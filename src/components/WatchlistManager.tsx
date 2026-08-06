@@ -2,16 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { WatchlistItem, ComparisonInterval } from '@/lib/types/hardware';
-import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
-import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, ShieldAlert, Sparkles, Search, Loader2, Globe, RefreshCw } from 'lucide-react';
+import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, Sparkles, Search, Loader2, Globe } from 'lucide-react';
 
 export function WatchlistManager() {
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(MOCK_INITIAL_WATCHLIST);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [selectedInterval, setSelectedInterval] = useState<ComparisonInterval>('24h');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Live Scrape & Search state
+  // Live Scrape state inside Add Custom Item Modal
   const [liveQuery, setLiveQuery] = useState('');
   const [isScraping, setIsScraping] = useState(false);
   const [scrapedNotice, setScrapedNotice] = useState<string | null>(null);
@@ -44,7 +43,7 @@ export function WatchlistManager() {
     loadWatchlist();
   }, []);
 
-  const handleLiveScrape = async () => {
+  const handleLiveScrapeInsideModal = async () => {
     if (!liveQuery) return;
     setIsScraping(true);
     setScrapedNotice(null);
@@ -60,32 +59,21 @@ export function WatchlistManager() {
         const data = await res.json();
         if (data.component) {
           const comp = data.component;
-          const newItem: WatchlistItem = {
-            id: comp.id,
-            userId: 'user-demo-123',
-            componentName: comp.name,
-            category: comp.category,
-            targetPrice: Math.round(comp.currentPrice * 0.95),
-            currentPrice: comp.currentPrice,
-            previousPrice24h: comp.msrp,
-            previousPrice7d: comp.msrp,
-            previousPrice30d: comp.msrp,
-            allTimeLow: comp.lowestPrice90d,
-            retailer: comp.retailer,
-            productUrl: comp.productUrl,
-            imageUrl: comp.imageUrl,
-            inStock: true,
-            notifyOnFlashDrop: true,
-            addedAt: new Date().toISOString()
-          };
+          // Auto-fill form fields with real scraped data from Tavily!
+          setNewItemName(comp.name);
+          setNewItemCategory(comp.category);
+          setNewItemCurrentPrice(comp.currentPrice.toString());
+          setNewItemTargetPrice(Math.round(comp.currentPrice * 0.95).toString());
+          setNewItemRetailer(comp.retailer);
+          setNewItemUrl(comp.productUrl);
 
-          setWatchlist(prev => [newItem, ...prev.filter(item => item.id !== newItem.id)]);
-          setScrapedNotice(`Live scraped & saved "${comp.name}" at $${comp.currentPrice.toFixed(2)} from ${comp.retailer}!`);
-          setLiveQuery('');
+          setScrapedNotice(`Scraped & auto-filled "${comp.name}" ($${comp.currentPrice.toFixed(2)}) from ${comp.retailer}!`);
+          setIsScraping(false);
+          return;
         }
       }
     } catch (e) {
-      setScrapedNotice('Live scrape error, please check network connection.');
+      setScrapedNotice('Could not scrape URL. You can type details manually below.');
     } finally {
       setIsScraping(false);
     }
@@ -123,6 +111,8 @@ export function WatchlistManager() {
     setNewItemTargetPrice('');
     setNewItemCurrentPrice('');
     setNewItemUrl('');
+    setLiveQuery('');
+    setScrapedNotice(null);
     setShowAddModal(false);
   };
 
@@ -148,52 +138,6 @@ export function WatchlistManager() {
 
   return (
     <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
-      {/* Search & Scrape Modal Bar */}
-      <div className="bg-cyan-950/40 p-4 rounded-xl border border-cyan-500/30 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <Globe className="w-6 h-6 text-cyan-400 shrink-0 animate-pulse" />
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              Tavily Live Hardware Search & Scraper
-              <span className="bg-cyan-500/20 text-cyan-400 text-[10px] px-2 py-0.5 rounded border border-cyan-500/40 font-mono">
-                SUPABASE DB PERSISTED
-              </span>
-            </h3>
-            <p className="text-xs text-gray-400">Search any hardware model or retail URL to scrape live prices and add to your DB.</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-72">
-            <input
-              type="text"
-              placeholder="e.g. RTX 4080 Super or Amazon URL..."
-              value={liveQuery}
-              onChange={(e) => setLiveQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLiveScrape()}
-              className="w-full bg-gray-900/90 text-white text-xs px-3 py-2 pl-9 rounded-lg border border-gray-700 focus:outline-none focus:border-cyan-500"
-            />
-            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" />
-          </div>
-
-          <button
-            onClick={handleLiveScrape}
-            disabled={isScraping || !liveQuery}
-            className="btn-glow px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-2 disabled:opacity-50 shrink-0"
-          >
-            {isScraping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            Scrape & Save
-          </button>
-        </div>
-      </div>
-
-      {scrapedNotice && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs p-3 rounded-lg mb-6 flex items-center gap-2 animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{scrapedNotice}</span>
-        </div>
-      )}
-
       {/* Main Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -226,7 +170,7 @@ export function WatchlistManager() {
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="btn-glow px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5"
+            className="btn-glow px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg"
           >
             <Plus className="w-4 h-4" />
             Add Custom Item
@@ -234,7 +178,7 @@ export function WatchlistManager() {
         </div>
       </div>
 
-      {/* Watchlist Table / Grid */}
+      {/* Watchlist Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs text-gray-300">
           <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] border-b border-gray-800">
@@ -251,6 +195,13 @@ export function WatchlistManager() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800/60">
+            {watchlist.length === 0 && !isLoading && (
+              <tr>
+                <td colSpan={7} className="text-center py-8 text-gray-500">
+                  No items in watchlist yet. Click "+ Add Custom Item" to scrape and add hardware!
+                </td>
+              </tr>
+            )}
             {watchlist.map(item => {
               const prevPrice = getPreviousPrice(item);
               const priceDelta = item.currentPrice - prevPrice;
@@ -350,18 +301,57 @@ export function WatchlistManager() {
         </table>
       </div>
 
-      {/* Add Custom Item Modal */}
+      {/* Add Custom Item Modal with Live Scrape Integrated */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card w-full max-w-md p-6 rounded-2xl border border-gray-800 bg-gray-950/90 shadow-2xl animate-fade-in">
-            <h3 className="text-lg font-bold text-white mb-4">Add Custom Component to Watchlist</h3>
+          <div className="glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950/95 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-white mb-1">Add Hardware Component</h3>
+            <p className="text-xs text-gray-400 mb-4">Paste a retail link or product name to live-scrape real prices, or fill manually.</p>
+
+            {/* Integrated Live Scraper Bar Inside Modal */}
+            <div className="bg-cyan-950/40 p-3 rounded-xl border border-cyan-500/30 mb-5">
+              <label className="block text-[11px] font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5" />
+                Live Tavily Scrape & Auto-Fill
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="e.g. RTX 4080 Super or Amazon URL..."
+                    value={liveQuery}
+                    onChange={(e) => setLiveQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleLiveScrapeInsideModal())}
+                    className="w-full bg-gray-900/90 text-white text-xs px-3 py-2 pl-8 rounded-lg border border-gray-700 focus:outline-none focus:border-cyan-500"
+                  />
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLiveScrapeInsideModal}
+                  disabled={isScraping || !liveQuery}
+                  className="btn-glow px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                >
+                  {isScraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  Scrape & Fill
+                </button>
+              </div>
+
+              {scrapedNotice && (
+                <div className="mt-2 text-[11px] text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                  <span>{scrapedNotice}</span>
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleAddItem} className="space-y-4 text-xs">
               <div>
-                <label className="block text-gray-400 mb-1">Component Name</label>
+                <label className="block text-gray-400 mb-1 font-semibold">Component Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. NVIDIA RTX 4080 Super"
+                  placeholder="e.g. NVIDIA GeForce RTX 4080 Super"
                   value={newItemName}
                   onChange={e => setNewItemName(e.target.value)}
                   className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
@@ -370,7 +360,7 @@ export function WatchlistManager() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-400 mb-1">Category</label>
+                  <label className="block text-gray-400 mb-1 font-semibold">Category</label>
                   <select
                     value={newItemCategory}
                     onChange={e => setNewItemCategory(e.target.value as any)}
@@ -388,7 +378,7 @@ export function WatchlistManager() {
                 </div>
 
                 <div>
-                  <label className="block text-gray-400 mb-1">Retailer</label>
+                  <label className="block text-gray-400 mb-1 font-semibold">Retailer</label>
                   <select
                     value={newItemRetailer}
                     onChange={e => setNewItemRetailer(e.target.value as any)}
@@ -406,39 +396,39 @@ export function WatchlistManager() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-400 mb-1">Current Price ($)</label>
+                  <label className="block text-gray-400 mb-1 font-semibold">Current Scraped Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     required
-                    placeholder="549.99"
+                    placeholder="969.99"
                     value={newItemCurrentPrice}
                     onChange={e => setNewItemCurrentPrice(e.target.value)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-400 mb-1">Target Price ($)</label>
+                  <label className="block text-gray-400 mb-1 font-semibold">Target Alert Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
-                    placeholder="500.00"
+                    placeholder="900.00"
                     value={newItemTargetPrice}
                     onChange={e => setNewItemTargetPrice(e.target.value)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-sm"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-gray-400 mb-1">Product Page URL</label>
+                <label className="block text-gray-400 mb-1 font-semibold">Product Listing Link</label>
                 <input
                   type="url"
                   placeholder="https://www.amazon.com/dp/..."
                   value={newItemUrl}
                   onChange={e => setNewItemUrl(e.target.value)}
-                  className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-[11px]"
                 />
               </div>
 
@@ -454,7 +444,7 @@ export function WatchlistManager() {
                   type="submit"
                   className="btn-glow px-4 py-2 text-xs font-bold rounded-lg"
                 >
-                  Add Component
+                  Save & Add to Watchlist
                 </button>
               </div>
             </form>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
-import { MOCK_HARDWARE_CATALOG } from '@/lib/scrapers/price-scraper';
+import { getDailyTrendingComponents } from '@/lib/scrapers/trending-engine';
 
 export const runtime = 'edge';
 
@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ source: 'database', components: formatted });
     }
   } catch (e) {
-    console.warn('Supabase DB fetch fallback to catalog:', e);
+    console.warn('Supabase DB fetch fallback:', e);
   }
 
-  // Fallback catalog if DB has no items yet
-  return NextResponse.json({ source: 'catalog', components: MOCK_HARDWARE_CATALOG });
+  // Daily Rotating Trending PC Parts Engine
+  const dailyTrending = getDailyTrendingComponents();
+  return NextResponse.json({ source: 'daily_trending', components: dailyTrending });
 }

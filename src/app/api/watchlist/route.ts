@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
-import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
+import { getDailyTrendingWatchlist } from '@/lib/scrapers/trending-engine';
 
 export const runtime = 'edge';
 
@@ -37,5 +37,7 @@ export async function GET(req: NextRequest) {
     console.warn('Watchlist DB fetch fallback:', e);
   }
 
-  return NextResponse.json({ source: 'catalog', items: MOCK_INITIAL_WATCHLIST });
+  // Daily Rotating Trending PC Parts Watchlist
+  const dailyWatchlist = getDailyTrendingWatchlist();
+  return NextResponse.json({ source: 'daily_trending', items: dailyWatchlist });
 }
