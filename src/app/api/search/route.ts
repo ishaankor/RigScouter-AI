@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scrapeLiveHardware } from '@/lib/scrapers/live-scraper';
 import { MOCK_HARDWARE_CATALOG } from '@/lib/scrapers/price-scraper';
 
+export const runtime = 'edge';
+
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get('q');
   
