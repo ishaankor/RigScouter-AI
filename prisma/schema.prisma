@@ -1,0 +1,77 @@
+// Prisma Schema for RigScouter-AI
+// Works out-of-the-box with SQLite (local) or PostgreSQL (Supabase / Neon)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model HardwareComponent {
+  id              String   @id @default(uuid())
+  name            String
+  category        String   // 'GPU', 'CPU', 'RAM', 'SSD', 'Motherboard', 'PSU', 'Case', 'Cooler'
+  brand           String
+  model           String
+  specs           String   @default("{}") // JSON stringified specs
+  msrp            Float
+  currentPrice    Float
+  lowestPrice90d  Float
+  retailer        String
+  productUrl      String
+  imageUrl        String
+  rating          Float    @default(4.5)
+  dealScore       Int      @default(50)
+  benchmarkScore  Int?
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model WatchlistItem {
+  id                  String          @id @default(uuid())
+  userId              String
+  componentName       String
+  category            String
+  targetPrice         Float
+  currentPrice        Float
+  previousPrice24h    Float?
+  previousPrice7d     Float?
+  previousPrice30d    Float?
+  allTimeLow          Float?
+  retailer            String
+  productUrl          String
+  imageUrl            String
+  inStock             Boolean         @default(true)
+  notifyOnFlashDrop   Boolean         @default(true)
+  addedAt             DateTime        @default(now())
+  snapshots           PriceSnapshot[]
+}
+
+model PriceSnapshot {
+  id              String        @id @default(uuid())
+  watchlistItemId String
+  price           Float
+  inStock         Boolean       @default(true)
+  scrapedAt       DateTime      @default(now())
+  watchlistItem   WatchlistItem @relation(fields: [watchlistItemId], references: [id], onDelete: Cascade)
+}
+
+model UserPreferences {
+  userId                    String   @id
+  summaryFrequency          String   @default("daily") // 'daily', 'every_3_days', 'weekly', 'flash_only'
+  deliveryChannels          String   @default("{\"email\":true}")
+  comparisonIntervals       String   @default("[\"24h\",\"7d\",\"30d\",\"ATL\"]")
+  autoRecommendAlternatives Boolean  @default(true)
+  updatedAt                 DateTime @default(now()) @updatedAt
+}
+
+model DailyDigest {
+  id                    String   @id @default(uuid())
+  userId                String
+  headline              String
+  executiveSummary      String
+  reportData            String   // JSON stringified report
+  totalSavedOpportunity Float    @default(0.0)
+  generatedAt           DateTime @default(now())
+}

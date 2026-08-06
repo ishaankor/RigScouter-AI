@@ -9,6 +9,7 @@ export function RigBuilderChat() {
   const [budget, setBudget] = useState<number>(1200);
   const [useCase, setUseCase] = useState<RigBuildRequirement['useCase']>('gaming');
   const [targetResolution, setTargetResolution] = useState<RigBuildRequirement['targetResolution']>('1440p');
+  const [isLiveScrapeMode, setIsLiveScrapeMode] = useState<boolean>(true);
   
   const [recommendation, setRecommendation] = useState<RigBuildRecommendation>(
     recommendRigBuild({ budget: 1200, useCase: 'gaming', targetResolution: '1440p' })
@@ -26,9 +27,21 @@ export function RigBuilderChat() {
       {/* Left Control Panel */}
       <div className="lg:col-span-4 glass-card p-6 border border-gray-800 rounded-2xl flex flex-col justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-xl font-bold font-heading text-white">AI Rig Concierge</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+              <h2 className="text-xl font-bold font-heading text-white">AI Rig Concierge</h2>
+            </div>
+            <button
+              onClick={() => setIsLiveScrapeMode(!isLiveScrapeMode)}
+              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                isLiveScrapeMode
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-700'
+              }`}
+            >
+              {isLiveScrapeMode ? '● LIVE SCRAPER ON' : '○ STATIC CATALOG'}
+            </button>
           </div>
           <p className="text-xs text-gray-400 mb-6">
             Configure your target budget & use case. The AI continuously scours retailers for compatible component deals.

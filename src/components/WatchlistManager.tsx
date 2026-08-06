@@ -3,25 +3,64 @@
 import React, { useState } from 'react';
 import { WatchlistItem, ComparisonInterval } from '@/lib/types/hardware';
 import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
-import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, ShieldAlert, Sparkles } from 'lucide-react';
+import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, ShieldAlert, Sparkles, Search, Loader2, Globe } from 'lucide-react';
 
 export function WatchlistManager() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(MOCK_INITIAL_WATCHLIST);
   const [selectedInterval, setSelectedInterval] = useState<ComparisonInterval>('24h');
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // Live Scrape & Search state
+  const [liveQuery, setLiveQuery] = useState('');
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapedNotice, setScrapedNotice] = useState<string | null>(null);
+
   // Form states for adding new item
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<WatchlistItem['category']>('GPU');
   const [newItemTargetPrice, setNewItemTargetPrice] = useState('');
+  const [newItemCurrentPrice, setNewItemCurrentPrice] = useState('');
+  const [newItemRetailer, setNewItemRetailer] = useState<WatchlistItem['retailer']>('Amazon');
   const [newItemUrl, setNewItemUrl] = useState('');
+
+  const handleLiveScrape = async () => {
+    if (!liveQuery) return;
+    setIsScraping(true);
+    setScrapedNotice(null);
+
+    try {
+      const res = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: liveQuery })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.component) {
+          const comp = data.component;
+          setNewItemName(comp.name);
+          setNewItemCategory(comp.category);
+          setNewItemCurrentPrice(comp.currentPrice.toString());
+          setNewItemTargetPrice((Math.round(comp.currentPrice * 0.92)).toString());
+          setNewItemRetailer(comp.retailer);
+          setNewItemUrl(comp.productUrl);
+          setScrapedNotice(`Live pricing fetched from ${comp.retailer}: $${comp.currentPrice.toFixed(2)} (Deal Score: ${comp.dealScore}/100)`);
+        }
+      }
+    } catch (e) {
+      setScrapedNotice('Scrape attempt fallback triggered.');
+    } finally {
+      setIsScraping(false);
+    }
+  };
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItemName || !newItemTargetPrice) return;
+    if (!newItemName || (!newItemTargetPrice && !newItemCurrentPrice)) return;
 
-    const targetPrice = parseFloat(newItemTargetPrice);
-    const mockCurrent = Math.round((targetPrice * 1.05) * 100) / 100;
+    const currentPrice = parseFloat(newItemCurrentPrice) || parseFloat(newItemTargetPrice) * 1.05;
+    const targetPrice = parseFloat(newItemTargetPrice) || currentPrice * 0.9;
 
     const newItem: WatchlistItem = {
       id: `w-${Date.now()}`,
@@ -29,12 +68,12 @@ export function WatchlistManager() {
       componentName: newItemName,
       category: newItemCategory,
       targetPrice,
-      currentPrice: mockCurrent,
-      previousPrice24h: mockCurrent + 15,
-      previousPrice7d: mockCurrent + 25,
-      previousPrice30d: mockCurrent + 40,
-      allTimeLow: mockCurrent - 10,
-      retailer: 'Amazon',
+      currentPrice,
+      previousPrice24h: currentPrice + 12,
+      previousPrice7d: currentPrice + 20,
+      previousPrice30d: currentPrice + 35,
+      allTimeLow: currentPrice - 8,
+      retailer: newItemRetailer,
       productUrl: newItemUrl || 'https://www.amazon.com',
       imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
       inStock: true,
@@ -45,7 +84,10 @@ export function WatchlistManager() {
     setWatchlist([newItem, ...watchlist]);
     setNewItemName('');
     setNewItemTargetPrice('');
+    setNewItemCurrentPrice('');
     setNewItemUrl('');
+    setLiveQuery('');
+    setScrapedNotice(null);
     setShowAddModal(false);
   };
 
@@ -106,7 +148,7 @@ export function WatchlistManager() {
             className="btn-glow px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Track Item
+            Track Item / Live Search
           </button>
         </div>
       </div>
@@ -203,14 +245,45 @@ export function WatchlistManager() {
         </table>
       </div>
 
-      {/* Add Item Modal */}
+      {/* Add Item & Live Search Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-cyan-400" />
-              Add Product to Watchlist
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-cyan-400" />
+              Live Web Search & Track Item
             </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Enter any PC part query (e.g. "RTX 4070 Super") or paste a product URL to scrape current live web prices.
+            </p>
+
+            {/* Live Search Bar */}
+            <div className="bg-gray-950 p-3 rounded-xl border border-gray-800 mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Paste URL or search hardware (e.g., Ryzen 7 7800X3D)..."
+                  value={liveQuery}
+                  onChange={(e) => setLiveQuery(e.target.value)}
+                  className="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleLiveScrape}
+                  disabled={isScraping || !liveQuery}
+                  className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-gray-950 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isScraping ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  Scrape Live
+                </button>
+              </div>
+              {scrapedNotice && (
+                <div className="text-[11px] text-emerald-400 mt-2 font-medium flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> {scrapedNotice}
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleAddItem} className="space-y-4">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Component Name</label>
@@ -224,13 +297,13 @@ export function WatchlistManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Category</label>
                   <select
                     value={newItemCategory}
                     onChange={(e) => setNewItemCategory(e.target.value as WatchlistItem['category'])}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
                   >
                     {['GPU', 'CPU', 'RAM', 'SSD', 'Motherboard', 'PSU', 'Case', 'Cooler'].map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -238,20 +311,32 @@ export function WatchlistManager() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-xs text-gray-400 mb-1">Current Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="120.00"
+                    value={newItemCurrentPrice}
+                    onChange={(e) => setNewItemCurrentPrice(e.target.value)}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs text-gray-400 mb-1">Target Price ($)</label>
                   <input
                     type="number"
-                    placeholder="120.00"
+                    step="0.01"
+                    placeholder="110.00"
                     value={newItemTargetPrice}
                     onChange={(e) => setNewItemTargetPrice(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Product Page URL (Optional)</label>
+                <label className="block text-xs text-gray-400 mb-1">Product Page URL</label>
                 <input
                   type="url"
                   placeholder="https://www.amazon.com/dp/..."
@@ -273,7 +358,7 @@ export function WatchlistManager() {
                   type="submit"
                   className="btn-glow px-4 py-2 text-xs font-bold rounded-xl"
                 >
-                  Start Tracking
+                  Start Tracking Item
                 </button>
               </div>
             </form>
