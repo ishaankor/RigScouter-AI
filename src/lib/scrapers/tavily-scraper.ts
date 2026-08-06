@@ -23,7 +23,6 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   let livePrice: number | null = null;
   let rawContent = '';
 
-  // 1. Primary Tavily Search API call targeting major US hardware retailers
   try {
     const searchQuery = isUrl
       ? `extract price product title ${cleanQuery}`

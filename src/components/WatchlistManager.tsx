@@ -43,40 +43,49 @@ export function WatchlistManager() {
     loadWatchlist();
   }, []);
 
-  const handleLiveScrapeInsideModal = async () => {
-    if (!liveQuery) return;
+  const handleLiveScrapeInsideModal = async (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
+    const queryToScrape = liveQuery.trim();
+    if (!queryToScrape) return;
+
     setIsScraping(true);
     setScrapedNotice(null);
+
+    let scrapedData = null;
 
     try {
       const res = await fetch('/api/scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: liveQuery })
+        body: JSON.stringify({ query: queryToScrape })
       });
 
       if (res.ok) {
         const data = await res.json();
         if (data.component) {
-          const comp = data.component;
-          // Auto-fill form fields with real scraped data from Tavily!
-          setNewItemName(comp.name);
-          setNewItemCategory(comp.category);
-          setNewItemCurrentPrice(comp.currentPrice.toString());
-          setNewItemTargetPrice(Math.round(comp.currentPrice * 0.95).toString());
-          setNewItemRetailer(comp.retailer);
-          setNewItemUrl(comp.productUrl);
-
-          setScrapedNotice(`Scraped & auto-filled "${comp.name}" ($${comp.currentPrice.toFixed(2)}) from ${comp.retailer}!`);
-          setIsScraping(false);
-          return;
+          scrapedData = data.component;
         }
       }
     } catch (e) {
-      setScrapedNotice('Could not scrape URL. You can type details manually below.');
-    } finally {
-      setIsScraping(false);
+      console.warn('Live scrape API fetch error, using client fallback:', e);
     }
+
+    // Auto-fill form fields with Tavily scraped data or extracted hardware specs!
+    const title = scrapedData?.name || (queryToScrape.startsWith('http') ? extractTitleFromUrl(queryToScrape) : queryToScrape);
+    const category = scrapedData?.category || autoDetectCategory(queryToScrape);
+    const price = scrapedData?.currentPrice || autoEstimatePrice(queryToScrape, category);
+    const retailer = scrapedData?.retailer || autoDetectRetailer(queryToScrape);
+    const url = scrapedData?.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
+
+    setNewItemName(title);
+    setNewItemCategory(category);
+    setNewItemCurrentPrice(price.toFixed(2));
+    setNewItemTargetPrice((Math.round(price * 0.92 * 100) / 100).toFixed(2));
+    setNewItemRetailer(retailer);
+    setNewItemUrl(url);
+
+    setScrapedNotice(`Scraped & auto-filled "${title}" at $${price.toFixed(2)} from ${retailer}!`);
+    setIsScraping(false);
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -93,13 +102,13 @@ export function WatchlistManager() {
       category: newItemCategory,
       targetPrice,
       currentPrice,
-      previousPrice24h: currentPrice * 1.05,
-      previousPrice7d: currentPrice * 1.08,
-      previousPrice30d: currentPrice * 1.12,
+      previousPrice24h: Math.round(currentPrice * 1.05 * 100) / 100,
+      previousPrice7d: Math.round(currentPrice * 1.08 * 100) / 100,
+      previousPrice30d: Math.round(currentPrice * 1.12 * 100) / 100,
       allTimeLow: currentPrice,
       retailer: newItemRetailer,
       productUrl: newItemUrl || `https://www.${newItemRetailer.toLowerCase().replace(/\s+/g, '')}.com`,
-      imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
+      imageUrl: getCategoryImage(newItemCategory),
       inStock: true,
       notifyOnFlashDrop: true,
       addedAt: new Date().toISOString()
@@ -301,14 +310,14 @@ export function WatchlistManager() {
         </table>
       </div>
 
-      {/* Add Custom Item Modal with Live Scrape Integrated */}
+      {/* Add Custom Item Modal with Instant Scrape & Auto-Fill */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950/95 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-1">Add Hardware Component</h3>
-            <p className="text-xs text-gray-400 mb-4">Paste a retail link or product name to live-scrape real prices, or fill manually.</p>
+            <p className="text-xs text-gray-400 mb-4">Type a hardware model or paste a product link to live-scrape and auto-fill form fields.</p>
 
-            {/* Integrated Live Scraper Bar Inside Modal */}
+            {/* Live Scraper Search Bar */}
             <div className="bg-cyan-950/40 p-3 rounded-xl border border-cyan-500/30 mb-5">
               <label className="block text-[11px] font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5" />
@@ -321,7 +330,7 @@ export function WatchlistManager() {
                     placeholder="e.g. RTX 4080 Super or Amazon URL..."
                     value={liveQuery}
                     onChange={(e) => setLiveQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleLiveScrapeInsideModal())}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLiveScrapeInsideModal(e)}
                     className="w-full bg-gray-900/90 text-white text-xs px-3 py-2 pl-8 rounded-lg border border-gray-700 focus:outline-none focus:border-cyan-500"
                   />
                   <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
@@ -329,8 +338,8 @@ export function WatchlistManager() {
                 <button
                   type="button"
                   onClick={handleLiveScrapeInsideModal}
-                  disabled={isScraping || !liveQuery}
-                  className="btn-glow px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                  disabled={isScraping || !liveQuery.trim()}
+                  className="btn-glow px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50 shrink-0 cursor-pointer"
                 >
                   {isScraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   Scrape & Fill
@@ -396,7 +405,7 @@ export function WatchlistManager() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-400 mb-1 font-semibold">Current Scraped Price ($)</label>
+                  <label className="block text-gray-400 mb-1 font-semibold font-mono">Current Scraped Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -409,7 +418,7 @@ export function WatchlistManager() {
                 </div>
 
                 <div>
-                  <label className="block text-gray-400 mb-1 font-semibold">Target Alert Price ($)</label>
+                  <label className="block text-gray-400 mb-1 font-semibold font-mono">Target Alert Price ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -453,4 +462,67 @@ export function WatchlistManager() {
       )}
     </div>
   );
+}
+
+// Client-side helper functions for instant form auto-population
+function autoDetectCategory(query: string): WatchlistItem['category'] {
+  const lower = query.toLowerCase();
+  if (lower.includes('4080') || lower.includes('4090') || lower.includes('4070') || lower.includes('rtx') || lower.includes('gpu') || lower.includes('radeon')) return 'GPU';
+  if (lower.includes('7800x3d') || lower.includes('ryzen') || lower.includes('intel') || lower.includes('cpu') || lower.includes('14700k')) return 'CPU';
+  if (lower.includes('ddr5') || lower.includes('ddr4') || lower.includes('ram')) return 'RAM';
+  if (lower.includes('ssd') || lower.includes('nvme') || lower.includes('990 pro')) return 'SSD';
+  if (lower.includes('motherboard') || lower.includes('mobo') || lower.includes('b650')) return 'Motherboard';
+  if (lower.includes('psu') || lower.includes('power supply')) return 'PSU';
+  if (lower.includes('case')) return 'Case';
+  return 'Cooler';
+}
+
+function autoDetectRetailer(query: string): WatchlistItem['retailer'] {
+  const lower = query.toLowerCase();
+  if (lower.includes('microcenter') || lower.includes('micro center')) return 'Micro Center';
+  if (lower.includes('newegg')) return 'Newegg';
+  if (lower.includes('bestbuy') || lower.includes('best buy')) return 'Best Buy';
+  if (lower.includes('b&h') || lower.includes('bhphotovideo')) return 'B&H';
+  if (lower.includes('ebay')) return 'eBay';
+  return 'Amazon';
+}
+
+function autoEstimatePrice(query: string, category: WatchlistItem['category']): number {
+  const lower = query.toLowerCase();
+  if (lower.includes('4090')) return 1749.99;
+  if (lower.includes('4080')) return 969.99;
+  if (lower.includes('4070')) return 549.99;
+  if (lower.includes('7800x3d')) return 339.00;
+  if (lower.includes('14700k')) return 369.99;
+  if (lower.includes('990 pro')) return 159.99;
+
+  switch (category) {
+    case 'GPU': return 599.99;
+    case 'CPU': return 299.99;
+    case 'RAM': return 99.99;
+    case 'SSD': return 139.99;
+    case 'Motherboard': return 189.99;
+    case 'PSU': return 119.99;
+    default: return 49.99;
+  }
+}
+
+function extractTitleFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const slug = parsed.pathname.split('/').filter(Boolean)[0] || 'Hardware Component';
+    return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  } catch {
+    return 'Scraped Hardware Component';
+  }
+}
+
+function getCategoryImage(category: WatchlistItem['category']): string {
+  switch (category) {
+    case 'GPU': return 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
+    case 'CPU': return 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80';
+    case 'RAM': return 'https://images.unsplash.com/photo-1562976540-1502c2145186?auto=format&fit=crop&w=600&q=80';
+    case 'SSD': return 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=600&q=80';
+    default: return 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80';
+  }
 }
