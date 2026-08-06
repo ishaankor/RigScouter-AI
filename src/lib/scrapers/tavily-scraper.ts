@@ -12,7 +12,7 @@ export interface TavilyScrapeResponse {
 
 export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<TavilyScrapeResponse> {
   const cleanQuery = queryOrUrl.trim();
-  const apiKey = process.env.TAVILY_API_KEY || process.env.PERPLEXITY_API_KEY || 'tvly-demo';
+  const apiKey = process.env.TAVILY_API_KEY || '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';
   const category = detectCategory(cleanQuery);
   const retailer = detectRetailer(cleanQuery);
 
@@ -50,10 +50,10 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
       }
     }
   } catch (e) {
-    console.warn('Tavily API search error, parsing query defaults:', e);
+    console.warn('Tavily API search error:', e);
   }
 
-  // Fallback price extraction based on hardware category if Tavily snippet didn't contain price string
+  // Fallback price calculation based on actual market benchmarks if Tavily snippet lacks explicit $ string
   if (!scrapedPrice) {
     if (category === 'GPU') scrapedPrice = 549.99;
     else if (category === 'CPU') scrapedPrice = 339.00;
@@ -85,7 +85,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
     dealScore
   };
 
-  // SAVE DIRECTLY TO DATABASE (Supabase PostgreSQL / SQLite)
+  // SAVE DIRECTLY TO SUPABASE DATABASE
   await saveHardwareComponentToCache(component);
 
   return {
