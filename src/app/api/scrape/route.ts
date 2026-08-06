@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeLiveHardware } from '@/lib/scrapers/live-scraper';
+import { scrapeTavilyAndSaveToDb } from '@/lib/scrapers/tavily-scraper';
 
 export const runtime = 'edge';
 
@@ -12,15 +12,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please provide a valid product search query or retailer URL.' }, { status: 400 });
     }
 
-    const scrapedData = await scrapeLiveHardware(query);
-    return NextResponse.json(scrapedData);
+    // Scrape Tavily Web Search and Save Result directly to Database
+    const scrapeResult = await scrapeTavilyAndSaveToDb(query);
+    return NextResponse.json(scrapeResult);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Scraping failed' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Tavily web scrape failed' }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
-  const url = req.nextUrl.searchParams.get('query') || req.nextUrl.searchParams.get('url') || 'RTX 4070 Super';
-  const scrapedData = await scrapeLiveHardware(url);
-  return NextResponse.json(scrapedData);
+  const query = req.nextUrl.searchParams.get('query') || req.nextUrl.searchParams.get('url') || 'RTX 4070 Super';
+  const scrapeResult = await scrapeTavilyAndSaveToDb(query);
+  return NextResponse.json(scrapeResult);
 }

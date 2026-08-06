@@ -12,10 +12,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@supabase/supabase-js": "^2.112.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.417.0",
     "next": "^15.1.0",
+    "pg": "^8.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
@@ -25,6 +28,7 @@
     "@cloudflare/next-on-pages": "^1.13.16",
     "@opennextjs/cloudflare": "^1.20.2",
     "@types/node": "^20.14.12",
+    "@types/pg": "^8.20.4",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",

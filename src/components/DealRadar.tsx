@@ -1,12 +1,38 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_HARDWARE_CATALOG } from '@/lib/scrapers/price-scraper';
 import { HardwareComponent } from '@/lib/types/hardware';
-import { Flame, ExternalLink, ShieldCheck, Tag } from 'lucide-react';
+import { Flame, ExternalLink, RefreshCw } from 'lucide-react';
 
 export function DealRadar() {
-  const topDeals = MOCK_HARDWARE_CATALOG.filter((c: HardwareComponent) => c.dealScore >= 85);
+  const [deals, setDeals] = useState<HardwareComponent[]>(
+    MOCK_HARDWARE_CATALOG.filter((c: HardwareComponent) => c.dealScore >= 85)
+  );
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadDbDeals() {
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/components');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.components && data.components.length > 0) {
+            const highDeals = data.components.filter((c: HardwareComponent) => c.dealScore >= 80);
+            if (highDeals.length > 0) {
+              setDeals(highDeals);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load DB deals, using catalog fallback:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDbDeals();
+  }, []);
 
   return (
     <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
@@ -14,19 +40,22 @@ export function DealRadar() {
         <div>
           <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
             <Flame className="w-5 h-5 text-rose-500" />
-            Flash Sales & High Deal-Score Hardware
+            Flash Sales & Database Hardware Deals
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Components with Deal Scores above 85/100 scored against 90-day price history.
+            Real hardware items scraped via Tavily and saved in PostgreSQL database with Deal Scores above 80/100.
           </p>
         </div>
-        <span className="bg-rose-500/20 text-rose-400 text-xs font-bold px-3 py-1 rounded-full border border-rose-500/30 animate-pulse">
-          LIVE DEALS
-        </span>
+        <div className="flex items-center gap-2">
+          {isLoading && <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />}
+          <span className="bg-rose-500/20 text-rose-400 text-xs font-bold px-3 py-1 rounded-full border border-rose-500/30 animate-pulse">
+            LIVE DEALS
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {topDeals.map((item: HardwareComponent) => {
+        {deals.map((item: HardwareComponent) => {
           const discountPct = Math.round(((item.msrp - item.currentPrice) / item.msrp) * 100);
           return (
             <div
