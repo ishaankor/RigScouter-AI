@@ -113,6 +113,7 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
     setScrapedNotice(null);
 
     let scrapedData = null;
+    let dataSource = 'client_fallback';
 
     try {
       const res = await fetch('/api/scrape', {
@@ -125,13 +126,14 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
         const data = await res.json();
         if (data.component) {
           scrapedData = data.component;
+          dataSource = data.source || 'backend';
         }
       }
     } catch (e) {
       console.warn('Live scrape API fetch error, using client fallback:', e);
     }
 
-    // Auto-fill form fields with Tavily scraped data or extracted hardware specs!
+    // Auto-fill form fields with database match or live scraped hardware specs
     const title = scrapedData?.name || (queryToScrape.startsWith('http') ? extractTitleFromUrl(queryToScrape) : queryToScrape);
     const category = scrapedData?.category || autoDetectCategory(queryToScrape);
     const price = scrapedData?.currentPrice || autoEstimatePrice(queryToScrape, category);
@@ -145,7 +147,14 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
     setNewItemRetailer(retailer);
     setNewItemUrl(url);
 
-    setScrapedNotice(`Scraped & auto-filled "${title}" at $${price.toFixed(2)} from ${retailer}!`);
+    if (dataSource === 'supabase_database_cache') {
+      setScrapedNotice(`⚡ Instant auto-fill from Database catalog! ("${title}" at $${price.toFixed(2)})`);
+    } else if (dataSource === 'tavily_autonomous_agent_backend') {
+      setScrapedNotice(`🔥 Scraped live across retailers & saved to Database! ("${title}" at $${price.toFixed(2)})`);
+    } else {
+      setScrapedNotice(`Auto-filled form fields for "${title}" at $${price.toFixed(2)}.`);
+    }
+
     setIsScraping(false);
   };
 
