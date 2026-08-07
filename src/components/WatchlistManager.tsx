@@ -160,7 +160,7 @@ export function WatchlistManager({
     // Check if valid scraped price was retrieved
     if (!scrapedData || !scrapedData.currentPrice) {
       setIsScraping(false);
-      setScrapeNotice(`⚠️ Could not retrieve live price for "${queryToScrape}". Please verify query or link.`);
+      setScrapeNotice(`⚠️ No live retail listings found for "${queryToScrape}". This component may be unreleased (e.g. RTX 50-series), out of stock, or requires a direct retailer URL. Try searching for released models like "RTX 4070 Super", "RTX 4060", or "Ryzen 7 7800X3D".`);
       return;
     }
 
