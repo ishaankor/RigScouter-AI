@@ -83,7 +83,7 @@ export function WatchlistManager({
     let scrapedData: any = null;
     let dataSource = 'backend';
 
-    // 1. Query Next.js Edge Scraper API Route
+    // Query Next.js Edge Scraper API Route (checks Supabase DB catalog -> Edge Tavily live scraper)
     try {
       const res = await fetch('/api/scrape', {
         method: 'POST',
@@ -95,43 +95,11 @@ export function WatchlistManager({
         const data = await res.json();
         if (data.component && data.component.currentPrice) {
           scrapedData = data.component;
-          dataSource = data.source || 'backend';
+          dataSource = data.source || 'database';
         }
       }
     } catch (err) {
-      console.warn('Autonomous scrape /api/scrape fetch error:', err);
-    }
-
-    // 2. Direct Render Backend Agent Service Fallback (if /api/scrape returns 404 or fails)
-    if (!scrapedData || !scrapedData.currentPrice) {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
-      try {
-        console.log(`[Direct Render Agent Query]: Fetching ${backendUrl}/api/agent/run for "${queryToScrape}"...`);
-        const agentRes = await fetch(`${backendUrl}/api/agent/run`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: queryToScrape })
-        });
-
-        if (agentRes.ok) {
-          const agentData = await agentRes.json();
-          const bestOffer = agentData.result?.bestOffer;
-          if (bestOffer && bestOffer.price) {
-            scrapedData = {
-              name: bestOffer.title || queryToScrape,
-              category: agentData.result?.category || autoDetectCategory(queryToScrape),
-              currentPrice: bestOffer.price,
-              msrp: bestOffer.originalPrice || Math.round(bestOffer.price * 1.12 * 100) / 100,
-              retailer: bestOffer.retailer || 'Micro Center',
-              productUrl: bestOffer.url || `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`,
-              imageUrl: getCategoryImage(autoDetectCategory(queryToScrape))
-            };
-            dataSource = 'render_direct_agent';
-          }
-        }
-      } catch (backendErr) {
-        console.warn('Render direct backend agent fetch error:', backendErr);
-      }
+      console.warn('Autonomous scrape fetch error:', err);
     }
 
     // Check if valid scraped price was retrieved
