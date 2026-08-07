@@ -47,6 +47,39 @@ export function WatchlistManager({
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeNotice, setScrapeNotice] = useState<string | null>(null);
 
+  // Dynamic Retailer selection state (itemId -> retailerName)
+  const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
+
+  // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers
+  const getEffectiveOffer = (item: any) => {
+    const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+    const offers: Array<{ retailer: string; price: number; originalPrice?: number; url: string; inStock: boolean }> = specs.RetailerOffers || [];
+
+    const activeRetailer = selectedRetailers[item.id] || item.retailer || (offers[0]?.retailer ?? 'Amazon');
+    const matchedOffer = offers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
+
+    const currentPrice = matchedOffer?.price || item.currentPrice || item.current_price || 0;
+    const msrp = matchedOffer?.originalPrice || item.msrp || currentPrice;
+    const productUrl = matchedOffer?.url || item.productUrl || item.product_url || '#';
+    const retailer = matchedOffer?.retailer || activeRetailer;
+    const inStock = matchedOffer ? matchedOffer.inStock : true;
+
+    const availableRetailers = Array.from(new Set([
+      ...(offers.map(o => o.retailer)),
+      item.retailer
+    ])).filter(Boolean);
+
+    return {
+      currentPrice,
+      msrp,
+      productUrl,
+      retailer,
+      inStock,
+      availableRetailers,
+      offers
+    };
+  };
+
   // Fetch watchlist & trending items directly from Supabase DB on mount
   useEffect(() => {
     async function loadDatabaseWatchlist() {
@@ -402,10 +435,11 @@ export function WatchlistManager({
               </thead>
               <tbody className="divide-y divide-gray-800/50">
                 {watchlist.map(item => {
+                  const effective = getEffectiveOffer(item);
                   const prevPrice = getPreviousPrice(item);
-                  const { diff, percent } = calculateDrop(item.currentPrice, prevPrice);
+                  const { diff, percent } = calculateDrop(effective.currentPrice, prevPrice);
                   const isDrop = diff > 0;
-                  const isTargetHit = item.currentPrice <= item.targetPrice;
+                  const isTargetHit = effective.currentPrice <= item.targetPrice;
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
@@ -425,10 +459,33 @@ export function WatchlistManager({
                         </div>
                       </td>
 
-                      <td className="p-4 font-semibold text-gray-300">{item.retailer}</td>
+                      {/* Dynamic Retailer Dropdown Selector */}
+                      <td className="p-4">
+                        {effective.availableRetailers.length > 1 ? (
+                          <select
+                            value={effective.retailer}
+                            onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
+                          >
+                            {effective.availableRetailers.map(rName => {
+                              const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
+                              const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
+                              return (
+                                <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
+                                  {rName}{priceTag}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        ) : (
+                          <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block">
+                            {effective.retailer}
+                          </span>
+                        )}
+                      </td>
 
                       <td className="p-4">
-                        <div className="text-sm font-black text-white">${item.currentPrice.toFixed(2)}</div>
+                        <div className="text-sm font-black text-white">${effective.currentPrice.toFixed(2)}</div>
                         {isTargetHit && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
                             <TrendingDown className="w-3 h-3" /> Target Price Met!
@@ -464,11 +521,11 @@ export function WatchlistManager({
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <a
-                            href={item.productUrl}
+                            href={effective.productUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-gray-300 hover:text-white transition-colors"
-                            title="View Direct Listing"
+                            className="p-2 bg-gray-900 hover:bg-cyan-950/80 border border-gray-800 hover:border-cyan-700/60 rounded-xl text-gray-300 hover:text-cyan-300 transition-colors"
+                            title={`View Direct Listing at ${effective.retailer}`}
                           >
                             <ExternalLink className="w-4 h-4" />
                           </a>
@@ -491,36 +548,65 @@ export function WatchlistManager({
       ) : (
         /* Trending Items Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {trendingItems.map(item => (
-            <div key={item.id} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/40">
-                    {item.category}
-                  </span>
-                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" /> Deal Score: {item.dealScore}/100
-                  </span>
+          {trendingItems.map(item => {
+            const effective = getEffectiveOffer(item);
+
+            return (
+              <div key={item.id} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/40">
+                      {item.category}
+                    </span>
+                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> Deal Score: {item.dealScore}/100
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-white text-sm line-clamp-2 mb-2">{item.name}</h3>
+
+                  <div className="flex items-center justify-between gap-2 mb-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xl font-black text-emerald-400">${effective.currentPrice.toFixed(2)}</span>
+                      {effective.msrp > effective.currentPrice && (
+                        <span className="text-xs text-gray-500 line-through">${effective.msrp.toFixed(2)}</span>
+                      )}
+                    </div>
+
+                    {/* Dynamic Retailer Dropdown Selector in Grid */}
+                    {effective.availableRetailers.length > 1 ? (
+                      <select
+                        value={effective.retailer}
+                        onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
+                      >
+                        {effective.availableRetailers.map(rName => {
+                          const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
+                          const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
+                          return (
+                            <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
+                              {rName}{priceTag}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-400 px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
+                        {effective.retailer}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <h3 className="font-bold text-white text-sm line-clamp-2 mb-2">{item.name}</h3>
-                <div className="flex items-baseline gap-2 mb-4">
-                  <span className="text-xl font-black text-emerald-400">${item.currentPrice.toFixed(2)}</span>
-                  {item.msrp > item.currentPrice && (
-                    <span className="text-xs text-gray-500 line-through">${item.msrp.toFixed(2)}</span>
-                  )}
-                  <span className="text-xs text-gray-400 ml-auto">{item.retailer}</span>
-                </div>
+                <a
+                  href={effective.productUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 bg-gray-900 hover:bg-cyan-950/80 text-white hover:text-cyan-300 font-bold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-2 transition-all"
+                >
+                  View Direct Listing at {effective.retailer} <ExternalLink className="w-3.5 h-3.5" />
+                </a>
               </div>
-              <a
-                href={item.productUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs rounded-xl border border-gray-800 flex items-center justify-center gap-2 transition-all"
-              >
-                View Live Deal Listing <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
