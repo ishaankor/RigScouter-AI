@@ -83,7 +83,9 @@ export function WatchlistManager({
     let scrapedData: any = null;
     let dataSource = 'backend';
 
-    // Query Next.js Edge Scraper API Route (checks Supabase DB catalog -> Edge Tavily live scraper)
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+
+    // 1. Query Next.js Edge Scraper API Route
     try {
       const res = await fetch('/api/scrape', {
         method: 'POST',
@@ -99,7 +101,29 @@ export function WatchlistManager({
         }
       }
     } catch (err) {
-      console.warn('Autonomous scrape fetch error:', err);
+      console.warn('Autonomous scrape /api/scrape fetch error:', err);
+    }
+
+    // 2. Fallback: Query Render Backend Database Proxy Directly (if /api/scrape returns 404 or non-200)
+    if (!scrapedData || !scrapedData.currentPrice) {
+      try {
+        console.log(`[Backend Proxy Fallback] Fetching ${BACKEND_URL}/api/scrape for "${queryToScrape}"...`);
+        const backendRes = await fetch(`${BACKEND_URL}/api/scrape`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: queryToScrape })
+        });
+
+        if (backendRes.ok) {
+          const data = await backendRes.json();
+          if (data.component && data.component.currentPrice) {
+            scrapedData = data.component;
+            dataSource = data.source || 'render_backend_proxy';
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend proxy direct fetch error:', backendErr);
+      }
     }
 
     // Check if valid scraped price was retrieved
