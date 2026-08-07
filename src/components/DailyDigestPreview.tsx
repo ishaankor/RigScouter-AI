@@ -4,12 +4,19 @@ import React, { useState } from 'react';
 import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary } from '@/lib/types/hardware';
 import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
 import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
-import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, ArrowRight } from 'lucide-react';
+import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
 
-export function DailyDigestPreview() {
+interface DailyDigestPreviewProps {
+  user?: any;
+  onOpenAuth?: () => void;
+}
+
+export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps) {
   const [frequency, setFrequency] = useState<DigestFrequency>('daily');
   const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'discord' | 'telegram'>('email');
   const [selectedIntervals, setSelectedIntervals] = useState<ComparisonInterval[]>(['24h', '7d', '30d', 'ATL']);
+  const [isSubscribed, setIsSubscribed] = useState(!!user);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   
   const [report, setReport] = useState<DailyDigestReport>(
     generateDailyDigestReport(MOCK_INITIAL_WATCHLIST)
@@ -25,6 +32,16 @@ export function DailyDigestPreview() {
     }, 400);
   };
 
+  const handleSaveSubscription = () => {
+    if (!user && onOpenAuth) {
+      onOpenAuth();
+      return;
+    }
+    setIsSubscribed(true);
+    setSaveNotice(`✅ Preferences saved! Digest dispatches via ${deliveryChannel.toUpperCase()} at 08:00 AM UTC.`);
+    setTimeout(() => setSaveNotice(null), 4000);
+  };
+
   const toggleInterval = (int: ComparisonInterval) => {
     if (selectedIntervals.includes(int)) {
       if (selectedIntervals.length > 1) {
@@ -37,6 +54,32 @@ export function DailyDigestPreview() {
 
   return (
     <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
+      {/* Auth Subscription Guard Banner */}
+      {!user && (
+        <div className="bg-gradient-to-r from-purple-950/90 via-gray-950 to-cyan-950/90 border border-purple-500/40 p-5 rounded-2xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+              <Mail className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                Automated Digest Subscription (Sign In Required)
+              </h4>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Users must be signed in to subscribe and receive automated price drop digests dispatched to Email or Discord.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenAuth}
+            className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-gray-950 font-bold text-xs rounded-xl shadow-lg shadow-purple-500/20 flex items-center gap-2 transition-all cursor-pointer shrink-0"
+          >
+            <LogIn className="w-4 h-4" />
+            Sign In to Subscribe
+          </button>
+        </div>
+      )}
+
       {/* Top Title & Explanation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
@@ -51,14 +94,21 @@ export function DailyDigestPreview() {
           </p>
         </div>
 
-        <button
-          onClick={handleRegenerate}
-          disabled={isGenerating}
-          className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-4 h-4 text-cyan-400 ${isGenerating ? 'animate-spin' : ''}`} />
-          Run Automater Cycle Now
-        </button>
+        <div className="flex items-center gap-3">
+          {user && (
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" /> Subscribed (Active)
+            </span>
+          )}
+          <button
+            onClick={handleRegenerate}
+            disabled={isGenerating}
+            className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 text-cyan-400 ${isGenerating ? 'animate-spin' : ''}`} />
+            Run Automater Cycle Now
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -146,6 +196,20 @@ export function DailyDigestPreview() {
               })}
             </div>
           </div>
+
+          {/* Save Subscription Preferences Button */}
+          <button
+            onClick={handleSaveSubscription}
+            className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+          >
+            {user ? 'Save Subscription Preferences' : 'Sign In to Subscribe'}
+          </button>
+
+          {saveNotice && (
+            <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 p-2 rounded-lg border border-emerald-800/40">
+              {saveNotice}
+            </div>
+          )}
         </div>
 
         {/* Generated Live Digest Preview */}

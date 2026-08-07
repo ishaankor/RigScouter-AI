@@ -31,7 +31,8 @@ interface WatchlistManagerProps {
 export function WatchlistManager({
   initialWatchlist = [],
   initialTrendingItems = [],
-  user
+  user,
+  onOpenAuth
 }: WatchlistManagerProps) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialWatchlist);
   const [trendingItems, setTrendingItems] = useState<HardwareComponent[]>(initialTrendingItems);
@@ -222,11 +223,17 @@ export function WatchlistManager({
           </div>
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              if (!user && onOpenAuth) {
+                onOpenAuth();
+              } else {
+                setShowAddModal(true);
+              }
+            }}
             className="btn-glow px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer shrink-0"
           >
             <Bot className="w-4 h-4" />
-            Add Hardware via Bot
+            Add Hardware via Bot {!user && '(Sign In Required)'}
           </button>
         </div>
       </div>
