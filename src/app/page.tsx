@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { WatchlistManager } from '../components/WatchlistManager';
 import { RigBuilderChat } from '../components/RigBuilderChat';
 import { DailyDigestPreview } from '../components/DailyDigestPreview';
@@ -107,7 +108,7 @@ export default function Home() {
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-800/60">
         {[
-          { id: 'overview', label: 'Home Overview & Features', icon: Sparkles },
+          { id: 'overview', label: 'Home Overview', icon: Sparkles },
           { id: 'watchlist', label: 'Watchlist Tracker', icon: Bell },
           { id: 'builder', label: 'AI Rig Concierge', icon: Cpu },
           { id: 'digest', label: 'Daily Automater Digest', icon: Calendar },
@@ -130,6 +131,14 @@ export default function Home() {
             </button>
           );
         })}
+
+        <Link
+          href="/features"
+          className="px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer glass-card text-purple-300 hover:text-white hover:bg-purple-950/40 border border-purple-500/30"
+        >
+          <Award className="w-4 h-4 text-purple-400" />
+          <span>Features Page ↗</span>
+        </Link>
       </div>
 
       {/* TAB 1: Home Overview & Feature Showcase */}
