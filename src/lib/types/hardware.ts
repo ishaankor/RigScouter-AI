@@ -8,7 +8,7 @@ export interface HardwareComponent {
   category: ComponentCategory;
   brand: string;
   model: string;
-  specs: Record<string, string | number | boolean>;
+  specs: Record<string, any>;
   msrp: number;
   currentPrice: number;
   lowestPrice90d: number;

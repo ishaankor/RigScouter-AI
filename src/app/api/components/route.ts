@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
-import { getDailyTrendingComponents } from '@/lib/scrapers/trending-engine';
+import { fetchTrendingHardwareFromNews } from '@/lib/scrapers/trending-engine';
 
 export const runtime = 'edge';
 
@@ -41,11 +41,11 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({ source: 'database', components: formatted });
     }
-  } catch (e) {
-    console.warn('Supabase DB fetch fallback:', e);
+  } catch (err: any) {
+    console.warn('Supabase DB fetch fallback:', err?.message || err);
   }
 
-  // Daily Rotating Trending PC Parts Engine
-  const dailyTrending = getDailyTrendingComponents();
-  return NextResponse.json({ source: 'daily_trending', components: dailyTrending });
+  // News-driven Tavily AI Trending Engine
+  const trendingNewsHardware = await fetchTrendingHardwareFromNews();
+  return NextResponse.json({ source: 'tavily_news_trending', components: trendingNewsHardware });
 }

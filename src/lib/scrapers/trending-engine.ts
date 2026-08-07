@@ -1,203 +1,158 @@
 import { HardwareComponent, WatchlistItem } from '../types/hardware';
-import { calculateDealScore } from './price-scraper';
+import { supabase } from '../db/supabase';
 
-// Comprehensive pool of real hardware parts for daily rotation
-const HARDWARE_ROTATION_POOL: HardwareComponent[] = [
-  // GPUs
-  {
-    id: 'gpu-4080-super-tr',
-    name: 'GIGABYTE GeForce RTX 4080 Super GAMING OC 16GB',
-    category: 'GPU',
-    brand: 'GIGABYTE',
-    model: 'RTX 4080 Super',
-    specs: { VRAM: '16GB GDDR6X', TDP: '320W', Length: '342mm' },
-    msrp: 999.99,
-    currentPrice: 969.99,
-    lowestPrice90d: 949.99,
-    retailer: 'Newegg',
-    productUrl: 'https://www.newegg.com/gigabyte-geforce-rtx-4080-super',
-    imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-    rating: 4.9,
-    dealScore: 88,
-    benchmarkScore: 19800
-  },
-  {
-    id: 'gpu-4070-super-tr',
-    name: 'ASUS Dual GeForce RTX 4070 Super OC Edition 12GB',
-    category: 'GPU',
-    brand: 'ASUS',
-    model: 'RTX 4070 Super',
-    specs: { VRAM: '12GB GDDR6X', TDP: '220W', Length: '267mm' },
-    msrp: 599.99,
-    currentPrice: 549.99,
-    lowestPrice90d: 539.99,
-    retailer: 'Micro Center',
-    productUrl: 'https://www.microcenter.com/product/676345/asus-nvidia-geforce-rtx-4070-super',
-    imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-    rating: 4.8,
-    dealScore: 92,
-    benchmarkScore: 14200
-  },
-  {
-    id: 'gpu-7800xt-tr',
-    name: 'Sapphire PULSE AMD Radeon RX 7800 XT 16GB',
-    category: 'GPU',
-    brand: 'Sapphire',
-    model: 'RX 7800 XT',
-    specs: { VRAM: '16GB GDDR6', TDP: '263W', Length: '280mm' },
-    msrp: 499.99,
-    currentPrice: 479.99,
-    lowestPrice90d: 469.99,
-    retailer: 'Amazon',
-    productUrl: 'https://www.amazon.com/dp/B0CGGP7WCG',
-    imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-    rating: 4.8,
-    dealScore: 89,
-    benchmarkScore: 13900
-  },
-  {
-    id: 'gpu-4090-tr',
-    name: 'MSI Gaming X Slim GeForce RTX 4090 24GB',
-    category: 'GPU',
-    brand: 'MSI',
-    model: 'RTX 4090',
-    specs: { VRAM: '24GB GDDR6X', TDP: '450W' },
-    msrp: 1599.99,
-    currentPrice: 1749.99,
-    lowestPrice90d: 1699.99,
-    retailer: 'Amazon',
-    productUrl: 'https://www.amazon.com/dp/B0CJG5688D',
-    imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-    rating: 4.9,
-    dealScore: 78,
-    benchmarkScore: 25500
-  },
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY || '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';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
 
-  // CPUs
-  {
-    id: 'cpu-7800x3d-tr',
-    name: 'AMD Ryzen 7 7800X3D 8-Core 16-Thread Desktop Processor',
-    category: 'CPU',
-    brand: 'AMD',
-    model: 'Ryzen 7 7800X3D',
-    specs: { Socket: 'AM5', Cores: 8, Threads: 16, BoostClock: '5.0GHz' },
-    msrp: 449.00,
-    currentPrice: 339.00,
-    lowestPrice90d: 339.00,
-    retailer: 'Micro Center',
-    productUrl: 'https://www.microcenter.com/product/663663/amd-ryzen-7-7800x3d',
-    imageUrl: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80',
-    rating: 4.9,
-    dealScore: 98,
-    benchmarkScore: 18500
-  },
-  {
-    id: 'cpu-7600x-tr',
-    name: 'AMD Ryzen 5 7600X 6-Core 12-Thread Desktop Processor',
-    category: 'CPU',
-    brand: 'AMD',
-    model: 'Ryzen 5 7600X',
-    specs: { Socket: 'AM5', Cores: 6, Threads: 12, BoostClock: '5.3GHz' },
-    msrp: 299.00,
-    currentPrice: 199.99,
-    lowestPrice90d: 194.99,
-    retailer: 'Newegg',
-    productUrl: 'https://www.newegg.com/amd-ryzen-5-7600x',
-    imageUrl: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80',
-    rating: 4.7,
-    dealScore: 94,
-    benchmarkScore: 14200
-  },
-  {
-    id: 'cpu-14700k-tr',
-    name: 'Intel Core i7-14700K 20-Core Unlocked Desktop Processor',
-    category: 'CPU',
-    brand: 'Intel',
-    model: 'Core i7-14700K',
-    specs: { Socket: 'LGA1700', Cores: 20, Threads: 28, BoostClock: '5.6GHz' },
-    msrp: 409.99,
-    currentPrice: 369.99,
-    lowestPrice90d: 359.99,
-    retailer: 'Amazon',
-    productUrl: 'https://www.amazon.com/dp/B0CGJ41V9U',
-    imageUrl: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80',
-    rating: 4.7,
-    dealScore: 85,
-    benchmarkScore: 19200
-  },
+/**
+ * Searches the internet for trending PC hardware news via Tavily AI,
+ * uses LLM to discover what parts are currently trending, triggers live retailer scraping,
+ * and returns real hardware components from Supabase database.
+ */
+export async function fetchTrendingHardwareFromNews(): Promise<HardwareComponent[]> {
+  try {
+    console.log('[Trending Engine] Searching internet news for trending PC hardware via Tavily AI...');
 
-  // RAM & SSDs
-  {
-    id: 'ram-ddr5-6000-tr',
-    name: 'G.Skill Trident Z5 Neo RGB 32GB (2x16GB) DDR5-6000 CL30',
-    category: 'RAM',
-    brand: 'G.Skill',
-    model: 'Trident Z5 Neo',
-    specs: { Speed: '6000 MT/s', Latency: 'CL30-38-38-96', Capacity: '32GB' },
-    msrp: 129.99,
-    currentPrice: 99.99,
-    lowestPrice90d: 94.99,
-    retailer: 'Amazon',
-    productUrl: 'https://www.amazon.com/dp/B0BF8FVLTL',
-    imageUrl: 'https://images.unsplash.com/photo-1562976540-1502c2145186?auto=format&fit=crop&w=600&q=80',
-    rating: 4.7,
-    dealScore: 88
-  },
-  {
-    id: 'ssd-990pro-tr',
-    name: 'Samsung 990 Pro 2TB NVMe M.2 PCIe Gen4 SSD',
-    category: 'SSD',
-    brand: 'Samsung',
-    model: '990 Pro 2TB',
-    specs: { Interface: 'PCIe 4.0 x4', ReadSpeed: '7450 MB/s' },
-    msrp: 239.99,
-    currentPrice: 159.99,
-    lowestPrice90d: 149.99,
-    retailer: 'Best Buy',
-    productUrl: 'https://www.bestbuy.com/site/samsung-990-pro-2tb',
-    imageUrl: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=600&q=80',
-    rating: 4.9,
-    dealScore: 90
+    const searchRes = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: TAVILY_API_KEY,
+        query: 'trending PC hardware graphics card GPU processor CPU deals releases news',
+        topic: 'news',
+        search_depth: 'advanced',
+        max_results: 6
+      })
+    });
+
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      const newsSnippets = (searchData.results || []).map((r: any) => `${r.title}: ${r.content}`).join('\n');
+
+      if (GROQ_API_KEY) {
+        const llmRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a tech news analyst. Extract a JSON array of up to 6 trending PC hardware model names (e.g. ["RTX 4070 Super", "Ryzen 7 7800X3D", "RTX 5070", "Samsung 990 Pro 2TB"]). Output JSON ONLY: { "trendingModels": string[] }'
+              },
+              { role: 'user', content: `Tech news snippets:\n${newsSnippets.substring(0, 3000)}` }
+            ],
+            temperature: 0.1,
+            response_format: { type: 'json_object' }
+          })
+        });
+
+        if (llmRes.ok) {
+          const llmData = await llmRes.json();
+          const parsed = JSON.parse(llmData.choices?.[0]?.message?.content || '{}');
+          const models: string[] = parsed.trendingModels || [];
+
+          console.log('[Trending Engine] Discovered trending hardware models from news:', models);
+
+          // Trigger live scraper backend for newly discovered trending items
+          for (const model of models.slice(0, 4)) {
+            try {
+              fetch(`${BACKEND_URL}/api/agent/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: model })
+              }).catch(() => {});
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Trending Engine News Discovery Warning]:', e);
   }
-];
 
-// Returns deterministic daily rotated trending components based on date seed
-export function getDailyTrendingComponents(): HardwareComponent[] {
-  const todayStr = new Date().toISOString().split('T')[0]; // e.g. "2026-08-06"
-  const dayHash = todayStr.split('-').reduce((acc, part) => acc + parseInt(part, 10), 0);
+  // Return real scraped hardware components from Supabase database
+  const { data: dbItems } = await supabase
+    .from('hardware_components')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(20);
 
-  // Rotate items based on dayHash offset
-  return HARDWARE_ROTATION_POOL.map((comp, idx) => {
-    const priceFluc = (( (dayHash + idx * 7) % 15 ) - 7) * 2; // Real -14 to +14 daily variance
-    const updatedPrice = Math.round(Math.max(30, comp.currentPrice + priceFluc) * 100) / 100;
-    const dealScore = calculateDealScore(comp.msrp, updatedPrice, comp.lowestPrice90d);
+  if (dbItems && dbItems.length > 0) {
+    const rawComponents = dbItems.map(item => ({
+      id: item.id,
+      name: item.name,
+      category: item.category as any,
+      brand: item.brand,
+      model: item.model,
+      specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
+      msrp: item.msrp,
+      currentPrice: item.current_price,
+      lowestPrice90d: item.lowest_price_90d,
+      retailer: item.retailer as any,
+      productUrl: item.product_url,
+      imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+      rating: item.rating || 4.5,
+      dealScore: item.deal_score || 75
+    }));
 
-    return {
-      ...comp,
-      currentPrice: updatedPrice,
-      dealScore
+    return groupHardwareComponentsByModel(rawComponents);
+  }
+
+  return [];
+}
+
+/**
+ * Groups multiple partner card variants (e.g. MSI Ventus 2X, ASUS Dual, Gigabyte Windforce)
+ * under their unified base model (e.g. "RTX 4070 Super", "GTX 1080 Ti"),
+ * featuring the lowest price as the primary deal.
+ */
+export function groupHardwareComponentsByModel(components: HardwareComponent[]): HardwareComponent[] {
+  const modelMap = new Map<string, HardwareComponent[]>();
+
+  for (const item of components) {
+    const key = (item.model || item.name).trim();
+    if (!modelMap.has(key)) {
+      modelMap.set(key, []);
+    }
+    modelMap.get(key)!.push(item);
+  }
+
+  const grouped: HardwareComponent[] = [];
+
+  modelMap.forEach((items, modelGroup) => {
+    // Sort items in this model group by lowest current price
+    items.sort((a, b) => a.currentPrice - b.currentPrice);
+    const bestDeal = { ...items[0] };
+
+    // Attach all variant offers under specs
+    bestDeal.specs = {
+      ...bestDeal.specs,
+      modelGroup,
+      variantCount: items.length,
+      allVariants: items.map(v => ({
+        name: v.name,
+        brand: v.brand,
+        price: v.currentPrice,
+        retailer: v.retailer,
+        productUrl: v.productUrl
+      }))
     };
+
+    grouped.push(bestDeal);
   });
+
+  return grouped;
+}
+
+export function getDailyTrendingComponents(): HardwareComponent[] {
+  return [];
 }
 
 export function getDailyTrendingWatchlist(): WatchlistItem[] {
-  const trending = getDailyTrendingComponents();
-  return trending.slice(0, 4).map((comp, idx) => ({
-    id: `trending-w-${idx}`,
-    userId: 'user-demo-123',
-    componentName: comp.name,
-    category: comp.category,
-    targetPrice: Math.round(comp.currentPrice * 0.92),
-    currentPrice: comp.currentPrice,
-    previousPrice24h: Math.round(comp.currentPrice * 1.04 * 100) / 100,
-    previousPrice7d: Math.round(comp.currentPrice * 1.08 * 100) / 100,
-    previousPrice30d: Math.round(comp.msrp * 100) / 100,
-    allTimeLow: comp.lowestPrice90d,
-    retailer: comp.retailer,
-    productUrl: comp.productUrl,
-    imageUrl: comp.imageUrl,
-    inStock: true,
-    notifyOnFlashDrop: true,
-    addedAt: new Date().toISOString()
-  }));
+  return [];
 }

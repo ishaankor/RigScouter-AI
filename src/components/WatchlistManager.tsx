@@ -1,14 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { WatchlistItem, ComparisonInterval } from '@/lib/types/hardware';
-import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, Sparkles, Search, Loader2, Globe } from 'lucide-react';
+import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, Sparkles, Search, Loader2, Globe, Zap } from 'lucide-react';
 
-export function WatchlistManager() {
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+
+interface WatchlistManagerProps {
+  user?: any;
+  onOpenAuth?: () => void;
+}
+
+export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [selectedInterval, setSelectedInterval] = useState<ComparisonInterval>('24h');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // SSE-driven price drop highlight: tracks watchlist item IDs with active alert
+  const [sseAlertedIds, setSseAlertedIds] = useState<Set<string>>(new Set());
+  const sseRef = useRef<EventSource | null>(null);
 
   // Live Scrape state inside Add Custom Item Modal
   const [liveQuery, setLiveQuery] = useState('');
@@ -27,7 +37,8 @@ export function WatchlistManager() {
     async function loadWatchlist() {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/watchlist');
+        const userId = user?.id || 'demo-user-123';
+        const res = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.items && data.items.length > 0) {
@@ -41,6 +52,56 @@ export function WatchlistManager() {
       }
     }
     loadWatchlist();
+  }, [user]);
+
+  // SSE subscription: highlight watchlist items when a matching price drop arrives
+  useEffect(() => {
+    let retryTimer: ReturnType<typeof setTimeout>;
+    let retryDelay = 3000;
+
+    function connect() {
+      if (sseRef.current) sseRef.current.close();
+      const es = new EventSource(`${BACKEND_URL}/api/stream`);
+      sseRef.current = es;
+
+      es.addEventListener('price_drop', (e: MessageEvent) => {
+        const drop = JSON.parse(e.data) as { query: string; newPrice: number; retailer: string };
+        // Match against any watchlist item whose name contains the query keywords
+        setWatchlist(prev => {
+          const updated = prev.map(item => {
+            const itemName = item.componentName.toLowerCase();
+            const dropQuery = drop.query.toLowerCase();
+            if (itemName.includes(dropQuery) || dropQuery.includes(itemName.split(' ')[0].toLowerCase())) {
+              // Flash this item
+              setSseAlertedIds(ids => {
+                const next = new Set(ids).add(item.id);
+                setTimeout(() => setSseAlertedIds(s => { const n = new Set(s); n.delete(item.id); return n; }), 5000);
+                return next;
+              });
+              // Update its current price
+              return { ...item, currentPrice: drop.newPrice };
+            }
+            return item;
+          });
+          return updated;
+        });
+      });
+
+      es.onerror = () => {
+        es.close();
+        sseRef.current = null;
+        retryTimer = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 1.5, 30000);
+          connect();
+        }, retryDelay);
+      };
+    }
+
+    connect();
+    return () => {
+      clearTimeout(retryTimer);
+      sseRef.current?.close();
+    };
   }, []);
 
   const handleLiveScrapeInsideModal = async (e?: React.MouseEvent | React.KeyboardEvent) => {
@@ -88,16 +149,17 @@ export function WatchlistManager() {
     setIsScraping(false);
   };
 
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName || !newItemCurrentPrice) return;
 
     const currentPrice = parseFloat(newItemCurrentPrice);
     const targetPrice = newItemTargetPrice ? parseFloat(newItemTargetPrice) : currentPrice * 0.9;
+    const userId = user?.id || 'demo-user-123';
 
     const newItem: WatchlistItem = {
       id: `w-${Date.now()}`,
-      userId: 'user-demo-123',
+      userId,
       componentName: newItemName,
       category: newItemCategory,
       targetPrice,
@@ -115,6 +177,26 @@ export function WatchlistManager() {
     };
 
     setWatchlist(prev => [newItem, ...prev]);
+
+    // Persist to Supabase Database (watchlist_items + hardware_components + user_preferences)
+    try {
+      await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          componentName: newItemName,
+          category: newItemCategory,
+          targetPrice,
+          currentPrice,
+          retailer: newItemRetailer,
+          productUrl: newItem.productUrl,
+          imageUrl: newItem.imageUrl
+        })
+      });
+    } catch (e) {
+      console.warn('Watchlist DB save warning:', e);
+    }
 
     setNewItemName('');
     setNewItemTargetPrice('');

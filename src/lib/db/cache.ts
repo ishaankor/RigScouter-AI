@@ -63,7 +63,7 @@ export async function getCachedHardwareComponent(queryOrName: string): Promise<C
 // Save or update scraped hardware component snapshot into Supabase DB
 export async function saveHardwareComponentToCache(comp: HardwareComponent): Promise<void> {
   try {
-    await supabase
+    const { data, error } = await supabase
       .from('hardware_components')
       .upsert({
         id: comp.id,
@@ -83,6 +83,12 @@ export async function saveHardwareComponentToCache(comp: HardwareComponent): Pro
         benchmark_score: comp.benchmarkScore || null,
         updated_at: new Date().toISOString()
       });
+
+    if (error) {
+      console.error('Supabase DB Save Error (Check Row Level Security policies):', error.message, error.details);
+    } else {
+      console.log(`Successfully persisted scraped item "${comp.name}" into Supabase DB!`);
+    }
   } catch (e) {
     console.warn('Failed to save component to Supabase DB cache:', e);
   }
