@@ -107,22 +107,39 @@ export async function GET(req: NextRequest) {
       addedAt: item.added_at
     }));
 
-    const formattedTrending = (hwCatalog || []).map(item => ({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      brand: item.brand,
-      model: item.model,
-      specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
-      msrp: item.msrp,
-      currentPrice: item.current_price,
-      lowestPrice90d: item.lowest_price_90d,
-      retailer: item.retailer,
-      productUrl: item.product_url,
-      imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-      rating: item.rating || 4.8,
-      dealScore: item.deal_score || 85
-    }));
+    const formattedTrending = (hwCatalog || []).map(item => {
+      const current = item.current_price || 0;
+      const msrp = item.msrp || current;
+      const lowest = item.lowest_price_90d || current;
+
+      let computedDealScore = item.deal_score;
+      if (typeof computedDealScore !== 'number' || computedDealScore <= 0) {
+        if (msrp > current && msrp > 0) {
+          computedDealScore = Math.round(Math.min(99, Math.max(50, ((msrp - current) / msrp) * 100 + 70)));
+        } else if (lowest > 0) {
+          computedDealScore = Math.round(Math.min(99, Math.max(50, (lowest / Math.max(1, current)) * 80)));
+        } else {
+          computedDealScore = 70;
+        }
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        brand: item.brand,
+        model: item.model,
+        specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
+        msrp: item.msrp,
+        currentPrice: item.current_price,
+        lowestPrice90d: item.lowest_price_90d,
+        retailer: item.retailer,
+        productUrl: item.product_url,
+        imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+        rating: item.rating ?? undefined,
+        dealScore: computedDealScore
+      };
+    });
 
     return NextResponse.json({
       source: 'supabase_database_direct',
