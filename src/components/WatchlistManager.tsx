@@ -1,40 +1,53 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { WatchlistItem, ComparisonInterval } from '@/lib/types/hardware';
-import { TrendingDown, TrendingUp, Bell, ExternalLink, Plus, Trash2, CheckCircle2, Sparkles, Search, Loader2, Globe, Zap } from 'lucide-react';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+import React, { useState, useEffect } from 'react';
+import {
+  Bell,
+  Trash2,
+  ExternalLink,
+  Plus,
+  ArrowDown,
+  ArrowUp,
+  AlertTriangle,
+  Sparkles,
+  TrendingDown,
+  CheckCircle2,
+  Flame,
+  Bot,
+  Loader2,
+  Search,
+  Globe,
+  Database
+} from 'lucide-react';
+import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 
 interface WatchlistManagerProps {
+  initialWatchlist?: WatchlistItem[];
+  initialTrendingItems?: HardwareComponent[];
   user?: any;
   onOpenAuth?: () => void;
 }
 
-export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [selectedInterval, setSelectedInterval] = useState<ComparisonInterval>('24h');
-  const [showAddModal, setShowAddModal] = useState(false);
+export function WatchlistManager({
+  initialWatchlist = [],
+  initialTrendingItems = [],
+  user
+}: WatchlistManagerProps) {
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialWatchlist);
+  const [trendingItems, setTrendingItems] = useState<HardwareComponent[]>(initialTrendingItems);
   const [isLoading, setIsLoading] = useState(false);
-  // SSE-driven price drop highlight: tracks watchlist item IDs with active alert
-  const [sseAlertedIds, setSseAlertedIds] = useState<Set<string>>(new Set());
-  const sseRef = useRef<EventSource | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedInterval, setSelectedInterval] = useState<'24h' | '7d' | '30d'>('24h');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'trending'>('watchlist');
 
-  // Live Scrape state inside Add Custom Item Modal
+  // Autonomous bot input state
   const [liveQuery, setLiveQuery] = useState('');
   const [isScraping, setIsScraping] = useState(false);
-  const [scrapedNotice, setScrapedNotice] = useState<string | null>(null);
+  const [scrapeNotice, setScrapeNotice] = useState<string | null>(null);
 
-  // Form states for adding new item
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemCategory, setNewItemCategory] = useState<WatchlistItem['category']>('GPU');
-  const [newItemTargetPrice, setNewItemTargetPrice] = useState('');
-  const [newItemCurrentPrice, setNewItemCurrentPrice] = useState('');
-  const [newItemRetailer, setNewItemRetailer] = useState<WatchlistItem['retailer']>('Amazon');
-  const [newItemUrl, setNewItemUrl] = useState('');
-
+  // Fetch watchlist & trending items directly from Supabase DB on mount
   useEffect(() => {
-    async function loadWatchlist() {
+    async function loadDatabaseWatchlist() {
       setIsLoading(true);
       try {
         const userId = user?.id || 'demo-user-123';
@@ -44,76 +57,30 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
           if (data.items && data.items.length > 0) {
             setWatchlist(data.items);
           }
+          if (data.trendingItems && data.trendingItems.length > 0) {
+            setTrendingItems(data.trendingItems);
+          }
         }
       } catch (e) {
-        console.warn('Failed to load DB watchlist:', e);
+        console.warn('Database fetch warning:', e);
       } finally {
         setIsLoading(false);
       }
     }
-    loadWatchlist();
+    loadDatabaseWatchlist();
   }, [user]);
 
-  // SSE subscription: highlight watchlist items when a matching price drop arrives
-  useEffect(() => {
-    let retryTimer: ReturnType<typeof setTimeout>;
-    let retryDelay = 3000;
-
-    function connect() {
-      if (sseRef.current) sseRef.current.close();
-      const es = new EventSource(`${BACKEND_URL}/api/stream`);
-      sseRef.current = es;
-
-      es.addEventListener('price_drop', (e: MessageEvent) => {
-        const drop = JSON.parse(e.data) as { query: string; newPrice: number; retailer: string };
-        // Match against any watchlist item whose name contains the query keywords
-        setWatchlist(prev => {
-          const updated = prev.map(item => {
-            const itemName = item.componentName.toLowerCase();
-            const dropQuery = drop.query.toLowerCase();
-            if (itemName.includes(dropQuery) || dropQuery.includes(itemName.split(' ')[0].toLowerCase())) {
-              // Flash this item
-              setSseAlertedIds(ids => {
-                const next = new Set(ids).add(item.id);
-                setTimeout(() => setSseAlertedIds(s => { const n = new Set(s); n.delete(item.id); return n; }), 5000);
-                return next;
-              });
-              // Update its current price
-              return { ...item, currentPrice: drop.newPrice };
-            }
-            return item;
-          });
-          return updated;
-        });
-      });
-
-      es.onerror = () => {
-        es.close();
-        sseRef.current = null;
-        retryTimer = setTimeout(() => {
-          retryDelay = Math.min(retryDelay * 1.5, 30000);
-          connect();
-        }, retryDelay);
-      };
-    }
-
-    connect();
-    return () => {
-      clearTimeout(retryTimer);
-      sseRef.current?.close();
-    };
-  }, []);
-
-  const handleLiveScrapeInsideModal = async (e?: React.MouseEvent | React.KeyboardEvent) => {
-    if (e) e.preventDefault();
+  // 100% Autonomous Bot Add-to-Watchlist Handler (NO manual form filling)
+  const handleAutonomousAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
     const queryToScrape = liveQuery.trim();
     if (!queryToScrape) return;
 
     setIsScraping(true);
-    setScrapedNotice(null);
+    setScrapeNotice(null);
 
-    let scrapedData = null;
-    let dataSource = 'client_fallback';
+    let scrapedData: any = null;
+    let dataSource = 'backend';
 
     try {
       const res = await fetch('/api/scrape', {
@@ -129,62 +96,41 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
           dataSource = data.source || 'backend';
         }
       }
-    } catch (e) {
-      console.warn('Live scrape API fetch error, using client fallback:', e);
+    } catch (err) {
+      console.warn('Autonomous scrape fetch error:', err);
     }
 
-    // Auto-fill form fields with database match or live scraped hardware specs
+    // Bot extracts and formats all component fields autonomously
     const title = scrapedData?.name || (queryToScrape.startsWith('http') ? extractTitleFromUrl(queryToScrape) : queryToScrape);
     const category = scrapedData?.category || autoDetectCategory(queryToScrape);
-    const price = scrapedData?.currentPrice || autoEstimatePrice(queryToScrape, category);
+    const currentPrice = scrapedData?.currentPrice || 549.99;
+    const targetPrice = Math.round(currentPrice * 0.9 * 100) / 100;
     const retailer = scrapedData?.retailer || autoDetectRetailer(queryToScrape);
-    const url = scrapedData?.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
+    const productUrl = scrapedData?.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
+    const imageUrl = scrapedData?.imageUrl || getCategoryImage(category);
 
-    setNewItemName(title);
-    setNewItemCategory(category);
-    setNewItemCurrentPrice(price.toFixed(2));
-    setNewItemTargetPrice((Math.round(price * 0.92 * 100) / 100).toFixed(2));
-    setNewItemRetailer(retailer);
-    setNewItemUrl(url);
-
-    if (dataSource === 'supabase_database_cache') {
-      setScrapedNotice(`⚡ Instant auto-fill from Database catalog! ("${title}" at $${price.toFixed(2)})`);
-    } else if (dataSource === 'tavily_autonomous_agent_backend') {
-      setScrapedNotice(`🔥 Scraped live across retailers & saved to Database! ("${title}" at $${price.toFixed(2)})`);
-    } else {
-      setScrapedNotice(`Auto-filled form fields for "${title}" at $${price.toFixed(2)}.`);
-    }
-
-    setIsScraping(false);
-  };
-
-  const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItemName || !newItemCurrentPrice) return;
-
-    const currentPrice = parseFloat(newItemCurrentPrice);
-    const targetPrice = newItemTargetPrice ? parseFloat(newItemTargetPrice) : currentPrice * 0.9;
     const userId = user?.id || 'demo-user-123';
 
     const newItem: WatchlistItem = {
       id: `w-${Date.now()}`,
       userId,
-      componentName: newItemName,
-      category: newItemCategory,
+      componentName: title,
+      category,
       targetPrice,
       currentPrice,
       previousPrice24h: Math.round(currentPrice * 1.05 * 100) / 100,
       previousPrice7d: Math.round(currentPrice * 1.08 * 100) / 100,
       previousPrice30d: Math.round(currentPrice * 1.12 * 100) / 100,
       allTimeLow: currentPrice,
-      retailer: newItemRetailer,
-      productUrl: newItemUrl || `https://www.${newItemRetailer.toLowerCase().replace(/\s+/g, '')}.com`,
-      imageUrl: getCategoryImage(newItemCategory),
+      retailer,
+      productUrl,
+      imageUrl,
       inStock: true,
       notifyOnFlashDrop: true,
       addedAt: new Date().toISOString()
     };
 
+    // Update screen instantly
     setWatchlist(prev => [newItem, ...prev]);
 
     // Persist to Supabase Database (watchlist_items + hardware_components + user_preferences)
@@ -194,25 +140,21 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          componentName: newItemName,
-          category: newItemCategory,
+          componentName: title,
+          category,
           targetPrice,
           currentPrice,
-          retailer: newItemRetailer,
-          productUrl: newItem.productUrl,
-          imageUrl: newItem.imageUrl
+          retailer,
+          productUrl,
+          imageUrl
         })
       });
     } catch (e) {
       console.warn('Watchlist DB save warning:', e);
     }
 
-    setNewItemName('');
-    setNewItemTargetPrice('');
-    setNewItemCurrentPrice('');
-    setNewItemUrl('');
+    setIsScraping(false);
     setLiveQuery('');
-    setScrapedNotice(null);
     setShowAddModal(false);
   };
 
@@ -228,323 +170,294 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
 
   const getPreviousPrice = (item: WatchlistItem) => {
     switch (selectedInterval) {
-      case '24h': return item.previousPrice24h ?? item.currentPrice;
-      case '7d': return item.previousPrice7d ?? item.currentPrice;
-      case '30d': return item.previousPrice30d ?? item.currentPrice;
-      case 'ATL': return item.allTimeLow ?? item.currentPrice;
-      default: return item.previousPrice24h ?? item.currentPrice;
+      case '24h': return item.previousPrice24h || item.currentPrice * 1.04;
+      case '7d': return item.previousPrice7d || item.currentPrice * 1.08;
+      case '30d': return item.previousPrice30d || item.currentPrice * 1.12;
     }
   };
 
+  const calculateDrop = (current: number, previous: number) => {
+    const diff = previous - current;
+    const percent = (diff / previous) * 100;
+    return { diff, percent };
+  };
+
   return (
-    <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
-      {/* Main Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl border border-gray-800">
         <div>
-          <h2 className="text-xl font-bold font-heading text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Flame className="w-5 h-5 text-cyan-400" />
             Hardware Watchlist & Price Drop Radar
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Real-time target price tracking and multi-interval comparison against historical prices.
+          <p className="text-xs text-gray-400 mt-1">
+            Autonomous multi-retailer target price tracking & live database catalog
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Interval Selector */}
           <div className="flex bg-gray-900/80 p-1 rounded-xl border border-gray-800 text-xs">
-            {(['24h', '7d', '30d', 'ATL'] as ComparisonInterval[]).map(interval => (
+            {(['24h', '7d', '30d'] as const).map(interval => (
               <button
                 key={interval}
                 onClick={() => setSelectedInterval(interval)}
-                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
                   selectedInterval === interval
-                    ? 'bg-cyan-500 text-gray-950 shadow-glow-sm'
+                    ? 'bg-cyan-500 text-gray-950 shadow-md font-bold'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                {interval === 'ATL' ? 'All-Time Low' : interval}
+                {interval.toUpperCase()}
               </button>
             ))}
           </div>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="btn-glow px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg"
+            className="btn-glow px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4" />
-            Add Custom Item
+            <Bot className="w-4 h-4" />
+            Add Hardware via Bot
           </button>
         </div>
       </div>
 
-      {/* Watchlist Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-gray-300">
-          <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] border-b border-gray-800">
-            <tr>
-              <th className="py-3 px-4">Component</th>
-              <th className="py-3 px-4">Retailer</th>
-              <th className="py-3 px-4">Current Price</th>
-              <th className="py-3 px-4">Target Price</th>
-              <th className="py-3 px-4">
-                Comparison ({selectedInterval === 'ATL' ? 'All-Time Low' : `vs ${selectedInterval}`})
-              </th>
-              <th className="py-3 px-4 text-center">Alerts</th>
-              <th className="py-3 px-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-800/60">
-            {watchlist.length === 0 && !isLoading && (
-              <tr>
-                <td colSpan={7} className="text-center py-8 text-gray-500">
-                  No items in watchlist yet. Click "+ Add Custom Item" to scrape and add hardware!
-                </td>
-              </tr>
-            )}
-            {watchlist.map(item => {
-              const prevPrice = getPreviousPrice(item);
-              const priceDelta = item.currentPrice - prevPrice;
-              const percentChange = prevPrice > 0 ? ((priceDelta) / prevPrice) * 100 : 0;
-              const isTargetReached = item.currentPrice <= item.targetPrice;
-
-              return (
-                <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={item.imageUrl}
-                        alt={item.componentName}
-                        className="w-10 h-10 rounded-lg object-cover bg-gray-950 border border-gray-800 shrink-0"
-                      />
-                      <div>
-                        <div className="font-semibold text-white line-clamp-1">{item.componentName}</div>
-                        <span className="bg-cyan-500/10 text-cyan-400 text-[10px] px-1.5 py-0.5 rounded font-mono border border-cyan-500/20">
-                          {item.category}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-4 font-medium text-gray-300">
-                    <span className="bg-gray-900 text-gray-300 px-2.5 py-1 rounded-md border border-gray-800">
-                      {item.retailer}
-                    </span>
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <div className="font-bold text-white text-sm">${item.currentPrice.toFixed(2)}</div>
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-gray-300">${item.targetPrice.toFixed(2)}</span>
-                      {isTargetReached ? (
-                        <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-emerald-500/30">
-                          <CheckCircle2 className="w-3 h-3" /> Target Met
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-500 font-mono">
-                          (+${(item.currentPrice - item.targetPrice).toFixed(2)})
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <div className={`font-semibold flex items-center gap-1 ${
-                      priceDelta < 0 ? 'text-emerald-400' : priceDelta > 0 ? 'text-rose-400' : 'text-gray-400'
-                    }`}>
-                      {priceDelta < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : priceDelta > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : null}
-                      <span>{priceDelta > 0 ? '+' : ''}{priceDelta.toFixed(2)} ({percentChange.toFixed(1)}%)</span>
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={() => toggleNotification(item.id)}
-                      className={`p-1.5 rounded-lg border transition-all ${
-                        item.notifyOnFlashDrop
-                          ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400 shadow-glow-sm'
-                          : 'bg-gray-900 border-gray-800 text-gray-500 hover:text-gray-300'
-                      }`}
-                      title={item.notifyOnFlashDrop ? 'Alerts Enabled' : 'Alerts Disabled'}
-                    >
-                      <Bell className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <a
-                        href={item.productUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
-                        title="Open Retail Listing"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="p-1.5 bg-gray-900 hover:bg-rose-500/20 border border-gray-800 hover:border-rose-500/40 rounded-lg text-gray-500 hover:text-rose-400 transition-colors"
-                        title="Remove Item"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* Tabs */}
+      <div className="flex border-b border-gray-800">
+        <button
+          onClick={() => setActiveTab('watchlist')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'watchlist'
+              ? 'border-cyan-400 text-cyan-400'
+              : 'border-transparent text-gray-400 hover:text-white'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          My Watchlist ({watchlist.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('trending')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'trending'
+              ? 'border-cyan-400 text-cyan-400'
+              : 'border-transparent text-gray-400 hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          Trending Deals in Database ({trendingItems.length})
+        </button>
       </div>
 
-      {/* Add Custom Item Modal with Instant Scrape & Auto-Fill */}
+      {/* Table Content */}
+      {activeTab === 'watchlist' ? (
+        <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-gray-800 bg-gray-950/50 text-gray-400 uppercase text-[10px] tracking-wider font-bold">
+                  <th className="p-4">Component</th>
+                  <th className="p-4">Retailer</th>
+                  <th className="p-4">Current Price</th>
+                  <th className="p-4">Target Alert</th>
+                  <th className="p-4">{selectedInterval.toUpperCase()} Price Delta</th>
+                  <th className="p-4">90-Day Low</th>
+                  <th className="p-4 text-center">Alerts</th>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/50">
+                {watchlist.map(item => {
+                  const prevPrice = getPreviousPrice(item);
+                  const { diff, percent } = calculateDrop(item.currentPrice, prevPrice);
+                  const isDrop = diff > 0;
+                  const isTargetHit = item.currentPrice <= item.targetPrice;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.componentName}
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
+                          />
+                          <div>
+                            <div className="font-bold text-white text-sm line-clamp-1">{item.componentName}</div>
+                            <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                              {item.category}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="p-4 font-semibold text-gray-300">{item.retailer}</td>
+
+                      <td className="p-4">
+                        <div className="text-sm font-black text-white">${item.currentPrice.toFixed(2)}</div>
+                        {isTargetHit && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
+                            <TrendingDown className="w-3 h-3" /> Target Price Met!
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="p-4 font-mono font-bold text-gray-300">${item.targetPrice.toFixed(2)}</td>
+
+                      <td className="p-4">
+                        <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
+                          <span>${Math.abs(diff).toFixed(2)} ({percent.toFixed(1)}%)</span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${prevPrice.toFixed(2)}</div>
+                      </td>
+
+                      <td className="p-4 font-mono text-gray-400">${item.allTimeLow.toFixed(2)}</td>
+
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => toggleNotification(item.id)}
+                          className={`p-2 rounded-xl border transition-all ${
+                            item.notifyOnFlashDrop
+                              ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
+                              : 'bg-gray-900 border-gray-800 text-gray-600'
+                          }`}
+                        >
+                          <Bell className="w-4 h-4" />
+                        </button>
+                      </td>
+
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <a
+                            href={item.productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-gray-300 hover:text-white transition-colors"
+                            title="View Direct Listing"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            className="p-2 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
+                            title="Remove from Watchlist"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* Trending Items Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {trendingItems.map(item => (
+            <div key={item.id} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/40">
+                    {item.category}
+                  </span>
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> Deal Score: {item.dealScore}/100
+                  </span>
+                </div>
+                <h3 className="font-bold text-white text-sm line-clamp-2 mb-2">{item.name}</h3>
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-xl font-black text-emerald-400">${item.currentPrice.toFixed(2)}</span>
+                  {item.msrp > item.currentPrice && (
+                    <span className="text-xs text-gray-500 line-through">${item.msrp.toFixed(2)}</span>
+                  )}
+                  <span className="text-xs text-gray-400 ml-auto">{item.retailer}</span>
+                </div>
+              </div>
+              <a
+                href={item.productUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs rounded-xl border border-gray-800 flex items-center justify-center gap-2 transition-all"
+              >
+                View Live Deal Listing <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Autonomous Bot Add Modal — NO manual form filling */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="relative glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950 shadow-2xl animate-fade-in my-auto">
-            <h3 className="text-lg font-bold text-white mb-1">Add Hardware Component</h3>
-            <p className="text-xs text-gray-400 mb-4">Type a hardware model or paste a product link to live-scrape and auto-fill form fields.</p>
-
-            {/* Live Scraper Search Bar */}
-            <div className="bg-cyan-950/40 p-3 rounded-xl border border-cyan-500/30 mb-5">
-              <label className="block text-[11px] font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5" />
-                Live Tavily Scrape & Auto-Fill
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="e.g. RTX 4080 Super or Amazon URL..."
-                    value={liveQuery}
-                    onChange={(e) => setLiveQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleLiveScrapeInsideModal(e)}
-                    className="w-full bg-gray-900/90 text-white text-xs px-3 py-2 pl-8 rounded-lg border border-gray-700 focus:outline-none focus:border-cyan-500"
-                  />
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+          <div className="relative glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950 shadow-2xl animate-fade-in my-auto space-y-5">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                  <Bot className="w-5 h-5" />
                 </div>
-                <button
-                  type="button"
-                  onClick={handleLiveScrapeInsideModal}
-                  disabled={isScraping || !liveQuery.trim()}
-                  className="btn-glow px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 disabled:opacity-50 shrink-0 cursor-pointer"
-                >
-                  {isScraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  Scrape & Fill
-                </button>
+                <div>
+                  <h3 className="text-base font-bold text-white">Autonomous Hardware Scraper</h3>
+                  <p className="text-[11px] text-gray-400">Bot scrapes all prices, retailers, specs & links automatically</p>
+                </div>
               </div>
-
-              {scrapedNotice && (
-                <div className="mt-2 text-[11px] text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 shrink-0" />
-                  <span>{scrapedNotice}</span>
-                </div>
-              )}
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-500 hover:text-white text-lg font-bold px-2"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleAddItem} className="space-y-4 text-xs">
+            <form onSubmit={handleAutonomousAdd} className="space-y-4">
               <div>
-                <label className="block text-gray-400 mb-1 font-semibold">Component Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. NVIDIA GeForce RTX 4080 Super"
-                  value={newItemName}
-                  onChange={e => setNewItemName(e.target.value)}
-                  className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-gray-400 mb-1 font-semibold">Category</label>
-                  <select
-                    value={newItemCategory}
-                    onChange={e => setNewItemCategory(e.target.value as any)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="GPU">GPU</option>
-                    <option value="CPU">CPU</option>
-                    <option value="RAM">RAM</option>
-                    <option value="SSD">SSD</option>
-                    <option value="Motherboard">Motherboard</option>
-                    <option value="PSU">PSU</option>
-                    <option value="Case">Case</option>
-                    <option value="Cooler">Cooler</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-gray-400 mb-1 font-semibold">Retailer</label>
-                  <select
-                    value={newItemRetailer}
-                    onChange={e => setNewItemRetailer(e.target.value as any)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500"
-                  >
-                    <option value="Amazon">Amazon</option>
-                    <option value="Micro Center">Micro Center</option>
-                    <option value="Newegg">Newegg</option>
-                    <option value="Best Buy">Best Buy</option>
-                    <option value="B&H Photo">B&H Photo</option>
-                    <option value="eBay">eBay</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-gray-400 mb-1 font-semibold font-mono">Current Scraped Price ($)</label>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5 flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5 text-cyan-400" />
+                  Enter Hardware Model or Product Link
+                </label>
+                <div className="relative">
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     required
-                    placeholder="969.99"
-                    value={newItemCurrentPrice}
-                    onChange={e => setNewItemCurrentPrice(e.target.value)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-sm"
+                    placeholder="e.g. RTX 4080 Super OR https://www.newegg.com/p/..."
+                    value={liveQuery}
+                    onChange={(e) => setLiveQuery(e.target.value)}
+                    className="w-full bg-gray-900/90 text-white text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500 font-mono"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-gray-400 mb-1 font-semibold font-mono">Target Alert Price ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="900.00"
-                    value={newItemTargetPrice}
-                    onChange={e => setNewItemTargetPrice(e.target.value)}
-                    className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-sm"
-                  />
-                </div>
+                <p className="text-[11px] text-gray-500 mt-1.5">
+                  The bot will query the Supabase Database catalog first, or scrape Firecrawl/Tavily live across 5 retailers.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-gray-400 mb-1 font-semibold">Product Listing Link</label>
-                <input
-                  type="url"
-                  placeholder="https://www.amazon.com/dp/..."
-                  value={newItemUrl}
-                  onChange={e => setNewItemUrl(e.target.value)}
-                  className="w-full bg-gray-900 text-white p-2.5 rounded-lg border border-gray-800 focus:outline-none focus:border-cyan-500 font-mono text-[11px]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-gray-900 text-gray-400 hover:text-white rounded-lg border border-gray-800 font-semibold"
+                  className="px-4 py-2.5 bg-gray-900 text-gray-400 hover:text-white rounded-xl border border-gray-800 text-xs font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="btn-glow px-4 py-2 text-xs font-bold rounded-lg"
+                  disabled={isScraping || !liveQuery.trim()}
+                  className="btn-glow px-5 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
-                  Save & Add to Watchlist
+                  {isScraping ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Bot Scraping & Auto-Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>⚡ Scrape & Add to Watchlist</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -555,7 +468,7 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
   );
 }
 
-// Client-side helper functions for instant form auto-population
+// Client helpers
 function autoDetectCategory(query: string): WatchlistItem['category'] {
   const lower = query.toLowerCase();
   if (lower.includes('4080') || lower.includes('4090') || lower.includes('4070') || lower.includes('rtx') || lower.includes('gpu') || lower.includes('radeon')) return 'GPU';
@@ -578,36 +491,6 @@ function autoDetectRetailer(query: string): WatchlistItem['retailer'] {
   return 'Amazon';
 }
 
-function autoEstimatePrice(query: string, category: WatchlistItem['category']): number {
-  const lower = query.toLowerCase();
-  if (lower.includes('4090')) return 1749.99;
-  if (lower.includes('4080')) return 969.99;
-  if (lower.includes('4070')) return 549.99;
-  if (lower.includes('7800x3d')) return 339.00;
-  if (lower.includes('14700k')) return 369.99;
-  if (lower.includes('990 pro')) return 159.99;
-
-  switch (category) {
-    case 'GPU': return 599.99;
-    case 'CPU': return 299.99;
-    case 'RAM': return 99.99;
-    case 'SSD': return 139.99;
-    case 'Motherboard': return 189.99;
-    case 'PSU': return 119.99;
-    default: return 49.99;
-  }
-}
-
-function extractTitleFromUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const slug = parsed.pathname.split('/').filter(Boolean)[0] || 'Hardware Component';
-    return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  } catch {
-    return 'Scraped Hardware Component';
-  }
-}
-
 function getCategoryImage(category: WatchlistItem['category']): string {
   switch (category) {
     case 'GPU': return 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
@@ -615,5 +498,17 @@ function getCategoryImage(category: WatchlistItem['category']): string {
     case 'RAM': return 'https://images.unsplash.com/photo-1562976540-1502c2145186?auto=format&fit=crop&w=600&q=80';
     case 'SSD': return 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=600&q=80';
     default: return 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80';
+  }
+}
+
+function extractTitleFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    const parts = path.split('/').filter(Boolean);
+    const slug = parts.find(p => p.length > 5 && !p.includes('.')) || parts[0] || 'Hardware Product';
+    return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).substring(0, 45);
+  } catch {
+    return 'Hardware Component';
   }
 }
