@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'edge';
 
-// Proxy to the accurate backend TavilyHardwareAgent instead of the weaker inline scraper
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 export async function POST(req: NextRequest) {
@@ -17,8 +16,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Forward to backend multi-retailer agent — this uses Tavily+Gemini with
-    // deterministic fallback and saves the best price to Supabase DB
     const backendRes = await fetch(`${BACKEND_URL}/api/agent/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
