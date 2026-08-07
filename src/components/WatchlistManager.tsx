@@ -20,6 +20,7 @@ import {
   Database
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
+import { supabase } from '@/lib/db/supabase';
 
 interface WatchlistManagerProps {
   initialWatchlist?: WatchlistItem[];
@@ -52,6 +53,36 @@ export function WatchlistManager({
       setIsLoading(true);
       try {
         const userId = user?.id || 'demo-user-123';
+
+        // 1. Direct Supabase DB Table Query (resilient to 404 on API endpoints)
+        const { data: dbItems } = await supabase
+          .from('watchlist_items')
+          .select('*')
+          .order('added_at', { ascending: false });
+
+        if (dbItems && dbItems.length > 0) {
+          const formatted: WatchlistItem[] = dbItems.map((item: any) => ({
+            id: item.id,
+            userId: item.user_id,
+            componentName: item.component_name,
+            category: item.category,
+            targetPrice: item.target_price,
+            currentPrice: item.current_price,
+            previousPrice24h: item.previous_price_24h || item.current_price * 1.04,
+            previousPrice7d: item.previous_price_7d || item.current_price * 1.08,
+            previousPrice30d: item.previous_price_30d || item.current_price * 1.12,
+            allTimeLow: item.all_time_low || item.current_price,
+            retailer: item.retailer,
+            productUrl: item.product_url,
+            imageUrl: item.image_url,
+            inStock: item.in_stock ?? true,
+            notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+            addedAt: item.added_at
+          }));
+          setWatchlist(formatted);
+        }
+
+        // 2. Also try API endpoint as fallback
         const res = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
         if (res.ok) {
           const data = await res.json();
@@ -166,7 +197,37 @@ export function WatchlistManager({
     // Update screen instantly
     setWatchlist(prev => [newItem, ...prev]);
 
-    // Persist to Supabase Database (watchlist_items + hardware_components + user_preferences)
+    // Persist directly to Supabase Database table `watchlist_items` via client SDK
+    try {
+      const { error: dbErr } = await supabase.from('watchlist_items').upsert({
+        id: newItem.id,
+        user_id: userId,
+        component_name: title,
+        category: category,
+        target_price: targetPrice,
+        current_price: currentPrice,
+        previous_price_24h: newItem.previousPrice24h,
+        previous_price_7d: newItem.previousPrice7d,
+        previous_price_30d: newItem.previousPrice30d,
+        all_time_low: currentPrice,
+        retailer: retailer,
+        product_url: productUrl,
+        image_url: imageUrl,
+        in_stock: true,
+        notify_on_flash_drop: true,
+        added_at: newItem.addedAt
+      });
+
+      if (dbErr) {
+        console.warn('Direct Supabase DB save error:', dbErr.message);
+      } else {
+        console.log(`[Supabase DB Success] Saved "${title}" ($${currentPrice}) directly to watchlist_items table!`);
+      }
+    } catch (dbErr) {
+      console.warn('Direct Supabase DB save exception:', dbErr);
+    }
+
+    // Also call API endpoints as fallback
     try {
       await fetch('/api/watchlist', {
         method: 'POST',
@@ -183,7 +244,7 @@ export function WatchlistManager({
         })
       });
     } catch (e) {
-      console.warn('Watchlist DB save warning:', e);
+      console.warn('Watchlist API save warning:', e);
     }
 
     setIsScraping(false);
