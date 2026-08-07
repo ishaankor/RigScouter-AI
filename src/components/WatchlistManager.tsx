@@ -54,7 +54,7 @@ export function WatchlistManager({
       try {
         const userId = user?.id || 'demo-user-123';
 
-        // 1. Direct Supabase DB Table Query (resilient to 404 on API endpoints)
+        // 1. Direct Supabase DB Table Query for user watchlist items
         const { data: dbItems } = await supabase
           .from('watchlist_items')
           .select('*')
@@ -82,16 +82,31 @@ export function WatchlistManager({
           setWatchlist(formatted);
         }
 
-        // 2. Also try API endpoint as fallback
-        const res = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.items && data.items.length > 0) {
-            setWatchlist(data.items);
-          }
-          if (data.trendingItems && data.trendingItems.length > 0) {
-            setTrendingItems(data.trendingItems);
-          }
+        // 2. Direct Supabase DB Table Query for trending hardware catalog
+        const { data: hwCatalog } = await supabase
+          .from('hardware_components')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(20);
+
+        if (hwCatalog && hwCatalog.length > 0) {
+          const formattedTrending = hwCatalog.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            brand: item.brand,
+            model: item.model,
+            specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
+            msrp: item.msrp,
+            currentPrice: item.current_price,
+            lowestPrice90d: item.lowest_price_90d,
+            retailer: item.retailer,
+            productUrl: item.product_url,
+            imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+            rating: item.rating || 4.8,
+            dealScore: item.deal_score || 85
+          }));
+          setTrendingItems(formattedTrending);
         }
       } catch (e) {
         console.warn('Database fetch warning:', e);
