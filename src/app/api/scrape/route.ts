@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const cleanQuery = query.trim();
 
-    // 1. Check Supabase Database catalog first for instant (~20ms) response
+    // 1. Check Supabase Database catalog first for instant response
     try {
       const { data: dbMatches } = await supabase
         .from('hardware_components')
@@ -69,20 +69,20 @@ export async function POST(req: NextRequest) {
       console.warn('[DB Fast Check Warning]:', dbErr);
     }
 
-    // 2. Call Render Backend Scraper Agent Service
+    // 2. Call Render Backend Scraper Agent Service (60s timeout for cold start)
     console.log(`[Backend Agent Request] Triggering backend multi-retailer agent at ${BACKEND_URL}...`);
     try {
       const backendRes = await fetch(`${BACKEND_URL}/api/agent/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: cleanQuery }),
-        signal: AbortSignal.timeout(15_000) // 15s timeout for fast response
+        signal: AbortSignal.timeout(60_000) // 60s timeout for cold start / multi-store scraping
       });
 
       if (backendRes.ok) {
         const data = await backendRes.json();
         const result = data.result;
-        if (result?.bestOffer) {
+        if (result?.bestOffer?.price) {
           return NextResponse.json({
             source: 'tavily_autonomous_agent_backend',
             query: cleanQuery,
@@ -112,9 +112,16 @@ export async function POST(req: NextRequest) {
       console.warn('[Backend Agent Fetch Warning, activating Edge scraper]:', agentErr?.message || agentErr);
     }
 
-    // 3. Direct Edge Live Scraper Fallback (Guarantees zero-downtime price extraction)
-    console.log(`[Direct Edge Scraper] Executing live Tavily web scraper for "${cleanQuery}"...`);
+    // 3. Direct Edge Live Scraper Fallback
+    console.log(`[Direct Edge Scraper] Executing live web scraper for "${cleanQuery}"...`);
     const liveResult = await scrapeTavilyAndSaveToDb(cleanQuery);
+
+    if (!liveResult.component || !liveResult.component.currentPrice) {
+      return NextResponse.json(
+        { error: `Could not retrieve live price for "${cleanQuery}".` },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({
       source: 'tavily_edge_live_scraper',

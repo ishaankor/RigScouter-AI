@@ -91,7 +91,7 @@ export function WatchlistManager({
 
       if (res.ok) {
         const data = await res.json();
-        if (data.component) {
+        if (data.component && data.component.currentPrice) {
           scrapedData = data.component;
           dataSource = data.source || 'backend';
         }
@@ -100,14 +100,21 @@ export function WatchlistManager({
       console.warn('Autonomous scrape fetch error:', err);
     }
 
+    // Check if valid scraped price was retrieved
+    if (!scrapedData || !scrapedData.currentPrice) {
+      setIsScraping(false);
+      setScrapeNotice(`⚠️ Could not retrieve live price for "${queryToScrape}". Please verify query or link.`);
+      return;
+    }
+
     // Bot extracts and formats all component fields autonomously
-    const title = scrapedData?.name || (queryToScrape.startsWith('http') ? extractTitleFromUrl(queryToScrape) : queryToScrape);
-    const category = scrapedData?.category || autoDetectCategory(queryToScrape);
-    const currentPrice = scrapedData?.currentPrice || 549.99;
+    const title = scrapedData.name || queryToScrape;
+    const category = scrapedData.category || autoDetectCategory(queryToScrape);
+    const currentPrice = scrapedData.currentPrice;
     const targetPrice = Math.round(currentPrice * 0.9 * 100) / 100;
-    const retailer = scrapedData?.retailer || autoDetectRetailer(queryToScrape);
-    const productUrl = scrapedData?.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
-    const imageUrl = scrapedData?.imageUrl || getCategoryImage(category);
+    const retailer = scrapedData.retailer || autoDetectRetailer(queryToScrape);
+    const productUrl = scrapedData.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
+    const imageUrl = scrapedData.imageUrl || getCategoryImage(category);
 
     const userId = user?.id || 'demo-user-123';
 
@@ -429,9 +436,12 @@ export function WatchlistManager({
                     className="w-full bg-gray-900/90 text-white text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500 font-mono"
                   />
                 </div>
-                <p className="text-[11px] text-gray-500 mt-1.5">
-                  The bot will query the Supabase Database catalog first, or scrape Firecrawl/Tavily live across 5 retailers.
-                </p>
+                {scrapeNotice && (
+                  <div className="mt-2 text-xs font-semibold text-amber-400 bg-amber-950/40 p-2.5 rounded-xl border border-amber-800/40 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{scrapeNotice}</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-800">
