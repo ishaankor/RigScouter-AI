@@ -394,8 +394,8 @@ export function WatchlistManager({ user, onOpenAuth }: WatchlistManagerProps) {
 
       {/* Add Custom Item Modal with Instant Scrape & Auto-Fill */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950/95 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="relative glass-card w-full max-w-lg p-6 rounded-2xl border border-gray-800 bg-gray-950 shadow-2xl animate-fade-in my-auto">
             <h3 className="text-lg font-bold text-white mb-1">Add Hardware Component</h3>
             <p className="text-xs text-gray-400 mb-4">Type a hardware model or paste a product link to live-scrape and auto-fill form fields.</p>
 

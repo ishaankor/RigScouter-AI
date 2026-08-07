@@ -127,7 +127,7 @@
       "handle": "hit"
     },
     {
-      "src": "/_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media|g00I\\-wTBazg11eSR0Rckn)/.+",
+      "src": "/_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media|bD61TpItslrhkRocBCCgV)/.+",
       "headers": {
         "cache-control": "public,max-age=31536000,immutable"
       },
