@@ -50,33 +50,63 @@ export function WatchlistManager({
   // Dynamic Retailer selection state (itemId -> retailerName)
   const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
 
-  // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers
+  // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
   const getEffectiveOffer = (item: any) => {
     const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-    const offers: Array<{ retailer: string; price: number; originalPrice?: number; url: string; inStock: boolean }> = specs.RetailerOffers || [];
+    let offers: Array<{ retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = specs.RetailerOffers || [];
 
-    const activeRetailer = selectedRetailers[item.id] || item.retailer || (offers[0]?.retailer ?? 'Amazon');
-    const matchedOffer = offers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
+    const itemModel = item.model || item.componentName || item.name || '';
+    if (itemModel && trendingItems.length > 0) {
+      const siblings = trendingItems.filter(t => 
+        t.model && itemModel && t.model.toLowerCase() === itemModel.toLowerCase()
+      );
+      for (const sib of siblings) {
+        if (sib.retailer && !offers.some(o => o.retailer.toLowerCase() === sib.retailer.toLowerCase())) {
+          offers.push({
+            retailer: sib.retailer,
+            price: sib.currentPrice,
+            originalPrice: sib.msrp,
+            title: sib.name,
+            url: sib.productUrl,
+            inStock: true
+          });
+        }
+      }
+    }
 
-    const currentPrice = matchedOffer?.price || item.currentPrice || item.current_price || 0;
-    const msrp = matchedOffer?.originalPrice || item.msrp || currentPrice;
-    const productUrl = matchedOffer?.url || item.productUrl || item.product_url || '#';
-    const retailer = matchedOffer?.retailer || activeRetailer;
+    const combinedOffers = [...offers];
+    if (item.retailer && !combinedOffers.some(o => o.retailer.toLowerCase() === item.retailer.toLowerCase())) {
+      combinedOffers.push({
+        retailer: item.retailer,
+        price: item.currentPrice || item.current_price || 0,
+        originalPrice: item.msrp,
+        title: item.componentName || item.name,
+        url: item.productUrl || item.product_url || '#',
+        inStock: item.inStock ?? true
+      });
+    }
+
+    const activeRetailer = selectedRetailers[item.id] || item.retailer || (combinedOffers[0]?.retailer ?? 'Amazon');
+    const matchedOffer = combinedOffers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
+
+    const currentPrice = matchedOffer?.price ?? item.currentPrice ?? item.current_price ?? 0;
+    const msrp = matchedOffer?.originalPrice ?? item.msrp ?? currentPrice;
+    const productUrl = matchedOffer?.url ?? item.productUrl ?? item.product_url ?? '#';
+    const retailer = matchedOffer?.retailer ?? activeRetailer;
+    const title = matchedOffer?.title ?? item.componentName ?? item.name;
     const inStock = matchedOffer ? matchedOffer.inStock : true;
 
-    const availableRetailers = Array.from(new Set([
-      ...(offers.map(o => o.retailer)),
-      item.retailer
-    ])).filter(Boolean);
+    const availableRetailers = Array.from(new Set(combinedOffers.map(o => o.retailer))).filter(Boolean);
 
     return {
+      title,
       currentPrice,
       msrp,
       productUrl,
       retailer,
       inStock,
       availableRetailers,
-      offers
+      offers: combinedOffers
     };
   };
 
