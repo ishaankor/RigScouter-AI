@@ -348,8 +348,60 @@ export function WatchlistManager({
     setShowAddModal(false);
   };
 
-  const removeItem = (id: string) => {
+  const removeItem = async (id: string) => {
+    const itemToDelete = watchlist.find(item => item.id === id);
     setWatchlist(prev => prev.filter(item => item.id !== id));
+
+    // 1. Delete directly from Supabase `watchlist_items` table
+    try {
+      const { error: wlErr } = await supabase
+        .from('watchlist_items')
+        .delete()
+        .eq('id', id);
+
+      if (wlErr) {
+        console.warn('[Supabase DB Delete Warning] watchlist_items:', wlErr.message);
+      } else {
+        console.log(`[Supabase DB Delete Success] Removed "${id}" from watchlist_items table.`);
+      }
+
+      // 2. Also delete corresponding item from `hardware_components` table if it exists
+      if (itemToDelete) {
+        const { error: hwErr } = await supabase
+          .from('hardware_components')
+          .delete()
+          .or(`id.eq.${id},name.eq.${itemToDelete.componentName},product_url.eq.${itemToDelete.productUrl}`);
+
+        if (!hwErr) {
+          console.log(`[Supabase DB Delete Success] Removed "${itemToDelete.componentName}" from hardware_components table.`);
+        }
+      }
+    } catch (e) {
+      console.warn('Database deletion exception:', e);
+    }
+
+    // 3. Fallback: Call Render backend proxy DELETE endpoints
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+    try {
+      await fetch(`${BACKEND_URL}/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {}
+  };
+
+  const removeTrendingItem = async (id: string, name: string) => {
+    setTrendingItems(prev => prev.filter(item => item.id !== id));
+    try {
+      const { error } = await supabase.from('hardware_components').delete().eq('id', id);
+      if (error) {
+        console.warn('[Supabase DB Delete Warning] hardware_components:', error.message);
+      } else {
+        console.log(`[Supabase DB Delete Success] Removed component "${name}" (${id}) from hardware_components table.`);
+      }
+    } catch (e) {}
+
+    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+    try {
+      await fetch(`${BACKEND_URL}/api/components/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {}
   };
 
   const toggleNotification = (id: string) => {
@@ -626,14 +678,23 @@ export function WatchlistManager({
                     )}
                   </div>
                 </div>
-                <a
-                  href={effective.productUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 bg-gray-900 hover:bg-cyan-950/80 text-white hover:text-cyan-300 font-bold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-2 transition-all"
-                >
-                  View Direct Listing at {effective.retailer} <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={effective.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2.5 bg-gray-900 hover:bg-cyan-950/80 text-white hover:text-cyan-300 font-bold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-2 transition-all"
+                  >
+                    View Direct Listing at {effective.retailer} <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <button
+                    onClick={() => removeTrendingItem(item.id, item.name)}
+                    className="p-2.5 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
+                    title="Remove Component from Database"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             );
           })}
