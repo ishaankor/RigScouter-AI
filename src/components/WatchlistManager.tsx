@@ -53,7 +53,7 @@ export function WatchlistManager({
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
   const getEffectiveOffer = (item: any) => {
     const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-    let offers: Array<{ retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = specs.RetailerOffers || [];
+    let offers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = specs.RetailerOffers || [];
 
     const itemModel = item.model || item.componentName || item.name || '';
     if (itemModel && trendingItems.length > 0) {
@@ -124,23 +124,48 @@ export function WatchlistManager({
           .order('added_at', { ascending: false });
 
         if (dbItems && dbItems.length > 0) {
-          const formatted: WatchlistItem[] = dbItems.map((item: any) => ({
-            id: item.id,
-            userId: item.user_id,
-            componentName: item.component_name,
-            category: item.category,
-            targetPrice: item.target_price,
-            currentPrice: item.current_price,
-            previousPrice24h: item.previous_price_24h || item.current_price * 1.04,
-            previousPrice7d: item.previous_price_7d || item.current_price * 1.08,
-            previousPrice30d: item.previous_price_30d || item.current_price * 1.12,
-            allTimeLow: item.all_time_low || item.current_price,
-            retailer: item.retailer,
-            productUrl: item.product_url,
-            imageUrl: item.image_url,
-            inStock: item.in_stock ?? true,
-            notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-            addedAt: item.added_at
+          // Group by componentName so they show up as one row with multiple retailers
+          const groupedMap = new Map<string, any>();
+          
+          dbItems.forEach((item: any) => {
+            const key = item.component_name?.toLowerCase().trim();
+            if (!key) return;
+            
+            if (!groupedMap.has(key)) {
+              groupedMap.set(key, { ...item, RetailerOffers: [] });
+            }
+            
+            const group = groupedMap.get(key);
+            // Add this DB item as an offer for this component
+            group.RetailerOffers.push({
+              id: item.id,
+              retailer: item.retailer,
+              price: item.current_price,
+              originalPrice: item.target_price,
+              title: item.component_name,
+              url: item.product_url,
+              inStock: item.in_stock ?? true
+            });
+          });
+
+          const formatted: WatchlistItem[] = Array.from(groupedMap.values()).map((group: any) => ({
+            id: group.id,
+            userId: group.user_id,
+            componentName: group.component_name,
+            category: group.category,
+            targetPrice: group.target_price,
+            currentPrice: group.current_price,
+            previousPrice24h: group.previous_price_24h || group.current_price * 1.04,
+            previousPrice7d: group.previous_price_7d || group.current_price * 1.08,
+            previousPrice30d: group.previous_price_30d || group.current_price * 1.12,
+            allTimeLow: group.all_time_low || group.current_price,
+            retailer: group.retailer,
+            productUrl: group.product_url,
+            imageUrl: group.image_url,
+            inStock: group.in_stock ?? true,
+            notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
+            addedAt: group.added_at,
+            specs: { RetailerOffers: group.RetailerOffers }
           }));
           setWatchlist(formatted);
         }
@@ -352,12 +377,14 @@ export function WatchlistManager({
     const itemToDelete = watchlist.find(item => item.id === id);
     setWatchlist(prev => prev.filter(item => item.id !== id));
 
+    const idsToDelete = itemToDelete?.specs?.RetailerOffers?.map((o: any) => o.id).filter(Boolean) || [id];
+
     // 1. Delete directly from Supabase `watchlist_items` table
     try {
       const { error: wlErr } = await supabase
         .from('watchlist_items')
         .delete()
-        .eq('id', id);
+        .in('id', idsToDelete);
 
       if (wlErr) {
         console.warn('[Supabase DB Delete Warning] watchlist_items:', wlErr.message);

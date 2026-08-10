@@ -41,6 +41,7 @@ export interface WatchlistItem {
   inStock: boolean;
   notifyOnFlashDrop: boolean;
   addedAt: string;
+  specs?: Record<string, any>;
 }
 
 export interface PriceSnapshot {
