@@ -9,9 +9,11 @@ export interface TavilyScrapeResponse {
   component: HardwareComponent;
 }
 
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY || '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';
+const rawTavilyKey = process.env.TAVILY_API_KEY || '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';
+const TAVILY_API_KEYS = rawTavilyKey.split(',').map(k => k.trim()).filter(Boolean);
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
-// Pure Live Web Scraper using Tavily Search API
+// Live Web Scraper using Tavily Search API + Groq LLM Extraction
 export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<TavilyScrapeResponse> {
   const cleanQuery = queryOrUrl.trim();
   const category = detectCategory(cleanQuery);
@@ -23,74 +25,101 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   let livePrice: number | null = null;
   let rawContent = '';
 
-  try {
-    const searchQuery = isUrl
-      ? `extract price product title ${cleanQuery}`
-      : `buy current price ${cleanQuery} site:amazon.com OR site:microcenter.com OR site:newegg.com OR site:bestbuy.com`;
-
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: TAVILY_API_KEY,
-        query: searchQuery,
-        search_depth: 'advanced',
-        max_results: 5,
-        include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
-      })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const results = data.results || [];
-      if (results.length > 0) {
-        const topHit = results[0];
-        productTitle = topHit.title || cleanQuery;
-        productUrl = topHit.url || productUrl;
-        retailer = detectRetailer(topHit.url || cleanQuery);
-        rawContent = (topHit.content || '') + ' ' + (topHit.title || '');
-
-        livePrice = parsePriceFromText(rawContent);
-      }
-    }
-  } catch (err) {
-    console.error('Tavily API primary fetch failed:', err);
-  }
-
-  // 2. Secondary targeted query if price wasn't found in first snippet
-  if (!livePrice) {
+  for (const activeKey of TAVILY_API_KEYS) {
+    if (livePrice) break;
     try {
+      const searchQuery = isUrl
+        ? `extract price product title ${cleanQuery}`
+        : `buy current price ${cleanQuery} site:amazon.com OR site:microcenter.com OR site:newegg.com OR site:bestbuy.com`;
+
       const res = await fetch('https://api.tavily.com/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          api_key: TAVILY_API_KEY,
-          query: `current price dollar amount for ${cleanQuery}`,
-          search_depth: 'basic',
-          max_results: 3
+          api_key: activeKey,
+          query: searchQuery,
+          search_depth: 'advanced',
+          max_results: 5,
+          include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
         })
       });
 
       if (res.ok) {
         const data = await res.json();
         const results = data.results || [];
-        for (const hit of results) {
-          const p = parsePriceFromText((hit.content || '') + ' ' + (hit.title || ''));
-          if (p) {
-            livePrice = p;
-            if (!productTitle || productTitle === cleanQuery) productTitle = hit.title;
-            if (!isUrl && hit.url) productUrl = hit.url;
-            break;
+        console.log(`Tavily Primary Search returned ${results.length} results.`);
+        if (results.length > 0) {
+          const topHit = results[0];
+          productTitle = topHit.title || cleanQuery;
+          productUrl = topHit.url || productUrl;
+          retailer = detectRetailer(topHit.url || cleanQuery);
+          rawContent = (topHit.content || '') + ' ' + (topHit.title || '');
+
+          const parsed = await parsePriceWithGroqLLM(rawContent, cleanQuery, retailer, category);
+          if (parsed && parsed.price) {
+            livePrice = parsed.price;
+            if (parsed.title) productTitle = parsed.title;
           }
         }
+      } else {
+        console.log('Tavily Primary HTTP Error:', res.status, await res.text());
       }
     } catch (err) {
-      console.error('Tavily API secondary price fetch failed:', err);
+      console.error('Tavily API primary fetch failed:', err);
     }
   }
 
-  // Final price safety fallback
-  const finalPrice = livePrice || 399.99;
+  // 2. Secondary targeted query if price wasn't found in first snippet
+  if (!livePrice) {
+    for (const activeKey of TAVILY_API_KEYS) {
+      if (livePrice) break;
+      try {
+        const res = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: activeKey,
+            query: `current price dollar amount for ${cleanQuery}`,
+            search_depth: 'basic',
+            max_results: 3
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const results = data.results || [];
+          console.log(`Tavily Secondary Search returned ${results.length} results.`);
+          for (const hit of results) {
+            const text = (hit.content || '') + ' ' + (hit.title || '');
+            const parsed = await parsePriceWithGroqLLM(text, cleanQuery, detectRetailer(hit.url || ''), category);
+            if (parsed && parsed.price) {
+              livePrice = parsed.price;
+              if (!productTitle || productTitle === cleanQuery) productTitle = parsed.title || hit.title;
+              if (!isUrl && hit.url) productUrl = hit.url;
+              retailer = detectRetailer(hit.url || '');
+              break;
+            }
+          }
+        } else {
+          console.log('Tavily Secondary HTTP Error:', res.status, await res.text());
+        }
+      } catch (err) {
+        console.error('Tavily API secondary price fetch failed:', err);
+      }
+    }
+  }
+
+  // Final price safety fallback (Abort if no valid price found)
+  if (!livePrice || livePrice <= 0) {
+    return {
+      query: cleanQuery,
+      scrapedAt: new Date().toISOString(),
+      source: 'tavily_live_web',
+      component: null as any // Allow caller to handle failure
+    };
+  }
+
+  const finalPrice = livePrice;
   const msrp = Math.round((finalPrice * 1.12) * 100) / 100;
   const lowest90d = Math.round((finalPrice * 0.95) * 100) / 100;
   const dealScore = calculateDealScore(msrp, finalPrice, lowest90d);
@@ -123,18 +152,52 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   };
 }
 
-function parsePriceFromText(text: string): number | null {
-  if (!text) return null;
-  // Match patterns like $549.99 or $1,299.00 or $339
-  const matches = text.match(/\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
-  if (matches) {
-    for (const matchStr of matches) {
-      const cleanStr = matchStr.replace(/\$|,|\s/g, '');
-      const num = parseFloat(cleanStr);
-      if (num >= 15 && num <= 6000) {
-        return num;
+async function parsePriceWithGroqLLM(text: string, query: string, retailer: string, category: string): Promise<{ price: number | null, title?: string } | null> {
+  if (!text || !GROQ_API_KEY) return null;
+  
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { 
+            role: 'system', 
+            content: `You are a high-precision PC hardware price extraction AI. 
+Extract EXACT primary sale price. Ignore sponsored ads. DO NOT extract prices for accessories (cables, protection plans, brackets).
+Output strict JSON: {"currentPrice": number or null, "cleanTitle": string}` 
+          },
+          { 
+            role: 'user', 
+            content: `Item: "${query}" (${category})\nRetailer: "${retailer}"\nContent:\n${text.substring(0, 4000)}` 
+          }
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      console.log('GROQ RAW RESPONSE:', data.choices?.[0]?.message?.content);
+      const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+      if (typeof parsed.currentPrice === 'number' && parsed.currentPrice > 15 && parsed.currentPrice <= 6000) {
+        return {
+          price: parsed.currentPrice,
+          title: parsed.cleanTitle
+        };
+      } else {
+        console.log('GROQ parse failed condition:', parsed);
       }
+    } else {
+      console.log('GROQ HTTP Error:', res.status, await res.text());
     }
+  } catch (e) {
+    console.warn('Groq LLM extraction failed in edge scraper:', e);
   }
   return null;
 }
