@@ -5,137 +5,110 @@ import { saveHardwareComponentToCache } from '../db/cache';
 export interface TavilyScrapeResponse {
   query: string;
   scrapedAt: string;
-  source: 'tavily_live_web';
+  source: 'tavily_live_web' | 'diffbot_direct';
   component: HardwareComponent;
 }
 
 const rawTavilyKey = process.env.TAVILY_API_KEY || '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';
 const TAVILY_API_KEYS = rawTavilyKey.split(',').map(k => k.trim()).filter(Boolean);
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const DIFFBOT_TOKEN = process.env.DIFFBOT_TOKEN || '';
 
-// Live Web Scraper using Tavily Search API + Groq LLM Extraction
+// Live Web Scraper using Tavily Search API + DiffBot Product Extraction
 export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<TavilyScrapeResponse> {
   const cleanQuery = queryOrUrl.trim();
   const category = detectCategory(cleanQuery);
   const isUrl = cleanQuery.startsWith('http://') || cleanQuery.startsWith('https://');
 
-  let productTitle = cleanQuery;
-  let productUrl = isUrl ? cleanQuery : `https://www.amazon.com/s?k=${encodeURIComponent(cleanQuery)}`;
-  let retailer: RetailerName = detectRetailer(cleanQuery);
-  let livePrice: number | null = null;
-  let rawContent = '';
+  let bestPrice: number | null = null;
+  let bestTitle = cleanQuery;
+  let bestUrl = isUrl ? cleanQuery : '';
+  let bestRetailer: RetailerName = detectRetailer(cleanQuery);
 
-  for (const activeKey of TAVILY_API_KEYS) {
-    if (livePrice) break;
-    try {
-      const searchQuery = isUrl
-        ? `extract price product title ${cleanQuery}`
-        : `buy current price ${cleanQuery} site:amazon.com OR site:microcenter.com OR site:newegg.com OR site:bestbuy.com`;
-
-      const res = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: activeKey,
-          query: searchQuery,
-          search_depth: 'advanced',
-          max_results: 5,
-          include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const results = data.results || [];
-        console.log(`Tavily Primary Search returned ${results.length} results.`);
-        if (results.length > 0) {
-          const topHit = results[0];
-          productTitle = topHit.title || cleanQuery;
-          productUrl = topHit.url || productUrl;
-          retailer = detectRetailer(topHit.url || cleanQuery);
-          rawContent = (topHit.content || '') + ' ' + (topHit.title || '');
-
-          const parsed = await parsePriceWithGroqLLM(rawContent, cleanQuery, retailer, category);
-          if (parsed && parsed.price) {
-            livePrice = parsed.price;
-            if (parsed.title) productTitle = parsed.title;
-          }
-        }
-      } else {
-        console.log('Tavily Primary HTTP Error:', res.status, await res.text());
-      }
-    } catch (err) {
-      console.error('Tavily API primary fetch failed:', err);
+  if (isUrl) {
+    // 1. Direct Diffbot Extraction for URLs
+    const diffData = await extractProductWithDiffBot(cleanQuery);
+    if (diffData && diffData.price) {
+      bestPrice = diffData.price;
+      if (diffData.title) bestTitle = diffData.title;
+      bestRetailer = detectRetailer(cleanQuery);
     }
-  }
-
-  // 2. Secondary targeted query if price wasn't found in first snippet
-  if (!livePrice) {
+  } else {
+    // 2. Hybrid: Tavily Search -> DiffBot Extraction
+    let urlsToCheck: string[] = [];
+    
+    // Step A: Find Product URLs
     for (const activeKey of TAVILY_API_KEYS) {
-      if (livePrice) break;
+      if (urlsToCheck.length > 0) break;
       try {
+        const searchQuery = `${cleanQuery} amazon OR newegg OR bestbuy OR microcenter`;
         const res = await fetch('https://api.tavily.com/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             api_key: activeKey,
-            query: `current price dollar amount for ${cleanQuery}`,
-            search_depth: 'basic',
-            max_results: 3
+            query: searchQuery,
+            search_depth: 'advanced',
+            max_results: 1,
+            include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
           })
         });
 
         if (res.ok) {
           const data = await res.json();
           const results = data.results || [];
-          console.log(`Tavily Secondary Search returned ${results.length} results.`);
-          for (const hit of results) {
-            const text = (hit.content || '') + ' ' + (hit.title || '');
-            const parsed = await parsePriceWithGroqLLM(text, cleanQuery, detectRetailer(hit.url || ''), category);
-            if (parsed && parsed.price) {
-              livePrice = parsed.price;
-              if (!productTitle || productTitle === cleanQuery) productTitle = parsed.title || hit.title;
-              if (!isUrl && hit.url) productUrl = hit.url;
-              retailer = detectRetailer(hit.url || '');
-              break;
-            }
-          }
+          urlsToCheck = results.map((r: any) => r.url).filter(Boolean);
+          console.log(`Tavily found ${urlsToCheck.length} URLs for DiffBot extraction.`);
         } else {
-          console.log('Tavily Secondary HTTP Error:', res.status, await res.text());
+          console.log('Tavily Primary HTTP Error:', res.status, await res.text());
         }
       } catch (err) {
-        console.error('Tavily API secondary price fetch failed:', err);
+        console.error('Tavily API search failed:', err);
+      }
+    }
+
+    // Step B: Extract Pricing from URLs using DiffBot
+    for (const url of urlsToCheck) {
+      console.log(`[DiffBot] Checking URL: ${url}`);
+      const diffData = await extractProductWithDiffBot(url);
+      if (diffData && diffData.price) {
+        // Pick the lowest price we can find across the top results
+        if (!bestPrice || diffData.price < bestPrice) {
+          bestPrice = diffData.price;
+          bestTitle = diffData.title || bestTitle;
+          bestUrl = url;
+          bestRetailer = detectRetailer(url);
+        }
       }
     }
   }
 
   // Final price safety fallback (Abort if no valid price found)
-  if (!livePrice || livePrice <= 0) {
+  if (!bestPrice || bestPrice <= 0) {
     return {
       query: cleanQuery,
       scrapedAt: new Date().toISOString(),
-      source: 'tavily_live_web',
+      source: isUrl ? 'diffbot_direct' : 'tavily_live_web',
       component: null as any // Allow caller to handle failure
     };
   }
 
-  const finalPrice = livePrice;
+  const finalPrice = bestPrice;
   const msrp = Math.round((finalPrice * 1.12) * 100) / 100;
   const lowest90d = Math.round((finalPrice * 0.95) * 100) / 100;
   const dealScore = calculateDealScore(msrp, finalPrice, lowest90d);
 
   const component: HardwareComponent = {
-    id: `tavily-${Date.now()}`,
-    name: productTitle,
+    id: `hybrid-${Date.now()}`,
+    name: bestTitle,
     category,
-    brand: extractBrand(productTitle),
+    brand: extractBrand(bestTitle),
     model: cleanQuery,
-    specs: { ScrapedVia: 'Tavily Search API', ScrapedAt: new Date().toISOString() },
+    specs: { ScrapedVia: isUrl ? 'DiffBot' : 'Tavily + DiffBot', ScrapedAt: new Date().toISOString() },
     msrp,
     currentPrice: finalPrice,
     lowestPrice90d: lowest90d,
-    retailer,
-    productUrl,
+    retailer: bestRetailer,
+    productUrl: bestUrl,
     imageUrl: getCategoryImage(category),
     rating: 4.8,
     dealScore
@@ -147,57 +120,107 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   return {
     query: cleanQuery,
     scrapedAt: new Date().toISOString(),
-    source: 'tavily_live_web',
+    source: isUrl ? 'diffbot_direct' : 'tavily_live_web',
     component
   };
 }
 
-async function parsePriceWithGroqLLM(text: string, query: string, retailer: string, category: string): Promise<{ price: number | null, title?: string } | null> {
-  if (!text || !GROQ_API_KEY) return null;
+const RESIDENTIAL_PROXY = process.env.RESIDENTIAL_PROXY || '';
+const RESIDENTIAL_PROXY_AUTH = process.env.RESIDENTIAL_PROXY_AUTH || '';
+
+async function extractProductWithDiffBot(url: string, retryCount = 0): Promise<{ price: number | null, title?: string } | null> {
+  if (!url) return null;
+  
+  if (!DIFFBOT_TOKEN) {
+    console.warn('Missing DIFFBOT_TOKEN environment variable. Cannot extract price for', url);
+    return null;
+  }
   
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
+    // Add &proxy and &render=true to bypass blocks and wait for dynamic content
+    let proxyParam = '&proxy'; 
+    if (retryCount > 0 && RESIDENTIAL_PROXY) {
+      proxyParam = `&proxy=${encodeURIComponent(RESIDENTIAL_PROXY)}`;
+      if (RESIDENTIAL_PROXY_AUTH) {
+        proxyParam += `&proxyAuth=${encodeURIComponent(RESIDENTIAL_PROXY_AUTH)}`;
+      }
+      console.log(`[DiffBot] Using custom residential proxy on attempt ${retryCount + 1}`);
+    }
+
+    const diffbotUrl = `https://api.diffbot.com/v3/product?token=${DIFFBOT_TOKEN}&url=${encodeURIComponent(url)}${proxyParam}&render=true`;
+    
+    const res = await fetch(diffbotUrl, {
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { 
-            role: 'system', 
-            content: `You are a high-precision PC hardware price extraction AI. 
-Extract EXACT primary sale price. Ignore sponsored ads. DO NOT extract prices for accessories (cables, protection plans, brackets).
-Output strict JSON: {"currentPrice": number or null, "cleanTitle": string}` 
-          },
-          { 
-            role: 'user', 
-            content: `Item: "${query}" (${category})\nRetailer: "${retailer}"\nContent:\n${text.substring(0, 4000)}` 
-          }
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' }
-      })
+        // Forward realistic headers to the target site via Diffbot
+        'X-Forward-User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'X-Forward-Accept-Language': 'en-US,en;q=0.9',
+        'X-Forward-Referer': 'https://www.google.com/'
+      }
     });
+    
+    let isBlocked = (res.status === 429 || res.status === 503 || res.status === 403);
+    let data: any = null;
 
     if (res.ok) {
-      const data = await res.json();
-      console.log('GROQ RAW RESPONSE:', data.choices?.[0]?.message?.content);
-      const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
-      if (typeof parsed.currentPrice === 'number' && parsed.currentPrice > 15 && parsed.currentPrice <= 6000) {
-        return {
-          price: parsed.currentPrice,
-          title: parsed.cleanTitle
-        };
-      } else {
-        console.log('GROQ parse failed condition:', parsed);
+      data = await res.json();
+      const object = data.objects?.[0];
+      
+      // Amazon specifically returns 200 OK but shows the CAPTCHA page
+      if (object && object.title && (object.title.includes('Conditions of Use') || object.title.includes('Bot Activity'))) {
+        isBlocked = true;
+        console.warn(`[DiffBot] Amazon CAPTCHA detected for ${url}`);
       }
-    } else {
-      console.log('GROQ HTTP Error:', res.status, await res.text());
+    }
+
+    if (isBlocked) {
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 2000; // 2s, 4s, 8s
+        console.warn(`[DiffBot] Blocked / CAPTCHA. Retrying in ${delay}ms... (Attempt ${retryCount + 1})`);
+        await new Promise(r => setTimeout(r, delay));
+        return extractProductWithDiffBot(url, retryCount + 1);
+      } else {
+        console.warn(`[DiffBot] Exhausted retries for ${url}`);
+        return null;
+      }
+    }
+
+    if (res.ok && data) {
+      const object = data.objects?.[0];
+      if (object) {
+        console.log(`[DiffBot RAW Object for ${url}]:`, JSON.stringify({
+           offerPrice: object.offerPrice,
+           offerPriceDetails: object.offerPriceDetails,
+           regularPrice: object.regularPrice,
+           title: object.title
+        }, null, 2));
+        let price: number | null = null;
+        
+        // Handle various ways DiffBot might return the price
+        if (typeof object.offerPrice === 'number') {
+          price = object.offerPrice;
+        } else if (typeof object.offerPrice === 'string') {
+          price = parseFloat(object.offerPrice.replace(/[^0-9.]/g, ''));
+        } else if (object.offerPriceDetails?.amount) {
+          price = object.offerPriceDetails.amount;
+        } else if (object.regularPrice) {
+          price = typeof object.regularPrice === 'number' 
+            ? object.regularPrice 
+            : parseFloat(object.regularPrice.replace(/[^0-9.]/g, ''));
+        }
+
+        // Validate price bounds (e.g. to filter out weird accessories picked up instead)
+        if (price !== null && !isNaN(price) && price > 15 && price <= 6000) {
+          console.log(`[DiffBot] Successfully extracted $${price} from ${url}`);
+          return { price, title: object.title };
+        } else {
+          console.log(`[DiffBot] Price extraction out of bounds or invalid for ${url}:`, price);
+        }
+      }
+    } else if (!res.ok) {
+      console.log('DiffBot HTTP Error:', res.status, await res.text());
     }
   } catch (e) {
-    console.warn('Groq LLM extraction failed in edge scraper:', e);
+    console.warn('DiffBot extraction failed:', e);
   }
   return null;
 }
