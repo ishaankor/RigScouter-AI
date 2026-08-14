@@ -26,4 +26,5 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.pem
+scratch/**
 scratch-test.ts

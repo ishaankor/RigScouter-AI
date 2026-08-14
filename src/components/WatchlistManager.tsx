@@ -203,7 +203,7 @@ export function WatchlistManager({
           .from('hardware_components')
           .select('*')
           .order('updated_at', { ascending: false })
-          .limit(20);
+          .limit(500);
 
         if (hwCatalog && hwCatalog.length > 0) {
           const formattedTrending = hwCatalog.map((item: any) => {
