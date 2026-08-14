@@ -277,7 +277,7 @@ export function WatchlistManager({
       previousPrice7d: 0,
       previousPrice30d: 0,
       allTimeLow: 0,
-      retailer: 'Scraping live prices...',
+      retailer: 'Scraping live prices...' as any,
       productUrl: '',
       imageUrl: getCategoryImage(category),
       inStock: false,
