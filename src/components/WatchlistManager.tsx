@@ -50,16 +50,41 @@ export function WatchlistManager({
   // Dynamic Retailer selection state (itemId -> retailerName)
   const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
 
+  // Helper to extract a canonical key from an item (either from ID or name fallback)
+  const getNormalizedKey = (itm: any) => {
+    let key = (itm.component_name || itm.componentName || itm.name || itm.model || '').toLowerCase().trim();
+    if (itm.id) {
+      const retailerSlug = itm.retailer?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      if (retailerSlug && itm.id.endsWith(`-${retailerSlug}`)) {
+        key = itm.id.slice(0, -(retailerSlug.length + 1));
+      } else {
+        key = itm.id;
+      }
+    }
+    return key;
+  };
+
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
   const getEffectiveOffer = (item: any) => {
     const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
     let offers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = specs.RetailerOffers || [];
 
-    const itemModel = item.model || item.componentName || item.name || '';
-    if (itemModel && trendingItems.length > 0) {
-      const siblings = trendingItems.filter(t => 
-        t.model && itemModel && t.model.toLowerCase() === itemModel.toLowerCase()
-      );
+    const itemKey = getNormalizedKey(item);
+    if (trendingItems.length > 0) {
+      const itemTitle = (item.componentName || item.component_name || item.name || '').toLowerCase();
+      const siblings = trendingItems.filter(t => {
+        const tKey = getNormalizedKey(t);
+        if (tKey && tKey === itemKey) return true;
+        
+        // Fallback for manually added items (w-* IDs) to match with backend hardware_components by model substring
+        if (t.model && itemTitle) {
+          const tModel = t.model.toLowerCase();
+          if (tModel.length > 4 && (itemTitle.includes(tModel) || tModel.includes(itemTitle))) {
+            return true;
+          }
+        }
+        return false;
+      });
       for (const sib of siblings) {
         if (sib.retailer && !offers.some(o => o.retailer.toLowerCase() === sib.retailer.toLowerCase())) {
           offers.push({
@@ -89,12 +114,15 @@ export function WatchlistManager({
     const activeRetailer = selectedRetailers[item.id] || item.retailer || (combinedOffers[0]?.retailer ?? 'Amazon');
     const matchedOffer = combinedOffers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
 
-    const currentPrice = matchedOffer?.price ?? item.currentPrice ?? item.current_price ?? 0;
-    const msrp = matchedOffer?.originalPrice ?? item.msrp ?? currentPrice;
-    const productUrl = matchedOffer?.url ?? item.productUrl ?? item.product_url ?? '#';
-    const retailer = matchedOffer?.retailer ?? activeRetailer;
-    const title = matchedOffer?.title ?? item.componentName ?? item.name;
-    const inStock = matchedOffer ? matchedOffer.inStock : true;
+    const isExplicitlySelected = !!selectedRetailers[item.id];
+    
+    // If the user explicitly selected a retailer and we don't have an offer for it, we shouldn't inherit the default item's price/URL.
+    const currentPrice = matchedOffer ? matchedOffer.price : (isExplicitlySelected ? 0 : (item.currentPrice ?? item.current_price ?? 0));
+    const msrp = matchedOffer ? (matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : (item.msrp ?? currentPrice));
+    const productUrl = matchedOffer ? matchedOffer.url : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));
+    const retailer = matchedOffer ? matchedOffer.retailer : activeRetailer;
+    const title = matchedOffer ? (matchedOffer.title ?? item.componentName ?? item.name) : (item.componentName ?? item.name);
+    const inStock = matchedOffer ? matchedOffer.inStock : false; // false if we don't have the offer
 
     const availableRetailers = Array.from(new Set(combinedOffers.map(o => o.retailer))).filter(Boolean);
 
@@ -128,18 +156,7 @@ export function WatchlistManager({
           const groupedMap = new Map<string, any>();
           
           dbItems.forEach((item: any) => {
-            // Extract the normalized component key from the ID (e.g. comp-gtx-1070-micro-center -> comp-gtx-1070)
-            let key = item.component_name?.toLowerCase().trim();
-            if (item.id) {
-              const retailerSlug = item.retailer?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-              if (retailerSlug && item.id.endsWith(`-${retailerSlug}`)) {
-                key = item.id.slice(0, -(retailerSlug.length + 1));
-              } else if (item.id.startsWith('comp-')) {
-                key = item.id; // fallback to ID
-              }
-              // If it doesn't end with the retailer slug and doesn't start with comp-,
-              // key remains the component_name (which was set above).
-            }
+            const key = getNormalizedKey(item);
             if (!key) return;
             
             if (!groupedMap.has(key)) {
@@ -571,7 +588,7 @@ export function WatchlistManager({
                             className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
                           />
                           <div>
-                            <div className="font-bold text-white text-sm line-clamp-1">{item.componentName}</div>
+                            <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>
                             <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
                               {item.category}
                             </span>
