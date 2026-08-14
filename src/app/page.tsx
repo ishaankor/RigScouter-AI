@@ -128,8 +128,7 @@ export default function Home() {
             </button>
           );
         })}
-
-
+      </div>
 
       {/* Dynamic Tab Views */}
       {activeTab === 'watchlist' && <WatchlistManager user={user} onOpenAuth={() => setAuthModalOpen(true)} />}
