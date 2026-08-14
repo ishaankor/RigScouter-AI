@@ -128,7 +128,18 @@ export function WatchlistManager({
           const groupedMap = new Map<string, any>();
           
           dbItems.forEach((item: any) => {
-            const key = item.component_name?.toLowerCase().trim();
+            // Extract the normalized component key from the ID (e.g. comp-gtx-1070-micro-center -> comp-gtx-1070)
+            let key = item.component_name?.toLowerCase().trim();
+            if (item.id) {
+              const retailerSlug = item.retailer?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              if (retailerSlug && item.id.endsWith(`-${retailerSlug}`)) {
+                key = item.id.slice(0, -(retailerSlug.length + 1));
+              } else if (item.id.startsWith('comp-')) {
+                key = item.id; // fallback to ID
+              }
+              // If it doesn't end with the retailer slug and doesn't start with comp-,
+              // key remains the component_name (which was set above).
+            }
             if (!key) return;
             
             if (!groupedMap.has(key)) {
@@ -570,13 +581,12 @@ export function WatchlistManager({
 
                       {/* Dynamic Retailer Dropdown Selector */}
                       <td className="p-4">
-                        {effective.availableRetailers.length > 1 ? (
                           <select
                             value={effective.retailer}
                             onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
                             className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
                           >
-                            {effective.availableRetailers.map(rName => {
+                            {Array.from(new Set([...effective.availableRetailers, 'Amazon', 'Micro Center', 'Best Buy', 'B&H', 'Newegg', 'eBay'])).map(rName => {
                               const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
                               const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
                               return (
@@ -586,11 +596,6 @@ export function WatchlistManager({
                               );
                             })}
                           </select>
-                        ) : (
-                          <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block">
-                            {effective.retailer}
-                          </span>
-                        )}
                       </td>
 
                       <td className="p-4">
