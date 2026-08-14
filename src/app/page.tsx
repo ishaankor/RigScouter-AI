@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'watchlist' | 'builder' | 'digest' | 'radar'>('overview');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'digest'>('watchlist');
   const [user, setUser] = useState<any>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -108,11 +108,8 @@ export default function Home() {
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-800/60">
         {[
-          { id: 'overview', label: 'Home Overview', icon: Sparkles },
           { id: 'watchlist', label: 'Watchlist Tracker', icon: Bell },
-          { id: 'builder', label: 'AI Rig Concierge', icon: Cpu },
-          { id: 'digest', label: 'Daily Automater Digest', icon: Calendar },
-          { id: 'radar', label: 'Flash Deals Radar', icon: Flame },
+          { id: 'digest', label: 'Daily Digest', icon: Calendar },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -132,163 +129,11 @@ export default function Home() {
           );
         })}
 
-        <Link
-          href="/features"
-          className="px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer glass-card text-purple-300 hover:text-white hover:bg-purple-950/40 border border-purple-500/30"
-        >
-          <Award className="w-4 h-4 text-purple-400" />
-          <span>Features Page ↗</span>
-        </Link>
-      </div>
 
-      {/* TAB 1: Home Overview & Feature Showcase */}
-      {activeTab === 'overview' && (
-        <div className="space-y-10 animate-fade-in">
-          {/* Hero Section */}
-          <div className="glass-card relative overflow-hidden rounded-3xl border border-gray-800 p-8 md:p-12 bg-gradient-to-br from-gray-950 via-cyan-950/20 to-gray-950">
-            <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="relative z-10 max-w-3xl space-y-6">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold">
-                <Zap className="w-3.5 h-3.5" />
-                24/7 Multi-Retailer Scraper & Autonomous Price Drop Radar
-              </div>
-
-              <h2 className="text-4xl md:text-5xl font-black text-white font-heading tracking-tight leading-tight">
-                Intelligent PC Deal Finder & Autonomous Price Tracker
-              </h2>
-
-              <p className="text-base text-gray-300 leading-relaxed">
-                RigScouter-AI scans Micro Center, Amazon, Newegg, Best Buy, and B&H Photo continuously. Save items to your personalized watchlist, receive scheduled daily digests to Email or Discord, and generate AI-verified custom PC builds.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-4 pt-2">
-                {!user ? (
-                  <button
-                    onClick={() => setAuthModalOpen(true)}
-                    className="btn-glow px-6 py-3.5 text-sm font-bold rounded-xl flex items-center gap-2 cursor-pointer shadow-xl"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Sign In / Create Account
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setActiveTab('watchlist')}
-                    className="btn-glow px-6 py-3.5 text-sm font-bold rounded-xl flex items-center gap-2 cursor-pointer shadow-xl"
-                  >
-                    <Bell className="w-4 h-4" />
-                    Open My Watchlist
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setActiveTab('builder')}
-                  className="px-6 py-3.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-sm rounded-xl border border-gray-800 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <Bot className="w-4 h-4 text-cyan-400" />
-                  Launch AI Rig Concierge
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 4 Core Features Showcase */}
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-400" />
-                  Platform Features & Architecture
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">Explore how RigScouter-AI monitors hardware catalog prices and dispatches daily digests</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Feature 1 */}
-              <div className="glass-card p-6 rounded-2xl border border-gray-800 space-y-4 hover:border-cyan-500/40 transition-colors">
-                <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-                  <Globe className="w-6 h-6" />
-                </div>
-                <h4 className="text-lg font-bold text-white">1. Autonomous Multi-Retailer Scraper</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Scrapes Micro Center, Amazon, Newegg, Best Buy, and B&H Photo live using Firecrawl & Tavily native LLM extractions. Identifies model groups and partner variants under unified canonical models.
-                </p>
-                <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 pt-2">
-                  <span>Firecrawl API & Tavily SDK Integrated</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </div>
-              </div>
-
-              {/* Feature 2 */}
-              <div className="glass-card p-6 rounded-2xl border border-gray-800 space-y-4 hover:border-purple-500/40 transition-colors">
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                  <Lock className="w-6 h-6" />
-                </div>
-                <h4 className="text-lg font-bold text-white">2. Personalized Watchlist & RLS Security</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Users must be signed in to add items to their personal watchlist. Powered by Supabase Auth and Row Level Security (RLS) to isolate user alerts and target prices.
-                </p>
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs font-semibold text-purple-400 flex items-center gap-1">
-                    <ShieldCheck className="w-4 h-4" /> Sign In Required
-                  </span>
-                  <button
-                    onClick={() => {
-                      if (!user) setAuthModalOpen(true);
-                      else setActiveTab('watchlist');
-                    }}
-                    className="text-xs font-bold text-white hover:text-cyan-400 flex items-center gap-1 cursor-pointer"
-                  >
-                    {user ? 'View Watchlist' : 'Sign In Now'} <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="glass-card p-6 rounded-2xl border border-gray-800 space-y-4 hover:border-emerald-500/40 transition-colors">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Cpu className="w-6 h-6" />
-                </div>
-                <h4 className="text-lg font-bold text-white">3. RAG AI Rig Concierge & Compatibility</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Build custom gaming and workstation PCs with real-time hardware compatibility checks (Socket, TDP wattage, cooler height, GPU length).
-                </p>
-                <button
-                  onClick={() => setActiveTab('builder')}
-                  className="flex items-center gap-2 text-xs font-semibold text-emerald-400 pt-2 cursor-pointer hover:underline"
-                >
-                  <span>Launch AI Rig Concierge</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Feature 4 */}
-              <div className="glass-card p-6 rounded-2xl border border-gray-800 space-y-4 hover:border-amber-500/40 transition-colors">
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <Mail className="w-6 h-6" />
-                </div>
-                <h4 className="text-lg font-bold text-white">4. Subscribed Daily Digest & Alerts</h4>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Subscribed users receive scheduled daily digests dispatched directly to their Email or Discord webhook. Includes executive price drop summaries and 90-day trend deltas.
-                </p>
-                <button
-                  onClick={() => setActiveTab('digest')}
-                  className="flex items-center gap-2 text-xs font-semibold text-amber-400 pt-2 cursor-pointer hover:underline"
-                >
-                  <span>Manage Digest Subscriptions</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Dynamic Tab Views */}
       {activeTab === 'watchlist' && <WatchlistManager user={user} onOpenAuth={() => setAuthModalOpen(true)} />}
-      {activeTab === 'builder' && <RigBuilderChat />}
       {activeTab === 'digest' && <DailyDigestPreview user={user} onOpenAuth={() => setAuthModalOpen(true)} />}
-      {activeTab === 'radar' && <DealRadar />}
 
       {/* Auth Modal */}
       <AuthModal

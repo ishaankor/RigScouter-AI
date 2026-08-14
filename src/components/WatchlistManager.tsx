@@ -260,145 +260,114 @@ export function WatchlistManager({
     setIsScraping(true);
     setScrapeNotice(null);
 
-    let scrapedData: any = null;
-    let dataSource = 'backend';
-
     const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
-
-    // 1. Query Next.js Edge Scraper API Route
-    try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryToScrape })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.component && data.component.currentPrice) {
-          scrapedData = data.component;
-          dataSource = data.source || 'database';
-        }
-      }
-    } catch (err) {
-      console.warn('Autonomous scrape /api/scrape fetch error:', err);
-    }
-
-    // 2. Fallback: Query Render Backend Database Proxy Directly (if /api/scrape returns 404 or non-200)
-    if (!scrapedData || !scrapedData.currentPrice) {
-      try {
-        console.log(`[Backend Proxy Fallback] Fetching ${BACKEND_URL}/api/scrape for "${queryToScrape}"...`);
-        const backendRes = await fetch(`${BACKEND_URL}/api/scrape`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: queryToScrape })
-        });
-
-        if (backendRes.ok) {
-          const data = await backendRes.json();
-          if (data.component && data.component.currentPrice) {
-            scrapedData = data.component;
-            dataSource = data.source || 'render_backend_proxy';
-          }
-        }
-      } catch (backendErr) {
-        console.warn('Backend proxy direct fetch error:', backendErr);
-      }
-    }
-
-    // Check if valid scraped price was retrieved
-    if (!scrapedData || !scrapedData.currentPrice) {
-      setIsScraping(false);
-      setScrapeNotice(`⚠️ No live retail listings found for "${queryToScrape}". This component may be unreleased (e.g. RTX 50-series), out of stock, or requires a direct retailer URL. Try searching for released models like "RTX 4070 Super", "RTX 4060", or "Ryzen 7 7800X3D".`);
-      return;
-    }
-
-    // Bot extracts and formats all component fields autonomously
-    const title = scrapedData.name || queryToScrape;
-    const category = scrapedData.category || autoDetectCategory(queryToScrape);
-    const currentPrice = scrapedData.currentPrice;
-    const targetPrice = Math.round(currentPrice * 0.9 * 100) / 100;
-    const retailer = scrapedData.retailer || autoDetectRetailer(queryToScrape);
-    const productUrl = scrapedData.productUrl || (queryToScrape.startsWith('http') ? queryToScrape : `https://www.amazon.com/s?k=${encodeURIComponent(queryToScrape)}`);
-    const imageUrl = scrapedData.imageUrl || getCategoryImage(category);
-
     const userId = user?.id || 'demo-user-123';
+    const pendingId = `w-${Date.now()}`;
+    const category = autoDetectCategory(queryToScrape);
 
-    const newItem: WatchlistItem = {
-      id: `w-${Date.now()}`,
+    // 1. Create a "Pending" item in the Watchlist instantly
+    const pendingItem: WatchlistItem = {
+      id: pendingId,
       userId,
-      componentName: title,
+      componentName: queryToScrape,
       category,
-      targetPrice,
-      currentPrice,
-      previousPrice24h: Math.round(currentPrice * 1.05 * 100) / 100,
-      previousPrice7d: Math.round(currentPrice * 1.08 * 100) / 100,
-      previousPrice30d: Math.round(currentPrice * 1.12 * 100) / 100,
-      allTimeLow: currentPrice,
-      retailer,
-      productUrl,
-      imageUrl,
-      inStock: true,
+      targetPrice: 0,
+      currentPrice: 0,
+      previousPrice24h: 0,
+      previousPrice7d: 0,
+      previousPrice30d: 0,
+      allTimeLow: 0,
+      retailer: 'Scraping live prices...',
+      productUrl: '',
+      imageUrl: getCategoryImage(category),
+      inStock: false,
       notifyOnFlashDrop: true,
       addedAt: new Date().toISOString()
     };
 
-    // Update screen instantly
-    setWatchlist(prev => [newItem, ...prev]);
+    // Update screen instantly & close modal
+    setWatchlist(prev => [pendingItem, ...prev]);
+    setShowAddModal(false);
+    setLiveQuery('');
 
-    // Persist directly to Supabase Database table `watchlist_items` via client SDK
-    try {
-      const { error: dbErr } = await supabase.from('watchlist_items').upsert({
-        id: newItem.id,
-        user_id: userId,
-        component_name: title,
-        category: category,
-        target_price: targetPrice,
-        current_price: currentPrice,
-        previous_price_24h: newItem.previousPrice24h,
-        previous_price_7d: newItem.previousPrice7d,
-        previous_price_30d: newItem.previousPrice30d,
-        all_time_low: currentPrice,
-        retailer: retailer,
-        product_url: productUrl,
-        image_url: imageUrl,
-        in_stock: true,
-        notify_on_flash_drop: true,
-        added_at: newItem.addedAt
-      });
+    // 2. Setup an SSE listener to catch the streaming results
+    const es = new EventSource(`${BACKEND_URL}/api/stream`);
+    let bestPrice = Infinity;
 
-      if (dbErr) {
-        console.warn('Direct Supabase DB save error:', dbErr.message);
-      } else {
-        console.log(`[Supabase DB Success] Saved "${title}" ($${currentPrice}) directly to watchlist_items table!`);
+    es.addEventListener('retailer_found', async (e: MessageEvent) => {
+      const payload = JSON.parse(e.data);
+      if (payload.query.toLowerCase() === queryToScrape.toLowerCase()) {
+        // We found a retailer for our query! Only update if it's the first or a cheaper price
+        if (payload.price < bestPrice) {
+          bestPrice = payload.price;
+          
+          // Update the UI with this new best price dynamically
+          setWatchlist(prev => prev.map(item => {
+            if (item.id === pendingId) {
+              return {
+                ...item,
+                componentName: payload.title,
+                currentPrice: payload.price,
+                targetPrice: Math.round(payload.price * 0.9 * 100) / 100,
+                retailer: payload.retailer,
+                productUrl: payload.url,
+                inStock: payload.inStock
+              };
+            }
+            return item;
+          }));
+          
+          // Upsert incrementally to Supabase
+          try {
+            await supabase.from('watchlist_items').upsert({
+              id: pendingId,
+              user_id: userId,
+              component_name: payload.title,
+              category: category,
+              target_price: Math.round(payload.price * 0.9 * 100) / 100,
+              current_price: payload.price,
+              previous_price_24h: Math.round(payload.price * 1.05 * 100) / 100,
+              previous_price_7d: Math.round(payload.price * 1.08 * 100) / 100,
+              previous_price_30d: Math.round(payload.price * 1.12 * 100) / 100,
+              all_time_low: payload.price,
+              retailer: payload.retailer,
+              product_url: payload.url,
+              image_url: getCategoryImage(category),
+              in_stock: payload.inStock,
+              notify_on_flash_drop: true,
+              added_at: new Date().toISOString()
+            });
+          } catch (dbErr) {
+            console.warn('Live SSE DB Upsert error:', dbErr);
+          }
+        }
       }
-    } catch (dbErr) {
-      console.warn('Direct Supabase DB save exception:', dbErr);
-    }
+    });
 
-    // Also call API endpoints as fallback
+    es.addEventListener('agent_complete', (e: MessageEvent) => {
+      const payload = JSON.parse(e.data);
+      if (payload.query.toLowerCase() === queryToScrape.toLowerCase()) {
+        setIsScraping(false);
+        es.close();
+      }
+    });
+
+    es.addEventListener('error', () => {
+      // Close on error to prevent infinite retries
+      setIsScraping(false);
+      es.close();
+    });
+
+    // 3. Trigger the actual backend agent in the background (fire & forget)
     try {
-      await fetch('/api/watchlist', {
+      fetch(`${BACKEND_URL}/api/agent/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          componentName: title,
-          category,
-          targetPrice,
-          currentPrice,
-          retailer,
-          productUrl,
-          imageUrl
-        })
-      });
-    } catch (e) {
-      console.warn('Watchlist API save warning:', e);
+        body: JSON.stringify({ query: queryToScrape })
+      }).catch(err => console.warn('Background trigger fetch error:', err));
+    } catch (err) {
+      console.warn('Background trigger exception:', err);
     }
-
-    setIsScraping(false);
-    setLiveQuery('');
-    setShowAddModal(false);
   };
 
   const removeItem = async (id: string) => {
