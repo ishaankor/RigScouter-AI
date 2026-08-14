@@ -681,28 +681,11 @@ export function WatchlistManager({
                       )}
                     </div>
 
-                    {/* Dynamic Retailer Dropdown Selector in Grid */}
-                    {effective.availableRetailers.length > 1 ? (
-                      <select
-                        value={effective.retailer}
-                        onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
-                        className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
-                      >
-                        {effective.availableRetailers.map(rName => {
-                          const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
-                          const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
-                          return (
-                            <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
-                              {rName}{priceTag}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    ) : (
-                      <span className="text-xs font-semibold text-gray-400 px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
                         {effective.retailer}
                       </span>
-                    )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
