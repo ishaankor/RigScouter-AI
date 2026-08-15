@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/dispatch-digest?key=rigscouter-cron-secret",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}

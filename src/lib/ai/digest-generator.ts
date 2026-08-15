@@ -1,6 +1,9 @@
 import { WatchlistItem, DigestItemSummary, DailyDigestReport } from '../types/hardware';
+import Groq from 'groq-sdk';
 
-export function generateDailyDigestReport(watchlist: WatchlistItem[]): DailyDigestReport {
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
+
+export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Promise<DailyDigestReport> {
   let totalSavedOpportunity = 0;
 
   const itemSummaries: DigestItemSummary[] = watchlist.map(item => {
@@ -69,6 +72,34 @@ export function generateDailyDigestReport(watchlist: WatchlistItem[]): DailyDige
   } price drop(s) in the last 24 hours. ${
     biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} just hit a 90-day All-Time Low at $${biggestDrop.item.currentPrice.toFixed(2)}.` : ''
   }`;
+
+  if (groq && watchlist.length > 0) {
+    try {
+      const prompt = `You are RigScouter, an expert PC hardware deal-hunter AI.
+Given the following user watchlist with price drop data, write a personalized email headline and a 1-2 paragraph executive summary.
+Keep it punchy, hype-driven, and highlight the best deals.
+Return a SINGLE valid JSON object ONLY (not an array) with the exact format {"headline": "...", "executiveSummary": "..."}.
+Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({ name: i.item.componentName, price: i.item.currentPrice, drop24h: i.change24h.amount, isATL: i.isAllTimeLow })))}
+      `;
+      
+      const response = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" }
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        let parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) parsed = parsed[0];
+        
+        if (parsed?.headline) headline = parsed.headline;
+        if (parsed?.executiveSummary) executiveSummary = parsed.executiveSummary;
+      }
+    } catch (e) {
+      console.error("Groq generation failed:", e);
+    }
+  }
 
   return {
     id: `digest-${Date.now()}`,

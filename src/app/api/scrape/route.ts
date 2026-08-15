@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
               lowestPrice90d: Math.round(result.bestOffer.price * 0.96 * 100) / 100,
               retailer: result.bestOffer.retailer,
               productUrl: result.bestOffer.url,
-              imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
+              imageUrl: result.bestOffer.imageUrl || result.imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
               rating: 4.8,
               dealScore: 95
             }

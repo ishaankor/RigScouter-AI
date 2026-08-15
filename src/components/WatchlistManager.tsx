@@ -572,7 +572,7 @@ export function WatchlistManager({
                             onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
                             className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
                           >
-                            {Array.from(new Set([...effective.availableRetailers, 'Amazon', 'Micro Center', 'Best Buy', 'B&H', 'Newegg', 'eBay'])).map(rName => {
+                            {effective.availableRetailers.map(rName => {
                               const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
                               const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
                               return (

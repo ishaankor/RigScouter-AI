@@ -23,6 +23,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   let bestTitle = cleanQuery;
   let bestUrl = isUrl ? cleanQuery : '';
   let bestRetailer: RetailerName = detectRetailer(cleanQuery);
+  let bestImageUrl: string | null = null;
 
   if (isUrl) {
     // 1. Direct Diffbot Extraction for URLs
@@ -77,6 +78,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
           bestTitle = diffData.title || bestTitle;
           bestUrl = url;
           bestRetailer = detectRetailer(url);
+          bestImageUrl = diffData.imageUrl || bestImageUrl;
         }
       }
     }
@@ -109,7 +111,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
     lowestPrice90d: lowest90d,
     retailer: bestRetailer,
     productUrl: bestUrl,
-    imageUrl: getCategoryImage(category),
+    imageUrl: bestImageUrl || getCategoryImage(category),
     rating: 4.8,
     dealScore
   };
@@ -128,7 +130,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
 const RESIDENTIAL_PROXY = process.env.RESIDENTIAL_PROXY || '';
 const RESIDENTIAL_PROXY_AUTH = process.env.RESIDENTIAL_PROXY_AUTH || '';
 
-async function extractProductWithDiffBot(url: string, retryCount = 0): Promise<{ price: number | null, title?: string } | null> {
+async function extractProductWithDiffBot(url: string, retryCount = 0): Promise<{ price: number | null, title?: string, imageUrl?: string } | null> {
   if (!url) return null;
   
   if (!DIFFBOT_TOKEN) {
@@ -211,7 +213,14 @@ async function extractProductWithDiffBot(url: string, retryCount = 0): Promise<{
         // Validate price bounds (e.g. to filter out weird accessories picked up instead)
         if (price !== null && !isNaN(price) && price > 15 && price <= 6000) {
           console.log(`[DiffBot] Successfully extracted $${price} from ${url}`);
-          return { price, title: object.title };
+          
+          let imageUrl = object.images?.[0]?.url || object.image;
+          // Clean image urls
+          if (imageUrl && imageUrl.startsWith('//')) {
+            imageUrl = 'https:' + imageUrl;
+          }
+
+          return { price, title: object.title, imageUrl };
         } else {
           console.log(`[DiffBot] Price extraction out of bounds or invalid for ${url}:`, price);
         }

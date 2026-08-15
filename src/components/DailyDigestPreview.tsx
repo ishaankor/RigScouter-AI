@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary } from '@/lib/types/hardware';
+import React, { useState, useEffect } from 'react';
+import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary, WatchlistItem } from '@/lib/types/hardware';
 import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
 import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
+import { supabase } from '@/lib/db/supabase';
 import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
 
 interface DailyDigestPreviewProps {
@@ -14,31 +15,80 @@ interface DailyDigestPreviewProps {
 export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps) {
   const [frequency, setFrequency] = useState<DigestFrequency>('daily');
   const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'discord' | 'telegram'>('email');
+  const [customEmail, setCustomEmail] = useState('');
   const [selectedIntervals, setSelectedIntervals] = useState<ComparisonInterval[]>(['24h', '7d', '30d', 'ATL']);
   const [isSubscribed, setIsSubscribed] = useState(!!user);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   
-  const [report, setReport] = useState<DailyDigestReport>(
-    generateDailyDigestReport(MOCK_INITIAL_WATCHLIST)
-  );
+  const [report, setReport] = useState<DailyDigestReport | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleRegenerate = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setReport(generateDailyDigestReport(MOCK_INITIAL_WATCHLIST));
-      setIsGenerating(false);
-    }, 400);
+  const fetchUserWatchlist = async () => {
+    if (!user) return MOCK_INITIAL_WATCHLIST;
+    const { data, error } = await supabase.from('watchlist_items').select('*').eq('user_id', user.id);
+    if (error || !data) return MOCK_INITIAL_WATCHLIST;
+    
+    return data.map(item => ({
+      id: item.id,
+      userId: item.user_id,
+      componentName: item.component_name,
+      category: item.category,
+      targetPrice: item.target_price,
+      currentPrice: item.current_price,
+      previousPrice24h: item.previous_price_24h || item.current_price,
+      previousPrice7d: item.previous_price_7d || item.current_price,
+      previousPrice30d: item.previous_price_30d || item.current_price,
+      allTimeLow: item.all_time_low || item.current_price,
+      retailer: item.retailer,
+      productUrl: item.product_url,
+      imageUrl: item.image_url,
+      inStock: item.in_stock,
+      notifyOnFlashDrop: item.notify_on_flash_drop,
+      addedAt: item.added_at,
+      specs: item.specs
+    })) as WatchlistItem[];
   };
 
-  const handleSaveSubscription = () => {
+  useEffect(() => {
+    fetchUserWatchlist().then(async items => {
+      const generated = await generateDailyDigestReport(items);
+      setReport(generated);
+    });
+  }, [user]);
+
+  const handleRegenerate = async () => {
+    setIsGenerating(true);
+    const items = await fetchUserWatchlist();
+    const generated = await generateDailyDigestReport(items);
+    setReport(generated);
+    setIsGenerating(false);
+  };
+
+  const handleSaveSubscription = async () => {
     if (!user && onOpenAuth) {
       onOpenAuth();
       return;
     }
+    
     setIsSubscribed(true);
-    setSaveNotice(`✅ Preferences saved! Digest dispatches via ${deliveryChannel.toUpperCase()} at 08:00 AM UTC.`);
+    
+    try {
+      const routingEmail = customEmail.trim() || user?.email;
+      const { error } = await supabase.from('user_preferences').upsert({
+        user_id: user.id,
+        summary_frequency: frequency,
+        delivery_channels: JSON.stringify({ email: deliveryChannel === 'email', emailAddress: routingEmail }),
+        comparison_intervals: JSON.stringify(selectedIntervals),
+        auto_recommend_alternatives: true
+      });
+      if (error) throw error;
+      setSaveNotice(`✅ Preferences saved! Digest routes to ${routingEmail} via ${deliveryChannel.toUpperCase()} at 08:00 AM UTC.`);
+    } catch (e: any) {
+      console.error('Error saving preferences', e);
+      setSaveNotice(`⚠️ Failed to save preferences to DB: ${e.message || JSON.stringify(e)}`);
+    }
+
     setTimeout(() => setSaveNotice(null), 4000);
   };
 
@@ -169,6 +219,18 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                 );
               })}
             </div>
+            
+            {deliveryChannel === 'email' && (
+              <div className="mt-3 animate-fade-in">
+                <input
+                  type="email"
+                  placeholder={user?.email ? `Default: ${user.email}` : "Custom routing email address"}
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  className="w-full bg-gray-950/60 border border-purple-500/30 text-xs text-white px-3 py-2.5 rounded-lg focus:outline-none focus:border-purple-500 placeholder:text-gray-500"
+                />
+              </div>
+            )}
           </div>
 
           {/* Price Interval Selection */}
@@ -225,40 +287,29 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
 
           {/* Digest Email/Message Body Mock */}
           <div className="space-y-4 text-sm">
-            <h3 className="text-lg font-bold text-white font-heading">
-              {report.headline}
-            </h3>
-
-            <div className="p-3 bg-gray-900/90 rounded-xl border border-gray-800 text-gray-300 text-xs leading-relaxed">
-              {report.executiveSummary}
+            <h2 className="text-xl font-bold text-white mb-2">{report ? report.headline : 'Generating...'}</h2>
+            <div className="bg-slate-800/50 rounded-lg p-4 mb-8">
+              <p className="text-slate-300 text-sm">{report ? report.executiveSummary : 'Analyzing market data...'}</p>
             </div>
 
             {/* Biggest Price Drop Highlight Card */}
-            {report.biggestDrop && (
+            {report?.biggestDrop && (
               <div className="bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/30 p-4 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1">
-                    <TrendingDown className="w-4 h-4" /> Top Daily Deal Drop
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-emerald-400">↘ TOP DAILY DEAL DROP</span>
+                      {report?.biggestDrop?.isAllTimeLow && (
+                        <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-bold">ALL-TIME LOW</span>
+                      )}
+                    </div>
+                    <h3 className="text-lg font-bold text-white">{report?.biggestDrop?.item.componentName}</h3>
                   </div>
-                  {report.biggestDrop.isAllTimeLow && (
-                    <span className="bg-emerald-500 text-gray-950 text-[10px] font-black px-2 py-0.5 rounded">
-                      ALL-TIME LOW
-                    </span>
-                  )}
                 </div>
-                <div className="font-bold text-white text-base mt-1">
-                  {report.biggestDrop.item.componentName}
-                </div>
-                <div className="flex items-center gap-4 text-xs text-gray-300 mt-2">
-                  <div>
-                    Price Today: <span className="font-bold text-emerald-400 text-sm">${report.biggestDrop.item.currentPrice.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    24h Drop: <span className="font-bold text-white">-${Math.abs(report.biggestDrop.change24h.amount).toFixed(2)} ({report.biggestDrop.change24h.percentage}%)</span>
-                  </div>
-                  <div>
-                    Store: <span className="text-cyan-400">{report.biggestDrop.item.retailer}</span>
-                  </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-slate-400">Price Today: <span className="text-emerald-400 font-bold">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span></span>
+                  <span className="text-slate-400">24h Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)} ({report?.biggestDrop?.change24h.percentage || 0}%)</span></span>
+                  <span className="text-slate-400">Store: <span className="text-cyan-400">{report?.biggestDrop?.item.retailer}</span></span>
                 </div>
               </div>
             )}
@@ -267,7 +318,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
             <div>
               <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Tracked Items Price Deltas</h4>
               <div className="space-y-2">
-                {report.items.map((itemSummary: DigestItemSummary) => (
+                {report?.items.map((itemSummary: DigestItemSummary) => (
                   <div
                     key={itemSummary.item.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between bg-gray-900/40 p-3 rounded-lg border border-gray-800 text-xs"
