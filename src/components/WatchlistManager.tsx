@@ -254,7 +254,7 @@ export function WatchlistManager({
       }
     }
     loadDatabaseWatchlist();
-  }, [user]);
+  }, [user?.id]);
 
   // 100% Autonomous Bot Add-to-Watchlist Handler (NO manual form filling)
   const handleAutonomousAdd = async (e: React.FormEvent) => {
