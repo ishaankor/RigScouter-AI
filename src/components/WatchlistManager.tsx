@@ -156,6 +156,7 @@ export function WatchlistManager({
           .select('*')
           .order('added_at', { ascending: false });
 
+        let formatted: WatchlistItem[] = [];
         if (dbItems && dbItems.length > 0) {
           // Group by componentName so they show up as one row with multiple retailers
           const groupedMap = new Map<string, any>();
@@ -181,7 +182,7 @@ export function WatchlistManager({
             });
           });
 
-          const formatted: WatchlistItem[] = Array.from(groupedMap.values()).map((group: any) => ({
+          formatted = Array.from(groupedMap.values()).map((group: any) => ({
             id: group.id,
             userId: group.user_id,
             componentName: group.component_name,
@@ -200,8 +201,25 @@ export function WatchlistManager({
             addedAt: group.added_at,
             specs: { RetailerOffers: group.RetailerOffers }
           }));
-          setWatchlist(formatted);
         }
+
+        // Recover pending scrapes from sessionStorage to survive Safari tab suspend & Fast Refresh
+        let recoveredPending: WatchlistItem[] = [];
+        try {
+          const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+          const now = Date.now();
+          
+          const activePending = stored.filter((p: WatchlistItem) => {
+            const isOld = now - new Date(p.addedAt).getTime() > 3 * 60 * 1000; // Drop after 3 mins
+            const isInDb = formatted.some((f) => f.id.includes(p.id) || f.componentName.toLowerCase() === p.componentName.toLowerCase());
+            return !isOld && !isInDb;
+          });
+          
+          sessionStorage.setItem('pendingScrapes', JSON.stringify(activePending));
+          recoveredPending = activePending;
+        } catch (e) {}
+
+        setWatchlist([...recoveredPending, ...formatted]);
 
         // 2. Direct Supabase DB Table Query for trending hardware catalog
         const { data: hwCatalog } = await supabase
@@ -289,6 +307,12 @@ export function WatchlistManager({
       notifyOnFlashDrop: true,
       addedAt: new Date().toISOString()
     };
+
+    // Save to sessionStorage to survive Fast Refresh / Safari tab suspending
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+      sessionStorage.setItem('pendingScrapes', JSON.stringify([...stored, pendingItem]));
+    } catch (e) {}
 
     // Update screen instantly & close modal
     setWatchlist(prev => [pendingItem, ...prev]);
