@@ -111,8 +111,13 @@ export function WatchlistManager({
       });
     }
 
-    const activeRetailer = selectedRetailers[item.id] || item.retailer || (combinedOffers[0]?.retailer ?? 'Amazon');
-    const matchedOffer = combinedOffers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
+    // Filter out dummy/unscraped retailers (price is 0 or URL is missing)
+    const validOffers = combinedOffers.filter(o => o.price > 0 && o.url && o.url !== '#');
+    // If somehow all are invalid, fallback to the original array so the UI doesn't crash
+    const finalOffers = validOffers.length > 0 ? validOffers : combinedOffers;
+
+    const activeRetailer = selectedRetailers[item.id] || item.retailer || (finalOffers[0]?.retailer ?? 'Amazon');
+    const matchedOffer = finalOffers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
 
     const isExplicitlySelected = !!selectedRetailers[item.id];
     
@@ -124,7 +129,7 @@ export function WatchlistManager({
     const title = matchedOffer ? (matchedOffer.title ?? item.componentName ?? item.name) : (item.componentName ?? item.name);
     const inStock = matchedOffer ? matchedOffer.inStock : false; // false if we don't have the offer
 
-    const availableRetailers = Array.from(new Set(combinedOffers.map(o => o.retailer))).filter(Boolean);
+    const availableRetailers = Array.from(new Set(finalOffers.map(o => o.retailer))).filter(Boolean);
 
     return {
       title,
@@ -296,7 +301,12 @@ export function WatchlistManager({
 
     es.addEventListener('retailer_found', async (e: MessageEvent) => {
       const payload = JSON.parse(e.data);
-      if (payload.query.toLowerCase() === queryToScrape.toLowerCase()) {
+      const isMatch = (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
+                      payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
+                      payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
+                      queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
+                      
+      if (isMatch) {
         // We found a retailer for our query! Only update if it's the first or a cheaper price
         if (payload.price < bestPrice) {
           bestPrice = payload.price;
@@ -346,7 +356,12 @@ export function WatchlistManager({
 
     es.addEventListener('agent_complete', (e: MessageEvent) => {
       const payload = JSON.parse(e.data);
-      if (payload.query.toLowerCase() === queryToScrape.toLowerCase()) {
+      const isMatch = (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
+                      payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
+                      payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
+                      queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
+                      
+      if (isMatch) {
         setIsScraping(false);
         es.close();
       }
