@@ -105,34 +105,48 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-800/60">
-        {[
-          { id: 'watchlist', label: 'Watchlist Tracker', icon: Bell },
-          { id: 'digest', label: 'Daily Digest', icon: Calendar },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-gray-950 shadow-lg shadow-cyan-500/25'
-                  : 'glass-card text-gray-400 hover:text-white hover:bg-gray-800/80'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* Navigation Tabs (Premium Segmented Control) */}
+      <div className="flex justify-center mb-8">
+        <div className="flex items-center gap-1 overflow-x-auto p-1.5 bg-gray-900/50 backdrop-blur-md rounded-2xl border border-gray-800/60 shadow-inner">
+          {[
+            { id: 'watchlist', label: 'Watchlist Tracker', icon: Bell },
+            { id: 'digest', label: 'Daily Digest', icon: Sparkles, isAI: true },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all duration-300 whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-gray-800 text-white shadow-lg border border-gray-700/50'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 border border-transparent'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 opacity-100" />
+                )}
+                <Icon className={`w-4 h-4 z-10 ${tab.isAI && !isActive ? 'text-purple-400 opacity-70' : 'z-10'}`} />
+                <span className="z-10">{tab.label}</span>
+                {tab.isAI && (
+                  <span className="z-10 ml-1.5 px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[9px] uppercase tracking-wider font-extrabold border border-purple-500/30">
+                    AI
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Dynamic Tab Views */}
-      {activeTab === 'watchlist' && <WatchlistManager user={user} onOpenAuth={() => setAuthModalOpen(true)} />}
-      {activeTab === 'digest' && <DailyDigestPreview user={user} onOpenAuth={() => setAuthModalOpen(true)} />}
+      <div className={activeTab === 'watchlist' ? 'block' : 'hidden'}>
+        <WatchlistManager user={user} onOpenAuth={() => setAuthModalOpen(true)} />
+      </div>
+      <div className={activeTab === 'digest' ? 'block' : 'hidden'}>
+        <DailyDigestPreview user={user} onOpenAuth={() => setAuthModalOpen(true)} />
+      </div>
 
       {/* Auth Modal */}
       <AuthModal

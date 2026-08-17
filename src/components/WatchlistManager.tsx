@@ -145,7 +145,7 @@ export function WatchlistManager({
 
   // Fetch watchlist & trending items directly from Supabase DB on mount
   useEffect(() => {
-    async function loadDatabaseWatchlist() {
+    async function loadDatabaseWatchlist() { console.log("running loadDatabaseWatchlist!");
       setIsLoading(true);
       try {
         const userId = user?.id || 'demo-user-123';
@@ -378,7 +378,11 @@ export function WatchlistManager({
       fetch(`${BACKEND_URL}/api/agent/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryToScrape })
+        body: JSON.stringify({ 
+          query: queryToScrape,
+          userId: userId,
+          pendingId: pendingId
+        })
       }).catch(err => console.warn('Background trigger fetch error:', err));
     } catch (err) {
       console.warn('Background trigger exception:', err);

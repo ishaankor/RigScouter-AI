@@ -161,9 +161,9 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Controls Configuration */}
-        <div className="lg:col-span-4 bg-gray-900/60 p-5 rounded-xl border border-gray-800 space-y-5">
+        <div className="lg:col-span-4 bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-6">
           {/* Summary Frequency */}
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
@@ -179,10 +179,10 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                 <button
                   key={item.id}
                   onClick={() => setFrequency(item.id as DigestFrequency)}
-                  className={`p-2 text-xs font-semibold rounded-lg border text-left transition-all ${
+                  className={`p-2.5 text-xs font-semibold rounded-xl border text-left transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
                     frequency === item.id
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold'
-                      : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-white'
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                      : 'bg-black/20 text-gray-400 border-white/5 hover:text-white hover:border-white/10 hover:bg-white/5'
                   }`}
                 >
                   {item.label}
@@ -207,10 +207,10 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                   <button
                     key={ch.id}
                     onClick={() => setDeliveryChannel(ch.id as any)}
-                    className={`p-2 text-xs font-semibold rounded-lg border flex flex-col items-center gap-1 transition-all ${
+                    className={`p-3 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
                       deliveryChannel === ch.id
-                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                        : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-white'
+                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                        : 'bg-black/20 text-gray-400 border-white/5 hover:text-white hover:border-white/10 hover:bg-white/5'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -227,7 +227,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                   placeholder={user?.email ? `Default: ${user.email}` : "Custom routing email address"}
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
-                  className="w-full bg-gray-950/60 border border-purple-500/30 text-xs text-white px-3 py-2.5 rounded-lg focus:outline-none focus:border-purple-500 placeholder:text-gray-500"
+                  className="w-full bg-black/40 border border-purple-500/30 text-xs text-white px-4 py-3 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 placeholder:text-gray-500 transition-all shadow-inner"
                 />
               </div>
             )}
@@ -245,10 +245,10 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                   <button
                     key={int}
                     onClick={() => toggleInterval(int)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-1.5 ${
+                    className={`px-4 py-2 text-xs font-bold rounded-full border flex items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
                       active
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-gray-950 text-gray-500 border-gray-800'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        : 'bg-black/20 text-gray-500 border-white/5 hover:text-gray-300 hover:border-white/10'
                     }`}
                   >
                     {active && <Check className="w-3 h-3" />}
@@ -262,7 +262,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           {/* Save Subscription Preferences Button */}
           <button
             onClick={handleSaveSubscription}
-            className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.6)] transition-all duration-300 hover:-translate-y-0.5 cursor-pointer uppercase tracking-wider"
           >
             {user ? 'Save Subscription Preferences' : 'Sign In to Subscribe'}
           </button>
@@ -285,83 +285,152 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
             </div>
           </div>
 
-          {/* Digest Email/Message Body Mock */}
-          <div className="space-y-4 text-sm">
-            <h2 className="text-xl font-bold text-white mb-2">{report ? report.headline : 'Generating...'}</h2>
-            <div className="bg-slate-800/50 rounded-lg p-4 mb-8">
-              <p className="text-slate-300 text-sm">{report ? report.executiveSummary : 'Analyzing market data...'}</p>
-            </div>
+          {/* Dynamic Mockup Body */}
+          <div className="relative mt-6">
+            {deliveryChannel === 'email' ? (
+              // ================= EMAIL MOCKUP =================
+              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-8 rounded-2xl shadow-2xl mx-auto border border-gray-800/80">
+                <div className="text-center mb-8 pb-6 border-b border-gray-800/60">
+                  <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">
+                    RigScouter AI Digest
+                  </h1>
+                  <p className="text-gray-400 text-sm font-medium">{report ? report.headline : 'Generating intelligence...'}</p>
+                </div>
+                
+                <div className="space-y-6 text-sm">
+                  <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/5">
+                    <p className="text-gray-300 leading-relaxed">{report ? report.executiveSummary : 'Analyzing market data and formulating strategy...'}</p>
+                  </div>
 
-            {/* Biggest Price Drop Highlight Card */}
-            {report?.biggestDrop && (
-              <div className="bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/30 p-4 rounded-xl">
-                <div className="flex justify-between items-start mb-4">
+                  {report?.biggestDrop && (
+                    <div className="bg-gradient-to-r from-emerald-900/40 to-cyan-900/40 border border-emerald-500/50 p-5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.15)] transform transition-all duration-300 hover:scale-[1.01]">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-emerald-400 font-bold tracking-wider text-[10px] uppercase">↘ Top Daily Drop</span>
+                            {report?.biggestDrop?.isAllTimeLow && (
+                              <span className="bg-emerald-500 text-emerald-950 text-[10px] px-2 py-0.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.5)] font-black">ALL-TIME LOW</span>
+                            )}
+                          </div>
+                          <h3 className="text-lg font-extrabold text-white">{report?.biggestDrop?.item.componentName}</h3>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 p-3 bg-black/40 rounded-lg border border-white/5">
+                        <div className="flex flex-col">
+                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">New Price</span>
+                          <span className="text-emerald-400 font-black text-lg">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">24h Drop</span>
+                          <span className="text-white font-bold text-lg">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">Retailer</span>
+                          <span className="text-cyan-400 font-bold text-lg truncate">{report?.biggestDrop?.item.retailer}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Interval Comparison Breakdown Table */}
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-emerald-400">↘ TOP DAILY DEAL DROP</span>
-                      {report?.biggestDrop?.isAllTimeLow && (
-                        <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-bold">ALL-TIME LOW</span>
-                      )}
+                    <h4 className="text-[11px] font-black uppercase text-gray-500 tracking-wider mb-3 ml-1">Price Deltas</h4>
+                    <div className="space-y-2">
+                      {report?.items.map((itemSummary: DigestItemSummary) => (
+                        <div key={itemSummary.item.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-black/20 p-3.5 rounded-xl border border-white/5 text-xs hover:bg-white/5 transition-colors">
+                          <div className="font-bold text-gray-200 mb-2 sm:mb-0 line-clamp-1 pr-4">{itemSummary.item.componentName}</div>
+                          <div className="flex items-center gap-3 text-gray-400 shrink-0">
+                            <span className="font-black text-white bg-white/10 px-2 py-1 rounded-md">${itemSummary.item.currentPrice.toFixed(2)}</span>
+                            {selectedIntervals.includes('24h') && (
+                              <span className={itemSummary.change24h.amount <= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-medium'}>
+                                {itemSummary.change24h.amount <= 0 ? '' : '+'}${itemSummary.change24h.amount.toFixed(2)}
+                              </span>
+                            )}
+                            {selectedIntervals.includes('ATL') && itemSummary.isAllTimeLow && (
+                              <span className="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black text-[9px] border border-emerald-500/30">ATL</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <h3 className="text-lg font-bold text-white">{report?.biggestDrop?.item.componentName}</h3>
                   </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="text-slate-400">Price Today: <span className="text-emerald-400 font-bold">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span></span>
-                  <span className="text-slate-400">24h Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)} ({report?.biggestDrop?.change24h.percentage || 0}%)</span></span>
-                  <span className="text-slate-400">Store: <span className="text-cyan-400">{report?.biggestDrop?.item.retailer}</span></span>
+
+                  {report?.items.some((i: DigestItemSummary) => i.alternativePick) && (
+                    <div className="mt-6 bg-gradient-to-br from-purple-900/40 to-fuchsia-900/20 border border-fuchsia-500/40 p-5 rounded-xl shadow-[0_0_20px_rgba(217,70,239,0.1)] relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Sparkles className="w-24 h-24 text-fuchsia-400" />
+                      </div>
+                      <div className="font-black text-fuchsia-400 mb-3 flex items-center gap-2 relative z-10 text-xs tracking-wider uppercase">
+                        <Sparkles className="w-4 h-4" /> AI Recommendations
+                      </div>
+                      <div className="space-y-3 relative z-10">
+                        {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
+                          <div key={idx} className="text-gray-300 text-sm bg-black/40 p-3 rounded-lg border border-white/5">
+                            Replace <span className="font-bold text-white">{i.item.componentName}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${i.alternativePick?.savings.toFixed(2)}</span>.
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-
-            {/* Interval Comparison Breakdown Table */}
-            <div>
-              <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Tracked Items Price Deltas</h4>
-              <div className="space-y-2">
-                {report?.items.map((itemSummary: DigestItemSummary) => (
-                  <div
-                    key={itemSummary.item.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between bg-gray-900/40 p-3 rounded-lg border border-gray-800 text-xs"
-                  >
-                    <div className="font-medium text-white mb-1 sm:mb-0">
-                      {itemSummary.item.componentName}
-                    </div>
-                    <div className="flex items-center gap-4 text-gray-300">
-                      <span className="font-bold text-white">${itemSummary.item.currentPrice.toFixed(2)}</span>
-                      {selectedIntervals.includes('24h') && (
-                        <span className={itemSummary.change24h.amount <= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400'}>
-                          24h: {itemSummary.change24h.amount <= 0 ? '' : '+'}${itemSummary.change24h.amount.toFixed(2)}
-                        </span>
-                      )}
-                      {selectedIntervals.includes('7d') && (
-                        <span className={itemSummary.change7d.amount <= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                          7d: {itemSummary.change7d.amount <= 0 ? '' : '+'}${itemSummary.change7d.amount.toFixed(2)}
-                        </span>
-                      )}
-                      {selectedIntervals.includes('ATL') && itemSummary.isAllTimeLow && (
-                        <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">
-                          ATL
-                        </span>
-                      )}
-                    </div>
+            ) : (
+              // ================= DISCORD / TELEGRAM MOCKUP =================
+              <div className="bg-[#36393f] mx-auto rounded-lg flex overflow-hidden shadow-2xl border border-[#202225] font-sans">
+                {/* Embed Left Pillar */}
+                <div className="w-1.5 bg-[#5865F2] shrink-0"></div>
+                
+                <div className="p-4 w-full text-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">RS</div>
+                    <span className="font-bold text-white text-sm">RigScouter Bot</span>
+                    <span className="bg-[#5865F2] text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Bot
+                    </span>
+                    <span className="text-xs text-[#72767d] ml-1">Today at 8:00 AM</span>
                   </div>
-                ))}
-              </div>
-            </div>
+                  
+                  <div className="pl-1">
+                    <div className="font-bold text-[#00b0f4] mb-2 hover:underline cursor-pointer">{report ? report.headline : 'Generating...'}</div>
+                    <div className="text-sm text-[#dcddde] mb-4 leading-snug">{report ? report.executiveSummary : 'Analyzing market data...'}</div>
+                    
+                    {report?.biggestDrop && (
+                      <div className="bg-[#2f3136] border border-[#202225] rounded p-3 mb-4 border-l-4 border-l-emerald-500">
+                        <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">Top Daily Drop</div>
+                        <div className="font-bold text-white text-sm mb-1">{report?.biggestDrop?.item.componentName}</div>
+                        <div className="text-xs text-[#b9bbbe]">
+                          Now: <span className="text-emerald-400 font-bold">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span> • 
+                          Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)}</span> • 
+                          <span className="text-[#00b0f4] ml-1">{report?.biggestDrop?.item.retailer}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="text-xs font-bold text-[#8e9297] mb-2 uppercase">Tracked Prices</div>
+                    <div className="bg-[#2f3136] rounded p-2 mb-4 font-mono text-[11px]">
+                      {report?.items.slice(0, 5).map((itemSummary: DigestItemSummary, idx: number) => (
+                        <div key={idx} className="flex justify-between py-1 border-b border-[#202225] last:border-0">
+                          <span className="truncate pr-2 text-[#b9bbbe]">{itemSummary.item.componentName.substring(0, 30)}...</span>
+                          <span className="text-white font-bold whitespace-nowrap">${itemSummary.item.currentPrice.toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {(report?.items.length || 0) > 5 && <div className="text-[#72767d] text-center pt-1">+ {(report?.items.length || 0) - 5} more items</div>}
+                    </div>
 
-            {/* Smart AI Alternatives */}
-            {report.items.some((i: DigestItemSummary) => i.alternativePick) && (
-              <div className="bg-purple-950/30 border border-purple-500/30 p-3 rounded-xl text-xs">
-                <div className="font-bold text-purple-300 mb-1 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" /> AI Recommended Switch
+                    {report?.items.some((i: DigestItemSummary) => i.alternativePick) && (
+                      <div className="bg-[#2f3136] border border-[#202225] rounded p-3 border-l-4 border-l-fuchsia-500">
+                        <div className="font-bold text-fuchsia-400 text-xs mb-1 uppercase flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" /> AI Switch Recommendations
+                        </div>
+                        {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
+                          <div key={idx} className="text-xs text-[#dcddde] mt-1.5">
+                            • Replace <span className="font-bold">{i.item.componentName.split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${i.alternativePick?.savings.toFixed(0)})
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
-                  <div key={idx} className="text-gray-300">
-                    Replace <span className="font-semibold text-white">{i.item.componentName}</span> with{' '}
-                    <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> (${i.alternativePick?.price}) to save{' '}
-                    <span className="text-emerald-400 font-bold">${i.alternativePick?.savings.toFixed(2)}</span>.
-                  </div>
-                ))}
               </div>
             )}
           </div>
