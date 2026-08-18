@@ -387,6 +387,9 @@ export function WatchlistManager({
                       
       if (isMatch) {
         setIsScraping(false);
+        if (payload.summary && !payload.bestOffer) {
+          setScrapeNotice(payload.summary);
+        }
         es.close();
       }
     });
