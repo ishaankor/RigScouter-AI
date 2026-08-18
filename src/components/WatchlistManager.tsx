@@ -331,27 +331,49 @@ export function WatchlistManager({
                       queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
                       
       if (isMatch) {
-        // We found a retailer for our query! Only update if it's the first or a cheaper price
+        const newOffer = {
+          retailer: payload.retailer,
+          price: payload.price,
+          originalPrice: null as number | null,
+          title: payload.title,
+          url: payload.url,
+          inStock: payload.inStock,
+        };
+
         if (payload.price < bestPrice) {
           bestPrice = payload.price;
-          
-          // Update the UI with this new best price dynamically
-          setWatchlist(prev => prev.map(item => {
-            if (item.id === pendingId) {
-              return {
-                ...item,
-                componentName: payload.title,
-                currentPrice: payload.price,
-                targetPrice: Math.round(payload.price * 0.9 * 100) / 100,
-                retailer: payload.retailer,
-                productUrl: payload.url,
-                inStock: payload.inStock
-              };
-            }
-            return item;
-          }));
-          
-          // Upsert incrementally to Supabase
+        }
+
+        // Accumulate ALL retailer offers so the dropdown shows every price
+        setWatchlist(prev => prev.map(item => {
+          if (item.id !== pendingId) return item;
+
+          const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+          const existingOffers: typeof newOffer[] = currentSpecs.RetailerOffers || [];
+
+          // Upsert: replace if retailer already exists, otherwise append
+          const updatedOffers = existingOffers.some(o => o.retailer === payload.retailer)
+            ? existingOffers.map(o => o.retailer === payload.retailer ? newOffer : o)
+            : [...existingOffers, newOffer];
+
+          const isBest = payload.price <= bestPrice;
+          return {
+            ...item,
+            // Only promote to best price if this is the cheapest so far
+            ...(isBest ? {
+              componentName: payload.title,
+              currentPrice: payload.price,
+              targetPrice: Math.round(payload.price * 0.9 * 100) / 100,
+              retailer: payload.retailer,
+              productUrl: payload.url,
+              inStock: payload.inStock,
+            } : {}),
+            specs: { ...currentSpecs, RetailerOffers: updatedOffers },
+          };
+        }));
+
+        // Upsert to Supabase (best price only, for the DB row)
+        if (payload.price <= bestPrice) {
           try {
             await supabase.from('watchlist_items').upsert({
               id: pendingId,
@@ -369,7 +391,6 @@ export function WatchlistManager({
               image_url: getCategoryImage(category),
               in_stock: payload.inStock,
               notify_on_flash_drop: true,
-              added_at: new Date().toISOString()
             });
           } catch (dbErr) {
             console.warn('Live SSE DB Upsert error:', dbErr);
