@@ -42,6 +42,7 @@ export interface WatchlistItem {
   notifyOnFlashDrop: boolean;
   addedAt: string;
   specs?: Record<string, any>;
+  dbRowIds?: string[];
 }
 
 export interface PriceSnapshot {

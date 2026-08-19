@@ -50,18 +50,19 @@ export function WatchlistManager({
   // Dynamic Retailer selection state (itemId -> retailerName)
   const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
 
-  // Helper to extract a canonical key from an item (either from ID or name fallback)
+  // Helper to extract a canonical hardware key from an item (groups all retailer listings together)
   const getNormalizedKey = (itm: any) => {
-    let key = (itm.component_name || itm.componentName || itm.name || itm.model || '').toLowerCase().trim();
-    if (itm.id) {
-      const retailerSlug = itm.retailer?.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      if (retailerSlug && itm.id.endsWith(`-${retailerSlug}`)) {
-        key = itm.id.slice(0, -(retailerSlug.length + 1));
-      } else {
-        key = itm.id;
-      }
+    if (!itm) return '';
+    const raw = (itm.component_name || itm.componentName || itm.name || itm.model || '').toLowerCase().trim();
+    if (raw) {
+      return raw
+        .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia)\s+/i, '')
+        .replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
     }
-    return key;
+    const id = (itm.id || itm.component_id || '').toLowerCase();
+    return id.replace(/^(w-|comp-)/, '').replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
   };
 
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
@@ -173,7 +174,7 @@ export function WatchlistManager({
 
         let formatted: WatchlistItem[] = [];
         if (dbItems && dbItems.length > 0) {
-          // Group by componentName so they show up as one row with multiple retailers
+          // Group by canonical component name so multiple retailer rows show up as ONE consolidated item with retailer dropdown
           const groupedMap = new Map<string, any>();
           
           dbItems.forEach((item: any) => {
@@ -181,12 +182,23 @@ export function WatchlistManager({
             if (!key) return;
             
             if (!groupedMap.has(key)) {
-              groupedMap.set(key, { ...item, RetailerOffers: [] });
+              groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
+            } else {
+              const existing = groupedMap.get(key);
+              if (item.id && !existing.dbRowIds.includes(item.id)) {
+                existing.dbRowIds.push(item.id);
+              }
+              // Prefer lowest price
+              if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
+                existing.all_time_low = item.all_time_low;
+                existing.target_price = item.target_price;
+              }
             }
           });
 
           formatted = Array.from(groupedMap.values()).map((group: any) => ({
             id: group.id,
+            dbRowIds: group.dbRowIds,
             userId: group.user_id,
             componentName: group.component_name,
             category: group.category || 'GPU',
@@ -474,37 +486,56 @@ export function WatchlistManager({
     const itemToDelete = watchlist.find(item => item.id === id);
     setWatchlist(prev => prev.filter(item => item.id !== id));
 
-    const idsToDelete = itemToDelete?.specs?.RetailerOffers?.map((o: any) => o.id).filter(Boolean) || [id];
-
-    // 1. Delete directly from Supabase `watchlist_items` table
+    // 1. Remove from sessionStorage to prevent resurrection on refresh
     try {
-      const { error: wlErr } = await supabase
-        .from('watchlist_items')
-        .delete()
-        .in('id', idsToDelete);
+      const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+      const filtered = stored.filter((p: any) => p.id !== id && (p.componentName || '').toLowerCase() !== (itemToDelete?.componentName || '').toLowerCase());
+      sessionStorage.setItem('pendingScrapes', JSON.stringify(filtered));
+    } catch (e) {}
 
-      if (wlErr) {
-        console.warn('[Supabase DB Delete Warning] watchlist_items:', wlErr.message);
-      } else {
-        console.log(`[Supabase DB Delete Success] Removed "${id}" from watchlist_items table.`);
-      }
+    // 2. Collect all valid UUIDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const collectedIds: string[] = [];
+    if (itemToDelete?.id) collectedIds.push(itemToDelete.id);
+    if (itemToDelete?.dbRowIds && Array.isArray(itemToDelete.dbRowIds)) {
+      collectedIds.push(...itemToDelete.dbRowIds);
+    }
+    if (itemToDelete?.specs?.RetailerOffers) {
+      itemToDelete.specs.RetailerOffers.forEach((o: any) => {
+        if (o?.id) collectedIds.push(o.id);
+      });
+    }
+    const validUuids = Array.from(new Set(collectedIds.filter(i => uuidRegex.test(i))));
 
-      // 2. Also delete corresponding item from `hardware_components` table if it exists
-      if (itemToDelete) {
-        const { error: hwErr } = await supabase
-          .from('hardware_components')
+    // 3. Direct Supabase DB Table Delete for valid UUIDs
+    if (validUuids.length > 0) {
+      try {
+        const { error: wlErr } = await supabase
+          .from('watchlist_items')
           .delete()
-          .or(`id.eq.${id},name.eq.${itemToDelete.componentName},product_url.eq.${itemToDelete.productUrl}`);
+          .in('id', validUuids);
 
-        if (!hwErr) {
-          console.log(`[Supabase DB Delete Success] Removed "${itemToDelete.componentName}" from hardware_components table.`);
+        if (wlErr) {
+          console.warn('[Supabase DB Delete Warning] watchlist_items:', wlErr.message);
+        } else {
+          console.log(`[Supabase DB Delete Success] Removed ${validUuids.length} rows from watchlist_items table.`);
         }
+      } catch (e) {
+        console.warn('Database deletion exception:', e);
       }
-    } catch (e) {
-      console.warn('Database deletion exception:', e);
     }
 
-    // 3. Fallback: Call Render backend proxy DELETE endpoints
+    // 4. Also delete any matching component_name rows as fallback
+    if (itemToDelete?.componentName) {
+      try {
+        await supabase
+          .from('watchlist_items')
+          .delete()
+          .ilike('component_name', `%${itemToDelete.componentName}%`);
+      } catch (e) {}
+    }
+
+    // 5. Backend proxy cleanup
     const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
     try {
       await fetch(`${BACKEND_URL}/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
