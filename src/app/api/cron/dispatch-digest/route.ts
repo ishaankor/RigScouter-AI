@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
 import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
-import nodemailer from 'nodemailer';
 
-export const runtime = 'nodejs'; // Use nodejs runtime for nodemailer
+export const runtime = 'edge';
+
+async function sendResendEmail({ from, to, subject, html }: { from: string; to: string; subject: string; html: string }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[Resend Email] No RESEND_API_KEY set, skipping dispatch');
+    return;
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from, to, subject, html }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Resend API error (${res.status}): ${errText}`);
+  }
+}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -13,17 +32,6 @@ export async function GET(req: NextRequest) {
   if (authHeader !== `Bearer ${cronSecret}` && req.nextUrl.searchParams.get('key') !== cronSecret) {
     return NextResponse.json({ error: 'Unauthorized cron execution request' }, { status: 401 });
   }
-
-  // Initialize SMTP transport with Resend
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: 'resend',
-      pass: process.env.RESEND_API_KEY,
-    },
-  });
 
   try {
     const isTest = req.nextUrl.searchParams.get('test') === 'true';
@@ -59,7 +67,7 @@ export async function GET(req: NextRequest) {
           ${[...report.items].sort((a, b) => a.change24h.amount - b.change24h.amount).slice(0, 3).map(item => `
             <div style="background: #1e293b; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid ${item.change24h.amount < 0 ? '#4ade80' : '#475569'};">
               <p style="margin:0; font-weight: bold; font-size: 18px;">${item.item.componentName}</p>
-              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${item.item.currentPrice.toFixed(2)}</p>
+              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${Number(item.item.currentPrice || 0).toFixed(2)}</p>
               ${item.change24h.amount < 0 ? `<p style="margin:5px 0 0 0; color: #4ade80; font-weight: bold;">Drop: -$${Math.abs(item.change24h.amount).toFixed(2)} (${item.change24h.percentage}%)</p>` : ''}
               ${item.isAllTimeLow ? `<p style="margin:5px 0 0 0; color: #a78bfa; font-weight: bold;">🚀 90-Day All-Time Low!</p>` : ''}
               <a href="${item.item.productUrl}" style="display: inline-block; margin-top: 12px; color: #38bdf8; text-decoration: none; font-size: 14px; font-weight: bold;">View Deal →</a>
@@ -71,7 +79,7 @@ export async function GET(req: NextRequest) {
       `;
 
       const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
-      await transporter.sendMail({
+      await sendResendEmail({
         from: `"RigScouter-AI" <${customDomain}>`,
         to: 'ishaankor@gmail.com', // Sending directly to the user's email for testing
         subject: `[TEST] ${report.headline}`,
@@ -163,7 +171,7 @@ export async function GET(req: NextRequest) {
           ${[...report.items].sort((a, b) => a.change24h.amount - b.change24h.amount).slice(0, 3).map(item => `
             <div style="background: #1e293b; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid ${item.change24h.amount < 0 ? '#4ade80' : '#475569'};">
               <p style="margin:0; font-weight: bold; font-size: 18px;">${item.item.componentName}</p>
-              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${item.item.currentPrice.toFixed(2)}</p>
+              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${Number(item.item.currentPrice || 0).toFixed(2)}</p>
               ${item.change24h.amount < 0 ? `<p style="margin:5px 0 0 0; color: #4ade80; font-weight: bold;">Drop: -$${Math.abs(item.change24h.amount).toFixed(2)} (${item.change24h.percentage}%)</p>` : ''}
               ${item.isAllTimeLow ? `<p style="margin:5px 0 0 0; color: #a78bfa; font-weight: bold;">🚀 90-Day All-Time Low!</p>` : ''}
               <a href="${item.item.productUrl}" style="display: inline-block; margin-top: 12px; color: #38bdf8; text-decoration: none; font-size: 14px; font-weight: bold;">View Deal →</a>
@@ -178,7 +186,7 @@ export async function GET(req: NextRequest) {
 
         // 4. Send Email
         const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
-        await transporter.sendMail({
+        await sendResendEmail({
           from: `"RigScouter-AI" <${customDomain}>`,
           to: targetEmail,
           subject: report.headline,
