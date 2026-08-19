@@ -53,11 +53,12 @@ export function WatchlistManager({
   // Helper to extract a canonical hardware key from an item (groups all retailer listings together)
   const getNormalizedKey = (itm: any) => {
     if (!itm) return '';
-    const raw = (itm.component_name || itm.componentName || itm.name || itm.model || '').toLowerCase().trim();
+    const raw = (itm.model || itm.component_name || itm.componentName || itm.name || '').toLowerCase().trim();
     if (raw) {
       return raw
-        .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia)\s+/i, '')
+        .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake)\s+/i, '')
         .replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '')
+        .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread)\b/gi, ' ')
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
     }
@@ -88,12 +89,11 @@ export function WatchlistManager({
       const itemTitle = (item.componentName || item.component_name || item.name || '').toLowerCase();
       const siblings = trendingItems.filter(t => {
         const tKey = getNormalizedKey(t);
-        if (tKey && tKey === itemKey) return true;
+        if (tKey && itemKey && (tKey === itemKey || (tKey.length > 6 && itemKey.includes(tKey)))) return true;
         
-        // Fallback for manually added items (w-* IDs) to match with backend hardware_components by model substring
         if (t.model && itemTitle) {
-          const tModel = (t.model || '').toLowerCase();
-          if (tModel.length > 4 && (itemTitle.includes(tModel) || tModel.includes(itemTitle))) {
+          const tModel = (t.model || '').toLowerCase().trim();
+          if (tModel.length > 5 && itemTitle.includes(tModel)) {
             return true;
           }
         }
@@ -240,11 +240,11 @@ export function WatchlistManager({
                     userId: userId,
                     componentName: item.name,
                     category: item.category || 'GPU',
-                    targetPrice: Math.round((item.current_price || 100) * 0.9 * 100) / 100,
+                    targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price || 0,
                     currentPrice: item.current_price || 0,
-                    previousPrice24h: Math.round((item.current_price || 100) * 1.05 * 100) / 100,
-                    previousPrice7d: Math.round((item.current_price || 100) * 1.08 * 100) / 100,
-                    previousPrice30d: Math.round((item.current_price || 100) * 1.12 * 100) / 100,
+                    previousPrice24h: undefined,
+                    previousPrice7d: undefined,
+                    previousPrice30d: undefined,
                     allTimeLow: item.lowest_price_90d || item.current_price || 0,
                     retailer: item.retailer || 'Amazon',
                     productUrl: item.product_url || '#',
@@ -422,25 +422,6 @@ export function WatchlistManager({
             specs: { ...currentSpecs, RetailerOffers: updatedOffers },
           };
         }));
-
-        // Insert to Supabase watchlist (best price only)
-        if (payload.price <= bestPrice) {
-          const wl_row: any = {
-            component_id: `comp-${(payload.title || queryToScrape).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-            component_name: payload.title,
-            category: category,
-            target_price: Math.round(payload.price * 0.9 * 100) / 100,
-            previous_price_24h: Math.round(payload.price * 1.05 * 100) / 100,
-            previous_price_7d: Math.round(payload.price * 1.08 * 100) / 100,
-            previous_price_30d: Math.round(payload.price * 1.12 * 100) / 100,
-            all_time_low: payload.price,
-          };
-          if (userId) {
-            wl_row.user_id = userId;
-          }
-          const { error: upsertErr } = await supabase.from('watchlist_items').insert(wl_row);
-          if (upsertErr) console.warn('[Watchlist DB Notice]', upsertErr.message);
-        }
       }
     });
 
@@ -567,13 +548,14 @@ export function WatchlistManager({
 
   const getPreviousPrice = (item: WatchlistItem) => {
     switch (selectedInterval) {
-      case '24h': return item.previousPrice24h || item.currentPrice * 1.04;
-      case '7d': return item.previousPrice7d || item.currentPrice * 1.08;
-      case '30d': return item.previousPrice30d || item.currentPrice * 1.12;
+      case '24h': return item.previousPrice24h;
+      case '7d': return item.previousPrice7d;
+      case '30d': return item.previousPrice30d;
     }
   };
 
-  const calculateDrop = (current: number, previous: number) => {
+  const calculateDrop = (current: number, previous?: number) => {
+    if (!previous || previous <= 0) return { diff: 0, percent: 0 };
     const diff = previous - current;
     const percent = (diff / previous) * 100;
     return { diff, percent };
@@ -727,11 +709,20 @@ export function WatchlistManager({
                       <td className="p-4 font-mono font-bold text-gray-300">${Number(item.targetPrice || 0).toFixed(2)}</td>
 
                       <td className="p-4">
-                        <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
-                          <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
-                        </div>
-                        <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
+                        {prevPrice && prevPrice > 0 && prevPrice !== effective.currentPrice ? (
+                          <>
+                            <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
+                              <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
+                          </>
+                        ) : (
+                          <div className="text-gray-500 font-medium text-[11px] flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/60 animate-pulse"></span>
+                            Baseline Tracked
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4 font-mono text-gray-400">${Number(item.allTimeLow || 0).toFixed(2)}</td>

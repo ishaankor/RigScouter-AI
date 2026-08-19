@@ -36,26 +36,42 @@ export async function GET(req: NextRequest) {
   try {
     const isTest = req.nextUrl.searchParams.get('test') === 'true';
 
-    // TEST MODE: Bypass DB entirely and send a mock email directly
+    // TEST MODE: Fetch real hardware components from DB and send digest email
     if (isTest) {
-      const mockItems = [
+      const { data: dbItems } = await supabaseAdmin
+        .from('hardware_components')
+        .select('*')
+        .order('deal_score', { ascending: false })
+        .limit(4);
+
+      const realItems = (dbItems || []).map(item => ({
+        id: item.id,
+        userId: 'test-user',
+        componentName: item.name,
+        category: item.category,
+        targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price,
+        currentPrice: item.current_price,
+        previousPrice24h: item.current_price,
+        previousPrice7d: item.current_price,
+        previousPrice30d: item.current_price,
+        allTimeLow: item.lowest_price_90d || item.current_price,
+        retailer: item.retailer || 'Amazon',
+        productUrl: item.product_url || '#',
+        imageUrl: item.image_url,
+        inStock: true,
+        notifyOnFlashDrop: true,
+        addedAt: item.updated_at
+      })) as any[];
+
+      const report = await generateDailyDigestReport(realItems.length > 0 ? realItems : [
         {
-          id: '1', userId: 'test', componentName: 'NVIDIA - GeForce RTX 5080 Founders Edition 16GB GDDR7',
-          category: 'GPU', targetPrice: 999.99, currentPrice: 999.99, previousPrice24h: 1049.99,
-          previousPrice7d: 1079.99, previousPrice30d: 1199.99, allTimeLow: 999.99,
-          retailer: 'Best Buy', productUrl: '#', imageUrl: 'https://via.placeholder.com/150',
-          inStock: true, notifyOnFlashDrop: true, addedAt: new Date()
-        },
-        {
-          id: '2', userId: 'test', componentName: 'ASUS GeForce GTX 1060 6GB GDDR5',
-          category: 'GPU', targetPrice: 100.00, currentPrice: 110.00, previousPrice24h: 115.50,
-          previousPrice7d: 118.80, previousPrice30d: 120.00, allTimeLow: 90.00,
-          retailer: 'Newegg', productUrl: '#', imageUrl: 'https://via.placeholder.com/150',
+          id: '1', userId: 'test', componentName: 'AMD Ryzen 7 7800X3D Desktop Processor',
+          category: 'CPU', targetPrice: 349.00, currentPrice: 339.00, previousPrice24h: 369.00,
+          previousPrice7d: 384.00, previousPrice30d: 399.00, allTimeLow: 339.00,
+          retailer: 'Micro Center', productUrl: '#', imageUrl: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80',
           inStock: true, notifyOnFlashDrop: true, addedAt: new Date()
         }
-      ] as any[];
-
-      const report = await generateDailyDigestReport(mockItems);
+      ] as any[]);
       
       const htmlContent = `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0b0f19; color: #fff; padding: 20px; border-radius: 8px;">

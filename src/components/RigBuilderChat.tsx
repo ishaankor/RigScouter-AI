@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RigBuildRequirement, RigBuildRecommendation, HardwareComponent } from '@/lib/types/hardware';
 import { recommendRigBuild } from '@/lib/ai/compatibility-checker';
+import { supabase } from '@/lib/db/supabase';
 import { Cpu, Zap, ShieldCheck, DollarSign, Sparkles, Monitor, Send, Check } from 'lucide-react';
 
 export function RigBuilderChat() {
@@ -10,16 +11,51 @@ export function RigBuilderChat() {
   const [useCase, setUseCase] = useState<RigBuildRequirement['useCase']>('gaming');
   const [targetResolution, setTargetResolution] = useState<RigBuildRequirement['targetResolution']>('1440p');
   const [isLiveScrapeMode, setIsLiveScrapeMode] = useState<boolean>(true);
+  const [catalog, setCatalog] = useState<HardwareComponent[]>([]);
   
-  const [recommendation, setRecommendation] = useState<RigBuildRecommendation>(
-    recommendRigBuild({ budget: 1200, useCase: 'gaming', targetResolution: '1440p' })
+  const [recommendation, setRecommendation] = useState<RigBuildRecommendation>(() =>
+    recommendRigBuild({ budget: 1200, useCase: 'gaming', targetResolution: '1440p' }, [])
   );
+
+  useEffect(() => {
+    async function loadCatalog() {
+      try {
+        const { data } = await supabase
+          .from('hardware_components')
+          .select('*')
+          .order('deal_score', { ascending: false })
+          .limit(100);
+
+        if (data && data.length > 0) {
+          const formatted: HardwareComponent[] = data.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            category: c.category,
+            brand: c.brand,
+            model: c.model,
+            specs: typeof c.specs === 'string' ? JSON.parse(c.specs || '{}') : (c.specs || {}),
+            msrp: c.msrp,
+            currentPrice: c.current_price,
+            lowestPrice90d: c.lowest_price_90d,
+            retailer: c.retailer,
+            productUrl: c.product_url,
+            imageUrl: c.image_url,
+            rating: c.rating,
+            dealScore: c.deal_score
+          }));
+          setCatalog(formatted);
+          setRecommendation(recommendRigBuild({ budget, useCase, targetResolution }, formatted));
+        }
+      } catch (e) {}
+    }
+    loadCatalog();
+  }, []);
 
   const handleUpdate = (newBudget: number, newUseCase = useCase, newRes = targetResolution) => {
     setBudget(newBudget);
     setUseCase(newUseCase);
     setTargetResolution(newRes);
-    setRecommendation(recommendRigBuild({ budget: newBudget, useCase: newUseCase, targetResolution: newRes }));
+    setRecommendation(recommendRigBuild({ budget: newBudget, useCase: newUseCase, targetResolution: newRes }, catalog));
   };
 
   return (

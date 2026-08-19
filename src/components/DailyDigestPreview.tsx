@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary, WatchlistItem } from '@/lib/types/hardware';
 import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
-import { MOCK_INITIAL_WATCHLIST } from '@/lib/scrapers/price-scraper';
 import { supabase } from '@/lib/db/supabase';
 import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
 
@@ -24,33 +23,63 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
 
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const fetchUserWatchlist = async () => {
-    if (!user) return MOCK_INITIAL_WATCHLIST;
-    const { data, error } = await supabase.from('watchlist_items').select('*').eq('user_id', user.id);
-    if (error || !data || data.length === 0) return MOCK_INITIAL_WATCHLIST;
-    
-    return data.map(item => {
-      const price = Number(item.current_price || item.all_time_low || item.target_price || 100);
-      return {
-        id: item.id,
-        userId: item.user_id,
-        componentName: item.component_name || 'Hardware Component',
-        category: item.category || 'GPU',
-        targetPrice: Number(item.target_price || price * 0.9),
-        currentPrice: price,
-        previousPrice24h: Number(item.previous_price_24h || price),
-        previousPrice7d: Number(item.previous_price_7d || price),
-        previousPrice30d: Number(item.previous_price_30d || price),
-        allTimeLow: Number(item.all_time_low || price),
-        retailer: item.retailer || 'Amazon',
-        productUrl: item.product_url || '#',
-        imageUrl: item.image_url,
-        inStock: item.in_stock ?? true,
-        notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-        addedAt: item.added_at,
-        specs: item.specs
-      };
-    }) as WatchlistItem[];
+  const fetchUserWatchlist = async (): Promise<WatchlistItem[]> => {
+    if (user?.id) {
+      const { data, error } = await supabase.from('watchlist_items').select('*').eq('user_id', user.id);
+      if (!error && data && data.length > 0) {
+        return data.map(item => {
+          const price = Number(item.current_price || item.all_time_low || item.target_price || 100);
+          return {
+            id: item.id,
+            userId: item.user_id,
+            componentName: item.component_name || 'Hardware Component',
+            category: item.category || 'GPU',
+            targetPrice: Number(item.target_price || (price * 0.9)),
+            currentPrice: price,
+            previousPrice24h: Number(item.previous_price_24h || price),
+            previousPrice7d: Number(item.previous_price_7d || price),
+            previousPrice30d: Number(item.previous_price_30d || price),
+            allTimeLow: Number(item.all_time_low || price),
+            retailer: item.retailer || 'Amazon',
+            productUrl: item.product_url || '#',
+            imageUrl: item.image_url,
+            inStock: item.in_stock ?? true,
+            notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+            addedAt: item.added_at,
+            specs: item.specs
+          };
+        });
+      }
+    }
+
+    // Fallback: Use top deals from live hardware_components database catalog
+    const { data: hwData } = await supabase.from('hardware_components').select('*').order('deal_score', { ascending: false }).limit(6);
+    if (hwData && hwData.length > 0) {
+      return hwData.map(item => {
+        const price = Number(item.current_price || 100);
+        return {
+          id: `hw-${item.id}`,
+          userId: user?.id || 'guest',
+          componentName: item.name,
+          category: item.category || 'GPU',
+          targetPrice: Number(item.msrp ? item.msrp * 0.9 : price * 0.9),
+          currentPrice: price,
+          previousPrice24h: price,
+          previousPrice7d: price,
+          previousPrice30d: price,
+          allTimeLow: Number(item.lowest_price_90d || price),
+          retailer: item.retailer || 'Amazon',
+          productUrl: item.product_url || '#',
+          imageUrl: item.image_url,
+          inStock: true,
+          notifyOnFlashDrop: true,
+          addedAt: item.updated_at,
+          specs: item.specs
+        };
+      });
+    }
+
+    return [];
   };
 
   useEffect(() => {

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { scrapeTavilyAndSaveToDb } from '@/lib/scrapers/tavily-scraper';
-import { MOCK_HARDWARE_CATALOG } from '@/lib/scrapers/price-scraper';
 
 export const runtime = 'edge';
 
@@ -21,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const itemsToUpdate = dbItems && dbItems.length > 0
       ? dbItems.map(i => i.model || i.name)
-      : MOCK_HARDWARE_CATALOG.slice(0, 5).map(c => c.name);
+      : ['RTX 4070 Super', 'Ryzen 7 7800X3D', 'Samsung 990 Pro 2TB'];
 
     const updateResults = [];
 
