@@ -67,10 +67,10 @@ export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Pro
     headline = `🔥 ${biggestDrop.item.componentName.split(' ')[0]} ${biggestDrop.item.componentName.split(' ')[1]} dropped $${Math.abs(biggestDrop.change24h.amount)} today!`;
   }
 
-  const executiveSummary = `Your tracked watchlist currently has ${watchlist.length} active items. We detected ${
-    itemSummaries.filter(i => i.change24h.amount < 0).length
+  let executiveSummary = `Your tracked watchlist currently has ${watchlist.length} active items. We detected ${
+    itemSummaries.filter(i => (i.change24h?.amount || 0) < 0).length
   } price drop(s) in the last 24 hours. ${
-    biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} just hit a 90-day All-Time Low at $${biggestDrop.item.currentPrice.toFixed(2)}.` : ''
+    biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} just hit a 90-day All-Time Low at $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)}.` : ''
   }`;
 
   if (groq && watchlist.length > 0) {
@@ -83,7 +83,7 @@ Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({ name: i.item.componen
       `;
       
       const response = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
+        model: "groq/compound-mini",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" }
       });

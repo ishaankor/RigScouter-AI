@@ -27,27 +27,30 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   const fetchUserWatchlist = async () => {
     if (!user) return MOCK_INITIAL_WATCHLIST;
     const { data, error } = await supabase.from('watchlist_items').select('*').eq('user_id', user.id);
-    if (error || !data) return MOCK_INITIAL_WATCHLIST;
+    if (error || !data || data.length === 0) return MOCK_INITIAL_WATCHLIST;
     
-    return data.map(item => ({
-      id: item.id,
-      userId: item.user_id,
-      componentName: item.component_name,
-      category: item.category,
-      targetPrice: item.target_price,
-      currentPrice: item.current_price,
-      previousPrice24h: item.previous_price_24h || item.current_price,
-      previousPrice7d: item.previous_price_7d || item.current_price,
-      previousPrice30d: item.previous_price_30d || item.current_price,
-      allTimeLow: item.all_time_low || item.current_price,
-      retailer: item.retailer,
-      productUrl: item.product_url,
-      imageUrl: item.image_url,
-      inStock: item.in_stock,
-      notifyOnFlashDrop: item.notify_on_flash_drop,
-      addedAt: item.added_at,
-      specs: item.specs
-    })) as WatchlistItem[];
+    return data.map(item => {
+      const price = Number(item.current_price || item.all_time_low || item.target_price || 100);
+      return {
+        id: item.id,
+        userId: item.user_id,
+        componentName: item.component_name || 'Hardware Component',
+        category: item.category || 'GPU',
+        targetPrice: Number(item.target_price || price * 0.9),
+        currentPrice: price,
+        previousPrice24h: Number(item.previous_price_24h || price),
+        previousPrice7d: Number(item.previous_price_7d || price),
+        previousPrice30d: Number(item.previous_price_30d || price),
+        allTimeLow: Number(item.all_time_low || price),
+        retailer: item.retailer || 'Amazon',
+        productUrl: item.product_url || '#',
+        imageUrl: item.image_url,
+        inStock: item.in_stock ?? true,
+        notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+        addedAt: item.added_at,
+        specs: item.specs
+      };
+    }) as WatchlistItem[];
   };
 
   useEffect(() => {
@@ -312,21 +315,21 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                               <span className="bg-emerald-500 text-emerald-950 text-[10px] px-2 py-0.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.5)] font-black">ALL-TIME LOW</span>
                             )}
                           </div>
-                          <h3 className="text-lg font-extrabold text-white">{report?.biggestDrop?.item.componentName}</h3>
+                          <h3 className="text-lg font-extrabold text-white">{report?.biggestDrop?.item?.componentName}</h3>
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-4 p-3 bg-black/40 rounded-lg border border-white/5">
                         <div className="flex flex-col">
                           <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">New Price</span>
-                          <span className="text-emerald-400 font-black text-lg">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span>
+                          <span className="text-emerald-400 font-black text-lg">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">24h Drop</span>
-                          <span className="text-white font-bold text-lg">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)}</span>
+                          <span className="text-white font-bold text-lg">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">Retailer</span>
-                          <span className="text-cyan-400 font-bold text-lg truncate">{report?.biggestDrop?.item.retailer}</span>
+                          <span className="text-cyan-400 font-bold text-lg truncate">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
                         </div>
                       </div>
                     </div>
@@ -336,17 +339,17 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                   <div>
                     <h4 className="text-[11px] font-black uppercase text-gray-500 tracking-wider mb-3 ml-1">Price Deltas</h4>
                     <div className="space-y-2">
-                      {report?.items.map((itemSummary: DigestItemSummary) => (
-                        <div key={itemSummary.item.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-black/20 p-3.5 rounded-xl border border-white/5 text-xs hover:bg-white/5 transition-colors">
-                          <div className="font-bold text-gray-200 mb-2 sm:mb-0 line-clamp-1 pr-4">{itemSummary.item.componentName}</div>
+                      {report?.items?.map((itemSummary: DigestItemSummary) => (
+                        <div key={itemSummary?.item?.id || Math.random()} className="flex flex-col sm:flex-row sm:items-center justify-between bg-black/20 p-3.5 rounded-xl border border-white/5 text-xs hover:bg-white/5 transition-colors">
+                          <div className="font-bold text-gray-200 mb-2 sm:mb-0 line-clamp-1 pr-4">{itemSummary?.item?.componentName}</div>
                           <div className="flex items-center gap-3 text-gray-400 shrink-0">
-                            <span className="font-black text-white bg-white/10 px-2 py-1 rounded-md">${itemSummary.item.currentPrice.toFixed(2)}</span>
+                            <span className="font-black text-white bg-white/10 px-2 py-1 rounded-md">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
                             {selectedIntervals.includes('24h') && (
-                              <span className={itemSummary.change24h.amount <= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-medium'}>
-                                {itemSummary.change24h.amount <= 0 ? '' : '+'}${itemSummary.change24h.amount.toFixed(2)}
+                              <span className={(itemSummary?.change24h?.amount || 0) <= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-medium'}>
+                                {(itemSummary?.change24h?.amount || 0) <= 0 ? '' : '+'}${(itemSummary?.change24h?.amount || 0).toFixed(2)}
                               </span>
                             )}
-                            {selectedIntervals.includes('ATL') && itemSummary.isAllTimeLow && (
+                            {selectedIntervals.includes('ATL') && itemSummary?.isAllTimeLow && (
                               <span className="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black text-[9px] border border-emerald-500/30">ATL</span>
                             )}
                           </div>
@@ -355,7 +358,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     </div>
                   </div>
 
-                  {report?.items.some((i: DigestItemSummary) => i.alternativePick) && (
+                  {report?.items?.some((i: DigestItemSummary) => i.alternativePick) && (
                     <div className="mt-6 bg-gradient-to-br from-purple-900/40 to-fuchsia-900/20 border border-fuchsia-500/40 p-5 rounded-xl shadow-[0_0_20px_rgba(217,70,239,0.1)] relative overflow-hidden">
                       <div className="absolute top-0 right-0 p-4 opacity-10">
                         <Sparkles className="w-24 h-24 text-fuchsia-400" />
@@ -366,7 +369,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                       <div className="space-y-3 relative z-10">
                         {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
                           <div key={idx} className="text-gray-300 text-sm bg-black/40 p-3 rounded-lg border border-white/5">
-                            Replace <span className="font-bold text-white">{i.item.componentName}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${i.alternativePick?.savings.toFixed(2)}</span>.
+                            Replace <span className="font-bold text-white">{i.item?.componentName}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${Number(i.alternativePick?.savings || 0).toFixed(2)}</span>.
                           </div>
                         ))}
                       </div>
@@ -397,34 +400,34 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     {report?.biggestDrop && (
                       <div className="bg-[#2f3136] border border-[#202225] rounded p-3 mb-4 border-l-4 border-l-emerald-500">
                         <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">Top Daily Drop</div>
-                        <div className="font-bold text-white text-sm mb-1">{report?.biggestDrop?.item.componentName}</div>
+                        <div className="font-bold text-white text-sm mb-1">{report?.biggestDrop?.item?.componentName}</div>
                         <div className="text-xs text-[#b9bbbe]">
-                          Now: <span className="text-emerald-400 font-bold">${report?.biggestDrop?.item.currentPrice.toFixed(2)}</span> • 
-                          Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h.amount || 0).toFixed(2)}</span> • 
-                          <span className="text-[#00b0f4] ml-1">{report?.biggestDrop?.item.retailer}</span>
+                          Now: <span className="text-emerald-400 font-bold">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span> • 
+                          Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span> • 
+                          <span className="text-[#00b0f4] ml-1">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
                         </div>
                       </div>
                     )}
                     
                     <div className="text-xs font-bold text-[#8e9297] mb-2 uppercase">Tracked Prices</div>
                     <div className="bg-[#2f3136] rounded p-2 mb-4 font-mono text-[11px]">
-                      {report?.items.slice(0, 5).map((itemSummary: DigestItemSummary, idx: number) => (
+                      {report?.items?.slice(0, 5).map((itemSummary: DigestItemSummary, idx: number) => (
                         <div key={idx} className="flex justify-between py-1 border-b border-[#202225] last:border-0">
-                          <span className="truncate pr-2 text-[#b9bbbe]">{itemSummary.item.componentName.substring(0, 30)}...</span>
-                          <span className="text-white font-bold whitespace-nowrap">${itemSummary.item.currentPrice.toFixed(2)}</span>
+                          <span className="truncate pr-2 text-[#b9bbbe]">{(itemSummary?.item?.componentName || '').substring(0, 30)}...</span>
+                          <span className="text-white font-bold whitespace-nowrap">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                       ))}
-                      {(report?.items.length || 0) > 5 && <div className="text-[#72767d] text-center pt-1">+ {(report?.items.length || 0) - 5} more items</div>}
+                      {(report?.items?.length || 0) > 5 && <div className="text-[#72767d] text-center pt-1">+ {(report?.items?.length || 0) - 5} more items</div>}
                     </div>
 
-                    {report?.items.some((i: DigestItemSummary) => i.alternativePick) && (
+                    {report?.items?.some((i: DigestItemSummary) => i.alternativePick) && (
                       <div className="bg-[#2f3136] border border-[#202225] rounded p-3 border-l-4 border-l-fuchsia-500">
                         <div className="font-bold text-fuchsia-400 text-xs mb-1 uppercase flex items-center gap-1">
                           <Sparkles className="w-3 h-3" /> AI Switch Recommendations
                         </div>
                         {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
                           <div key={idx} className="text-xs text-[#dcddde] mt-1.5">
-                            • Replace <span className="font-bold">{i.item.componentName.split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${i.alternativePick?.savings.toFixed(0)})
+                            • Replace <span className="font-bold">{i.item?.componentName?.split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${Number(i.alternativePick?.savings || 0).toFixed(0)})
                           </div>
                         ))}
                       </div>

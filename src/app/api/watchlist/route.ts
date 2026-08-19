@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const { data: userWatchlist } = await supabase
       .from('watchlist_items')
       .select('*')
-      .order('added_at', { ascending: false });
+      .order('id', { ascending: false });
 
     let rawWatchlist = userWatchlist || [];
 
@@ -52,7 +52,6 @@ export async function GET(req: NextRequest) {
         image_url: item.image_url,
         in_stock: true,
         notify_on_flash_drop: true,
-        added_at: item.updated_at
       }));
 
     // Merge without duplicates
@@ -84,7 +83,6 @@ export async function GET(req: NextRequest) {
         image_url: item.image_url,
         in_stock: true,
         notify_on_flash_drop: true,
-        added_at: item.updated_at
       }));
     }
 
@@ -104,7 +102,7 @@ export async function GET(req: NextRequest) {
       imageUrl: item.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
       inStock: item.in_stock ?? true,
       notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-      addedAt: item.added_at
+      addedAt: undefined
     }));
 
     const formattedTrending = (hwCatalog || []).map(item => {
@@ -202,26 +200,22 @@ export async function POST(req: NextRequest) {
     });
 
     // 2. Save to user watchlist_items table (handles RLS 42501 gracefully)
+    const wl_insert_payload: any = {
+      component_name: componentName,
+      category,
+      target_price: target,
+      previous_price_24h: price,
+      previous_price_7d: price,
+      previous_price_30d: price,
+      all_time_low: price,
+    };
+    if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      wl_insert_payload.user_id = userId;
+    }
+
     const { data: watchItem, error: watchErr } = await supabase
       .from('watchlist_items')
-      .insert({
-        id: itemId,
-        user_id: userId,
-        component_name: componentName,
-        category,
-        target_price: target,
-        current_price: price,
-        previous_price_24h: price,
-        previous_price_7d: price,
-        previous_price_30d: price,
-        all_time_low: price,
-        retailer,
-        product_url: productUrl,
-        image_url: imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-        in_stock: true,
-        notify_on_flash_drop: true,
-        added_at: new Date().toISOString()
-      })
+      .insert(wl_insert_payload)
       .select()
       .single();
 

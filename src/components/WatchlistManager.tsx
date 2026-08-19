@@ -154,7 +154,7 @@ export function WatchlistManager({
         const { data: dbItems } = await supabase
           .from('watchlist_items')
           .select('*')
-          .order('added_at', { ascending: false });
+          .order('id', { ascending: false });
 
         let formatted: WatchlistItem[] = [];
         if (dbItems && dbItems.length > 0) {
@@ -168,39 +168,70 @@ export function WatchlistManager({
             if (!groupedMap.has(key)) {
               groupedMap.set(key, { ...item, RetailerOffers: [] });
             }
-            
-            const group = groupedMap.get(key);
-            // Add this DB item as an offer for this component
-            group.RetailerOffers.push({
-              id: item.id,
-              retailer: item.retailer,
-              price: item.current_price,
-              originalPrice: item.target_price,
-              title: item.component_name,
-              url: item.product_url,
-              inStock: item.in_stock ?? true
-            });
           });
 
           formatted = Array.from(groupedMap.values()).map((group: any) => ({
             id: group.id,
             userId: group.user_id,
             componentName: group.component_name,
-            category: group.category,
-            targetPrice: group.target_price,
-            currentPrice: group.current_price,
-            previousPrice24h: group.previous_price_24h || group.current_price * 1.04,
-            previousPrice7d: group.previous_price_7d || group.current_price * 1.08,
-            previousPrice30d: group.previous_price_30d || group.current_price * 1.12,
-            allTimeLow: group.all_time_low || group.current_price,
-            retailer: group.retailer,
-            productUrl: group.product_url,
-            imageUrl: group.image_url,
-            inStock: group.in_stock ?? true,
-            notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
+            category: group.category || 'GPU',
+            targetPrice: group.target_price || 0,
+            currentPrice: group.all_time_low || group.target_price || 0,
+            previousPrice24h: group.previous_price_24h,
+            previousPrice7d: group.previous_price_7d,
+            previousPrice30d: group.previous_price_30d,
+            allTimeLow: group.all_time_low,
+            retailer: 'Amazon',
+            productUrl: '#',
+            imageUrl: getCategoryImage(group.category || 'GPU'),
+            inStock: true,
+            notifyOnFlashDrop: true,
             addedAt: group.added_at,
-            specs: { RetailerOffers: group.RetailerOffers }
+            specs: { RetailerOffers: group.RetailerOffers || [] }
           }));
+        }
+
+        // 2. Direct Supabase DB Table Query for trending hardware catalog
+        const { data: hwCatalog } = await supabase
+          .from('hardware_components')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(500);
+
+        // Also merge any user items saved in hardware_components
+        if (hwCatalog && hwCatalog.length > 0) {
+          const userHwMap = new Map<string, any>();
+          hwCatalog.forEach((item: any) => {
+            try {
+              const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+              const isUserItem = specs.user_watchlist === userId || specs.source === 'User Watchlist Addition';
+              if (isUserItem) {
+                const key = getNormalizedKey(item);
+                if (key && !formatted.some(f => getNormalizedKey(f) === key) && !userHwMap.has(key)) {
+                  userHwMap.set(key, {
+                    id: `w-${item.id}`,
+                    userId: userId,
+                    componentName: item.name,
+                    category: item.category || 'GPU',
+                    targetPrice: Math.round((item.current_price || 100) * 0.9 * 100) / 100,
+                    currentPrice: item.current_price || 0,
+                    previousPrice24h: Math.round((item.current_price || 100) * 1.05 * 100) / 100,
+                    previousPrice7d: Math.round((item.current_price || 100) * 1.08 * 100) / 100,
+                    previousPrice30d: Math.round((item.current_price || 100) * 1.12 * 100) / 100,
+                    allTimeLow: item.lowest_price_90d || item.current_price || 0,
+                    retailer: item.retailer || 'Amazon',
+                    productUrl: item.product_url || '#',
+                    imageUrl: item.image_url || getCategoryImage(item.category || 'GPU'),
+                    inStock: true,
+                    notifyOnFlashDrop: true,
+                    addedAt: item.updated_at,
+                    specs: { RetailerOffers: [] }
+                  });
+                }
+              }
+            } catch (e) {}
+          });
+          formatted = [...formatted, ...Array.from(userHwMap.values())];
         }
 
         // Recover pending scrapes from sessionStorage to survive Safari tab suspend & Fast Refresh
@@ -220,13 +251,6 @@ export function WatchlistManager({
         } catch (e) {}
 
         setWatchlist([...recoveredPending, ...formatted]);
-
-        // 2. Direct Supabase DB Table Query for trending hardware catalog
-        const { data: hwCatalog } = await supabase
-          .from('hardware_components')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(500);
 
         if (hwCatalog && hwCatalog.length > 0) {
           const formattedTrending = hwCatalog.map((item: any) => {
@@ -372,29 +396,23 @@ export function WatchlistManager({
           };
         }));
 
-        // Upsert to Supabase (best price only, for the DB row)
+        // Insert to Supabase watchlist (best price only)
         if (payload.price <= bestPrice) {
-          try {
-            await supabase.from('watchlist_items').upsert({
-              id: pendingId,
-              user_id: userId,
-              component_name: payload.title,
-              category: category,
-              target_price: Math.round(payload.price * 0.9 * 100) / 100,
-              current_price: payload.price,
-              previous_price_24h: Math.round(payload.price * 1.05 * 100) / 100,
-              previous_price_7d: Math.round(payload.price * 1.08 * 100) / 100,
-              previous_price_30d: Math.round(payload.price * 1.12 * 100) / 100,
-              all_time_low: payload.price,
-              retailer: payload.retailer,
-              product_url: payload.url,
-              image_url: getCategoryImage(category),
-              in_stock: payload.inStock,
-              notify_on_flash_drop: true,
-            });
-          } catch (dbErr) {
-            console.warn('Live SSE DB Upsert error:', dbErr);
+          const wl_row: any = {
+            component_id: `comp-${(payload.title || queryToScrape).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            component_name: payload.title,
+            category: category,
+            target_price: Math.round(payload.price * 0.9 * 100) / 100,
+            previous_price_24h: Math.round(payload.price * 1.05 * 100) / 100,
+            previous_price_7d: Math.round(payload.price * 1.08 * 100) / 100,
+            previous_price_30d: Math.round(payload.price * 1.12 * 100) / 100,
+            all_time_low: payload.price,
+          };
+          if (userId) {
+            wl_row.user_id = userId;
           }
+          const { error: upsertErr } = await supabase.from('watchlist_items').insert(wl_row);
+          if (upsertErr) console.warn('[Watchlist DB Notice]', upsertErr.message);
         }
       }
     });
@@ -652,7 +670,7 @@ export function WatchlistManager({
                       </td>
 
                       <td className="p-4">
-                        <div className="text-sm font-black text-white">${effective.currentPrice.toFixed(2)}</div>
+                        <div className="text-sm font-black text-white">${Number(effective.currentPrice || 0).toFixed(2)}</div>
                         {isTargetHit && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
                             <TrendingDown className="w-3 h-3" /> Target Price Met!
@@ -660,17 +678,17 @@ export function WatchlistManager({
                         )}
                       </td>
 
-                      <td className="p-4 font-mono font-bold text-gray-300">${item.targetPrice.toFixed(2)}</td>
+                      <td className="p-4 font-mono font-bold text-gray-300">${Number(item.targetPrice || 0).toFixed(2)}</td>
 
                       <td className="p-4">
                         <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
-                          <span>${Math.abs(diff).toFixed(2)} ({percent.toFixed(1)}%)</span>
+                          <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
                         </div>
-                        <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${prevPrice.toFixed(2)}</div>
+                        <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
                       </td>
 
-                      <td className="p-4 font-mono text-gray-400">${item.allTimeLow.toFixed(2)}</td>
+                      <td className="p-4 font-mono text-gray-400">${Number(item.allTimeLow || 0).toFixed(2)}</td>
 
                       <td className="p-4 text-center">
                         <button
@@ -733,9 +751,9 @@ export function WatchlistManager({
 
                   <div className="flex items-center justify-between gap-2 mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-xl font-black text-emerald-400">${effective.currentPrice.toFixed(2)}</span>
+                      <span className="text-xl font-black text-emerald-400">${Number(effective.currentPrice || 0).toFixed(2)}</span>
                       {effective.msrp > effective.currentPrice && (
-                        <span className="text-xs text-gray-500 line-through">${effective.msrp.toFixed(2)}</span>
+                        <span className="text-xs text-gray-500 line-through">${Number(effective.msrp || 0).toFixed(2)}</span>
                       )}
                     </div>
 
