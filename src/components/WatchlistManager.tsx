@@ -66,8 +66,21 @@ export function WatchlistManager({
 
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
   const getEffectiveOffer = (item: any) => {
+    if (!item) {
+      return {
+        title: 'Component',
+        currentPrice: 0,
+        msrp: 0,
+        productUrl: '#',
+        retailer: 'Amazon',
+        inStock: false,
+        availableRetailers: ['Amazon'],
+        offers: []
+      };
+    }
+
     const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-    let offers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = specs.RetailerOffers || [];
+    let offers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
 
     const itemKey = getNormalizedKey(item);
     if (trendingItems.length > 0) {
@@ -78,7 +91,7 @@ export function WatchlistManager({
         
         // Fallback for manually added items (w-* IDs) to match with backend hardware_components by model substring
         if (t.model && itemTitle) {
-          const tModel = t.model.toLowerCase();
+          const tModel = (t.model || '').toLowerCase();
           if (tModel.length > 4 && (itemTitle.includes(tModel) || tModel.includes(itemTitle))) {
             return true;
           }
@@ -86,13 +99,13 @@ export function WatchlistManager({
         return false;
       });
       for (const sib of siblings) {
-        if (sib.retailer && !offers.some(o => o.retailer.toLowerCase() === sib.retailer.toLowerCase())) {
+        if (sib.retailer && !offers.some(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase())) {
           offers.push({
             retailer: sib.retailer,
-            price: sib.currentPrice,
-            originalPrice: sib.msrp,
+            price: Number(sib.currentPrice || 0),
+            originalPrice: Number(sib.msrp || sib.currentPrice || 0),
             title: sib.name,
-            url: sib.productUrl,
+            url: sib.productUrl || '#',
             inStock: true
           });
         }
@@ -100,45 +113,47 @@ export function WatchlistManager({
     }
 
     const combinedOffers = [...offers];
-    if (item.retailer && !combinedOffers.some(o => o.retailer.toLowerCase() === item.retailer.toLowerCase())) {
+    const itemRetailer = item.retailer || '';
+    if (itemRetailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === itemRetailer.toLowerCase())) {
       combinedOffers.push({
-        retailer: item.retailer,
-        price: item.currentPrice || item.current_price || 0,
-        originalPrice: item.msrp,
-        title: item.componentName || item.name,
+        retailer: itemRetailer,
+        price: Number(item.currentPrice || item.current_price || 0),
+        originalPrice: Number(item.msrp || item.currentPrice || item.current_price || 0),
+        title: item.componentName || item.name || 'Component',
         url: item.productUrl || item.product_url || '#',
         inStock: item.inStock ?? true
       });
     }
 
-    // Filter out dummy/unscraped retailers (price is 0 or URL is missing)
-    const validOffers = combinedOffers.filter(o => o.price > 0 && o.url && o.url !== '#');
+    // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty)
+    const validOffers = combinedOffers.filter(o => o && o.retailer && o.price > 0 && o.url && o.url !== '#');
     // If somehow all are invalid, fallback to the original array so the UI doesn't crash
-    const finalOffers = validOffers.length > 0 ? validOffers : combinedOffers;
+    const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer) || []);
 
-    const activeRetailer = selectedRetailers[item.id] || item.retailer || (finalOffers[0]?.retailer ?? 'Amazon');
-    const matchedOffer = finalOffers.find(o => o.retailer.toLowerCase() === activeRetailer.toLowerCase());
+    const defaultFallbackRetailer = finalOffers[0]?.retailer || item.retailer || 'Amazon';
+    const activeRetailer = selectedRetailers[item.id] || defaultFallbackRetailer;
+    const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || finalOffers[0];
 
     const isExplicitlySelected = !!selectedRetailers[item.id];
     
     // If the user explicitly selected a retailer and we don't have an offer for it, we shouldn't inherit the default item's price/URL.
-    const currentPrice = matchedOffer ? matchedOffer.price : (isExplicitlySelected ? 0 : (item.currentPrice ?? item.current_price ?? 0));
-    const msrp = matchedOffer ? (matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : (item.msrp ?? currentPrice));
-    const productUrl = matchedOffer ? matchedOffer.url : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));
-    const retailer = matchedOffer ? matchedOffer.retailer : activeRetailer;
-    const title = matchedOffer ? (matchedOffer.title ?? item.componentName ?? item.name) : (item.componentName ?? item.name);
-    const inStock = matchedOffer ? matchedOffer.inStock : false; // false if we don't have the offer
+    const currentPrice = matchedOffer ? Number(matchedOffer.price || 0) : (isExplicitlySelected ? 0 : Number(item.currentPrice ?? item.current_price ?? 0));
+    const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : Number(item.msrp ?? currentPrice));
+    const productUrl = matchedOffer ? (matchedOffer.url || '#') : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));
+    const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : activeRetailer;
+    const title = matchedOffer ? (matchedOffer.title ?? item.componentName ?? item.name ?? 'Component') : (item.componentName ?? item.name ?? 'Component');
+    const inStock = matchedOffer ? Boolean(matchedOffer.inStock) : false;
 
-    const availableRetailers = Array.from(new Set(finalOffers.map(o => o.retailer))).filter(Boolean);
+    const availableRetailers = Array.from(new Set(finalOffers.map(o => o?.retailer))).filter((r): r is string => Boolean(r));
 
     return {
       title,
       currentPrice,
       msrp,
       productUrl,
-      retailer,
+      retailer: retailer || 'Amazon',
       inStock,
-      availableRetailers,
+      availableRetailers: availableRetailers.length > 0 ? availableRetailers : [retailer || 'Amazon'],
       offers: combinedOffers
     };
   };
@@ -242,7 +257,7 @@ export function WatchlistManager({
           
           const activePending = stored.filter((p: WatchlistItem) => {
             const isOld = now - new Date(p.addedAt).getTime() > 3 * 60 * 1000; // Drop after 3 mins
-            const isInDb = formatted.some((f) => f.id.includes(p.id) || f.componentName.toLowerCase() === p.componentName.toLowerCase());
+            const isInDb = formatted.some((f) => (f.id && p.id && f.id.includes(p.id)) || (f.componentName || '').toLowerCase() === (p.componentName || '').toLowerCase());
             return !isOld && !isInDb;
           });
           
@@ -658,8 +673,8 @@ export function WatchlistManager({
                             className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
                           >
                             {effective.availableRetailers.map(rName => {
-                              const offerObj = effective.offers.find(o => o.retailer.toLowerCase() === rName.toLowerCase());
-                              const priceTag = offerObj ? ` ($${offerObj.price.toFixed(2)})` : '';
+                              const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
+                              const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
                               return (
                                 <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
                                   {rName}{priceTag}
