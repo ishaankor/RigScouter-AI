@@ -280,65 +280,12 @@ export function WatchlistManager({
         setWatchlist([...recoveredPending, ...formatted]);
 
         if (hwCatalog && hwCatalog.length > 0) {
-          const groupedCatalogMap = new Map<string, any>();
-
-          hwCatalog.forEach((item: any) => {
-            const key = getNormalizedKey(item);
-            if (!key) return;
-
-            const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-            const existingOffers = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
-
-            if (!groupedCatalogMap.has(key)) {
-              groupedCatalogMap.set(key, {
-                ...item,
-                dbRowIds: [item.id],
-                RetailerOffers: existingOffers.length > 0 ? existingOffers : [
-                  {
-                    retailer: item.retailer,
-                    price: item.current_price,
-                    originalPrice: item.msrp || item.current_price,
-                    title: item.name,
-                    url: item.product_url,
-                    inStock: specs.InStock ?? true
-                  }
-                ]
-              });
-            } else {
-              const existing = groupedCatalogMap.get(key);
-              if (item.id && !existing.dbRowIds.includes(item.id)) {
-                existing.dbRowIds.push(item.id);
-              }
-              // Add retailer offer if not present
-              if (item.retailer && !existing.RetailerOffers.some((o: any) => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase())) {
-                existing.RetailerOffers.push({
-                  retailer: item.retailer,
-                  price: item.current_price,
-                  originalPrice: item.msrp || item.current_price,
-                  title: item.name,
-                  url: item.product_url,
-                  inStock: specs.InStock ?? true
-                });
-              }
-              // Prefer lowest price as the primary display
-              const itemPrice = Number(item.current_price || 0);
-              const existingPrice = Number(existing.current_price || 0);
-              if (itemPrice > 0 && (existingPrice === 0 || itemPrice < existingPrice)) {
-                existing.current_price = item.current_price;
-                existing.retailer = item.retailer;
-                existing.product_url = item.product_url;
-                existing.deal_score = item.deal_score;
-                existing.name = item.name;
-              }
-            }
-          });
-
-          const formattedTrending = Array.from(groupedCatalogMap.values()).map((item: any) => {
+          const formattedTrending = hwCatalog.map((item: any) => {
             const current = item.current_price || 0;
             const msrp = item.msrp || current;
             const lowest = item.lowest_price_90d || current;
 
-            // 100% Dynamic deal score computed from real price ratios (NO hardcoded fallback numbers)
+            // 100% Dynamic deal score computed from real price ratios
             let computedDealScore = item.deal_score;
             if (typeof computedDealScore !== 'number' || computedDealScore <= 0) {
               if (msrp > current && msrp > 0) {
@@ -352,12 +299,12 @@ export function WatchlistManager({
 
             return {
               id: item.id,
-              dbRowIds: item.dbRowIds,
+              dbRowIds: [item.id],
               name: item.name,
               category: item.category,
               brand: item.brand,
               model: item.model,
-              specs: { ...(typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {})), RetailerOffers: item.RetailerOffers || [] },
+              specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
               msrp: item.msrp,
               currentPrice: item.current_price,
               lowestPrice90d: item.lowest_price_90d,
@@ -825,10 +772,11 @@ export function WatchlistManager({
           </div>
         </div>
       ) : (
-        /* Trending Items Grid */
+        /* Trending Items Grid (Individual Retailer Deals) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trendingItems.map(item => {
-            const effective = getEffectiveOffer(item);
+            const price = Number(item.currentPrice || 0);
+            const msrp = Number(item.msrp || price);
 
             return (
               <div key={item.id} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
@@ -845,48 +793,30 @@ export function WatchlistManager({
 
                   <div className="flex items-center justify-between gap-2 mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-xl font-black text-emerald-400">${Number(effective.currentPrice || 0).toFixed(2)}</span>
-                      {effective.msrp > effective.currentPrice && (
-                        <span className="text-xs text-gray-500 line-through">${Number(effective.msrp || 0).toFixed(2)}</span>
+                      <span className="text-xl font-black text-emerald-400">${price.toFixed(2)}</span>
+                      {msrp > price && (
+                        <span className="text-xs text-gray-500 line-through">${msrp.toFixed(2)}</span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {effective.availableRetailers.length > 1 ? (
-                        <select
-                          value={effective.retailer}
-                          onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
-                          className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-lg px-2.5 py-1 outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
-                        >
-                          {effective.availableRetailers.map(rName => {
-                            const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
-                            const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
-                            return (
-                              <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
-                                {rName}{priceTag}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      ) : (
-                        <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
-                          {effective.retailer}
-                        </span>
-                      )}
+                      <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
+                        {item.retailer}
+                      </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <a
-                    href={effective.productUrl}
+                    href={item.productUrl || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 py-2.5 bg-gray-900 hover:bg-cyan-950/80 text-white hover:text-cyan-300 font-bold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-2 transition-all"
                   >
-                    View Direct Listing at {effective.retailer} <ExternalLink className="w-3.5 h-3.5" />
+                    View Direct Listing at {item.retailer} <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button
-                    onClick={() => removeTrendingItem(item.id, item.name, item.dbRowIds)}
+                    onClick={() => removeTrendingItem(item.id, item.name, item.dbRowIds || [item.id])}
                     className="p-2.5 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
                     title="Remove Component from Database"
                   >
