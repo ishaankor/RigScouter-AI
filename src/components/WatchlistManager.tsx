@@ -53,17 +53,46 @@ export function WatchlistManager({
   // Helper to extract a canonical hardware key from an item (groups all retailer listings together)
   const getNormalizedKey = (itm: any) => {
     if (!itm) return '';
-    const raw = (itm.model || itm.component_name || itm.componentName || itm.name || '').toLowerCase().trim();
-    if (raw) {
-      return raw
-        .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake)\s+/i, '')
-        .replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '')
-        .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread)\b/gi, ' ')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim();
+    const text = (itm.model || itm.component_name || itm.componentName || itm.name || '').toLowerCase();
+    const compId = (itm.component_id || itm.id || '').toLowerCase();
+
+    // 1. GPU Pattern (e.g. RTX 4080 Super, RX 7900 XTX)
+    const gpuMatch = text.match(/\b(geforce\s+)?(rtx|gtx|rx|arc)\s*(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b/i);
+    if (gpuMatch) {
+      const prefix = gpuMatch[2].toLowerCase();
+      const num = gpuMatch[3];
+      const mod = gpuMatch[4] ? ' ' + gpuMatch[4].toLowerCase() : '';
+      return (prefix + ' ' + num + mod).trim();
     }
-    const id = (itm.id || itm.component_id || '').toLowerCase();
-    return id.replace(/^(w-|comp-)/, '').replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+    // 2. CPU Pattern (e.g. Ryzen 9 9900X3D, Core i9 14900K, Ultra 9 285K)
+    const cpuMatch = text.match(/\b(ryzen\s*[3579]\s*\d{4,5}[a-z0-9]*(?:\s*x3d)?|core\s*i[3579][ -]\d{4,5}[a-z]*|ultra\s*[3579]\s*[- ]?\d{3,4}[a-z]*)\b/i);
+    if (cpuMatch) {
+      return cpuMatch[0].replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    // 3. Motherboard Pattern (e.g. Prime Q270M-C, Z890 WiFi, B650 Tomahawk)
+    const moboMatch = text.match(/\b(prime|strix|tuf|aorus|tomahawk|proart|taichi|maximus|hero|plus|elite)\s+([a-z0-9-]+)\b/i) ||
+                      text.match(/\b([zbxqa]\d{3}[a-z0-9-]*)\b/i);
+    if (moboMatch) {
+      return (moboMatch[1] + (moboMatch[2] ? ' ' + moboMatch[2] : '')).replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    // 4. RAM Pattern (e.g. Vengeance RGB, Trident Z5, Ripjaws)
+    const ramMatch = text.match(/\b(vengeance|trident\s*z\d?|ripjaws|dominator|fury\s+beast|t-force|g\.?skill)\b.*?\b(ddr[45])?\b/i);
+    if (ramMatch) {
+      return (ramMatch[1] + (ramMatch[2] ? ' ' + ramMatch[2] : '')).replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    // 5. Fallback: Cleaned alphanumeric slug
+    const cleanId = compId.replace(/^(w-|comp-)/, '').replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    if (cleanId && cleanId.length > 3) return cleanId;
+
+    return text
+      .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake|lenovo|arch memory)\s+/i, '')
+      .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread)\b/gi, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   };
 
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
