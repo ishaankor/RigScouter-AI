@@ -4,6 +4,7 @@ export type RetailerName = 'Amazon' | 'Micro Center' | 'Newegg' | 'Best Buy' | '
 
 export interface HardwareComponent {
   id: string;
+  dbRowIds?: string[];
   name: string;
   category: ComponentCategory;
   brand: string;
