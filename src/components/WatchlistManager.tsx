@@ -131,9 +131,9 @@ export function WatchlistManager({
     // If somehow all are invalid, fallback to the original array so the UI doesn't crash
     const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer) || []);
 
-    const defaultFallbackRetailer = finalOffers[0]?.retailer || item.retailer || 'Amazon';
+    const defaultFallbackRetailer = item.retailer || finalOffers[0]?.retailer || 'Amazon';
     const activeRetailer = selectedRetailers[item.id] || defaultFallbackRetailer;
-    const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || finalOffers[0];
+    const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || finalOffers.find(o => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase()) || finalOffers[0];
 
     const isExplicitlySelected = !!selectedRetailers[item.id];
     
@@ -852,9 +852,27 @@ export function WatchlistManager({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
-                        {effective.retailer}
-                      </span>
+                      {effective.availableRetailers.length > 1 ? (
+                        <select
+                          value={effective.retailer}
+                          onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
+                          className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-lg px-2.5 py-1 outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
+                        >
+                          {effective.availableRetailers.map(rName => {
+                            const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
+                            const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
+                            return (
+                              <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
+                                {rName}{priceTag}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      ) : (
+                        <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
+                          {effective.retailer}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
