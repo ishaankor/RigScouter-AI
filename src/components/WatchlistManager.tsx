@@ -95,7 +95,7 @@ export function WatchlistManager({
       .trim();
   };
 
-  // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records
+  // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records (Immutable & Memory-Safe)
   const getEffectiveOffer = (item: any) => {
     if (!item) {
       return {
@@ -111,7 +111,10 @@ export function WatchlistManager({
     }
 
     const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-    let offers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
+    const baseOffers = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
+    
+    // Always clone to avoid mutating state object in memory
+    const combinedOffers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = [...baseOffers];
 
     const itemKey = getNormalizedKey(item);
     if (trendingItems.length > 0) {
@@ -129,8 +132,8 @@ export function WatchlistManager({
         return false;
       });
       for (const sib of siblings) {
-        if (sib.retailer && !offers.some(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase())) {
-          offers.push({
+        if (sib.retailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase())) {
+          combinedOffers.push({
             retailer: sib.retailer,
             price: Number(sib.currentPrice || 0),
             originalPrice: Number(sib.msrp || sib.currentPrice || 0),
@@ -142,7 +145,6 @@ export function WatchlistManager({
       }
     }
 
-    const combinedOffers = [...offers];
     const itemRetailer = item.retailer || '';
     if (itemRetailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === itemRetailer.toLowerCase())) {
       combinedOffers.push({
@@ -157,16 +159,16 @@ export function WatchlistManager({
 
     // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty)
     const validOffers = combinedOffers.filter(o => o && o.retailer && o.price > 0 && o.url && o.url !== '#');
-    // If somehow all are invalid, fallback to the original array so the UI doesn't crash
     const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer) || []);
 
     const defaultFallbackRetailer = item.retailer || finalOffers[0]?.retailer || 'Amazon';
     const activeRetailer = selectedRetailers[item.id] || defaultFallbackRetailer;
-    const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || finalOffers.find(o => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase()) || finalOffers[0];
+    const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || 
+                         finalOffers.find(o => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase()) || 
+                         finalOffers[0];
 
     const isExplicitlySelected = !!selectedRetailers[item.id];
     
-    // If the user explicitly selected a retailer and we don't have an offer for it, we shouldn't inherit the default item's price/URL.
     const currentPrice = matchedOffer ? Number(matchedOffer.price || 0) : (isExplicitlySelected ? 0 : Number(item.currentPrice ?? item.current_price ?? 0));
     const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : Number(item.msrp ?? currentPrice));
     const productUrl = matchedOffer ? (matchedOffer.url || '#') : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));

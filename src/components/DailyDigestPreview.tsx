@@ -83,11 +83,15 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   };
 
   useEffect(() => {
+    let isMounted = true;
     fetchUserWatchlist().then(async items => {
-      const generated = await generateDailyDigestReport(items);
-      setReport(generated);
+      if (items.length > 0 && isMounted) {
+        const generated = await generateDailyDigestReport(items);
+        if (isMounted) setReport(generated);
+      }
     });
-  }, [user]);
+    return () => { isMounted = false; };
+  }, [user?.id]);
 
   const handleRegenerate = async () => {
     setIsGenerating(true);
