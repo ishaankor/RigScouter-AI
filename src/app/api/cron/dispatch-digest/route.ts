@@ -23,6 +23,131 @@ async function sendResendEmail({ from, to, subject, html }: { from: string; to: 
     throw new Error(`Resend API error (${res.status}): ${errText}`);
   }
 }
+function buildDigestEmailHtml(report: any, dateStr: string): string {
+  const sortedItems = [...report.items].sort((a: any, b: any) => (a.change24h?.amount || 0) - (b.change24h?.amount || 0));
+
+  const itemsHtml = sortedItems.map((entry: any) => {
+    const item = entry.item;
+    const currentPrice = Number(item.currentPrice || 0).toFixed(2);
+    const dropAmount = entry.change24h?.amount || 0;
+    const dropPercent = entry.change24h?.percentage || 0;
+    const isDrop = dropAmount < 0;
+
+    // Guaranteed working direct product link with fallback
+    const directUrl = item.productUrl && item.productUrl.startsWith('http')
+      ? item.productUrl
+      : `https://www.google.com/search?q=${encodeURIComponent((item.componentName || item.name) + ' ' + (item.retailer || ''))}`;
+
+    return `
+      <div style="background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #38bdf8; background: #0c4a6e; padding: 3px 8px; border-radius: 6px;">
+            ${item.category || 'Hardware'}
+          </span>
+          <span style="font-size: 12px; font-weight: 600; color: #9ca3af; background: #1f2937; padding: 3px 10px; border-radius: 6px;">
+            ${item.retailer || 'Retailer'}
+          </span>
+        </div>
+
+        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 700; color: #f9fafb; line-height: 1.4;">
+          ${item.componentName || item.name}
+        </h3>
+
+        <div style="background-color: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="color: #94a3b8; font-size: 13px; padding-bottom: 4px;">Current Live Price:</td>
+              <td style="text-align: right; font-weight: 800; font-size: 17px; color: #34d399;">$${currentPrice}</td>
+            </tr>
+            ${isDrop ? `
+            <tr>
+              <td style="color: #94a3b8; font-size: 13px;">24h Price Movement:</td>
+              <td style="text-align: right; font-weight: 700; font-size: 13px; color: #34d399;">
+                -$${Math.abs(dropAmount).toFixed(2)} (${dropPercent}%)
+              </td>
+            </tr>` : `
+            <tr>
+              <td style="color: #94a3b8; font-size: 13px;">24h Price Movement:</td>
+              <td style="text-align: right; font-weight: 600; font-size: 13px; color: #64748b;">Stable</td>
+            </tr>`}
+            ${entry.isAllTimeLow ? `
+            <tr>
+              <td colspan="2" style="padding-top: 8px;">
+                <span style="display: inline-block; font-size: 11px; font-weight: 700; color: #c084fc; background: #581c87; padding: 2px 8px; border-radius: 4px;">
+                  🚀 90-Day All-Time Low
+                </span>
+              </td>
+            </tr>` : ''}
+          </table>
+        </div>
+
+        <div style="text-align: right;">
+          <a href="${directUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 9px 18px; background-color: #06b6d4; color: #020617; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 13px; letter-spacing: 0.2px;">
+            View Deal on ${item.retailer || 'Store'} &rarr;
+          </a>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin: 0; padding: 20px; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f3f4f6;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #0b0f19; border: 1px solid #1f2937; border-radius: 16px; overflow: hidden; padding: 24px;">
+          
+          <!-- Header -->
+          <div style="border-bottom: 1px solid #1f2937; padding-bottom: 18px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px; color: #38bdf8;">
+                ⚡ RigScouter AI
+              </span>
+              <span style="font-size: 12px; color: #6b7280; font-weight: 600;">
+                ${dateStr}
+              </span>
+            </div>
+            <h1 style="margin: 14px 0 0 0; font-size: 20px; font-weight: 800; color: #f9fafb; line-height: 1.3;">
+              ${report.headline}
+            </h1>
+          </div>
+
+          <!-- Executive Intelligence Briefing -->
+          <div style="background-color: #0f172a; border-left: 4px solid #38bdf8; border-radius: 4px 8px 8px 4px; padding: 14px 16px; margin-bottom: 24px;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #38bdf8; letter-spacing: 0.5px; margin-bottom: 4px;">
+              Market Summary
+            </div>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+              ${report.executiveSummary}
+            </p>
+          </div>
+
+          <!-- Tracked Items Section -->
+          <div style="margin-bottom: 24px;">
+            <h2 style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9ca3af; margin: 0 0 14px 0;">
+              Tracked Component Intelligence
+            </h2>
+            ${itemsHtml}
+          </div>
+
+          <!-- Footer -->
+          <div style="border-top: 1px solid #1f2937; padding-top: 18px; text-align: center; font-size: 12px; color: #6b7280;">
+            <p style="margin: 0 0 8px 0;">
+              Automated hardware intelligence dispatched by <strong>RigScouter AI</strong>.
+            </p>
+            <p style="margin: 0;">
+              <a href="https://rigscouter-ai.vercel.app" style="color: #38bdf8; text-decoration: none;">Manage Digest Preferences</a>
+            </p>
+          </div>
+
+        </div>
+      </body>
+    </html>
+  `;
+}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -35,74 +160,50 @@ export async function GET(req: NextRequest) {
 
   try {
     const isTest = req.nextUrl.searchParams.get('test') === 'true';
+    const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     // TEST MODE: Fetch real hardware components from DB and send digest email
     if (isTest) {
       const { data: dbItems } = await supabaseAdmin
         .from('hardware_components')
         .select('*')
-        .order('deal_score', { ascending: false })
+        .order('current_price', { ascending: true })
         .limit(4);
 
-      const realItems = (dbItems || []).map(item => ({
-        id: item.id,
-        userId: 'test-user',
-        componentName: item.name,
-        category: item.category,
-        targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price,
-        currentPrice: item.current_price,
-        previousPrice24h: item.current_price,
-        previousPrice7d: item.current_price,
-        previousPrice30d: item.current_price,
-        allTimeLow: item.lowest_price_90d || item.current_price,
-        retailer: item.retailer || 'Amazon',
-        productUrl: item.product_url || '#',
-        imageUrl: item.image_url,
-        inStock: true,
-        notifyOnFlashDrop: true,
-        addedAt: item.updated_at
-      })) as any[];
+      const realItems = (dbItems || []).map(item => {
+        const price = Number(item.current_price || item.msrp || 100);
+        return {
+          id: item.id,
+          userId: 'test-user',
+          componentName: item.name,
+          category: item.category || 'Hardware',
+          targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : price,
+          currentPrice: price,
+          previousPrice24h: item.lowest_price_90d && item.lowest_price_90d < price ? Number(item.lowest_price_90d) : price,
+          previousPrice7d: price,
+          previousPrice30d: price,
+          allTimeLow: item.lowest_price_90d || price,
+          retailer: item.retailer || 'Amazon',
+          productUrl: item.product_url || '#',
+          imageUrl: item.image_url,
+          inStock: true,
+          notifyOnFlashDrop: true,
+          addedAt: item.updated_at
+        };
+      });
 
-      const report = await generateDailyDigestReport(realItems.length > 0 ? realItems : [
-        {
-          id: '1', userId: 'test', componentName: 'AMD Ryzen 7 7800X3D Desktop Processor',
-          category: 'CPU', targetPrice: 349.00, currentPrice: 339.00, previousPrice24h: 369.00,
-          previousPrice7d: 384.00, previousPrice30d: 399.00, allTimeLow: 339.00,
-          retailer: 'Micro Center', productUrl: '#', imageUrl: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?auto=format&fit=crop&w=600&q=80',
-          inStock: true, notifyOnFlashDrop: true, addedAt: new Date()
-        }
-      ] as any[]);
-      
-      const htmlContent = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0b0f19; color: #fff; padding: 20px; border-radius: 8px;">
-          <h1 style="color: #4ade80;">${report.headline}</h1>
-          <p style="font-size: 16px; color: #cbd5e1; line-height: 1.6;">${report.executiveSummary}</p>
-          <hr style="border-color: #1e293b; margin: 30px 0;" />
-          <h3 style="color: #94a3b8; margin-bottom: 20px;">Top Watchlist Updates</h3>
-          
-          ${[...report.items].sort((a, b) => a.change24h.amount - b.change24h.amount).slice(0, 3).map(item => `
-            <div style="background: #1e293b; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid ${item.change24h.amount < 0 ? '#4ade80' : '#475569'};">
-              <p style="margin:0; font-weight: bold; font-size: 18px;">${item.item.componentName}</p>
-              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${Number(item.item.currentPrice || 0).toFixed(2)}</p>
-              ${item.change24h.amount < 0 ? `<p style="margin:5px 0 0 0; color: #4ade80; font-weight: bold;">Drop: -$${Math.abs(item.change24h.amount).toFixed(2)} (${item.change24h.percentage}%)</p>` : ''}
-              ${item.isAllTimeLow ? `<p style="margin:5px 0 0 0; color: #a78bfa; font-weight: bold;">🚀 90-Day All-Time Low!</p>` : ''}
-              <a href="${item.item.productUrl}" style="display: inline-block; margin-top: 12px; color: #38bdf8; text-decoration: none; font-size: 14px; font-weight: bold;">View Deal →</a>
-            </div>
-          `).join('')}
-          
-          <p style="margin-top: 30px; font-size: 12px; color: #64748b; text-align: center;">Sent by RigScouter-AI Automater</p>
-        </div>
-      `;
+      const report = await generateDailyDigestReport(realItems);
+      const htmlContent = buildDigestEmailHtml(report, todayStr);
 
       const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
       await sendResendEmail({
-        from: `"RigScouter-AI" <${customDomain}>`,
-        to: 'ishaankor@gmail.com', // Sending directly to the user's email for testing
-        subject: `[TEST] ${report.headline}`,
+        from: `"RigScouter AI" <${customDomain}>`,
+        to: 'ishaankor@gmail.com',
+        subject: report.headline,
         html: htmlContent,
       });
 
-      return NextResponse.json({ message: 'Test email successfully dispatched to ishaankor@gmail.com!' });
+      return NextResponse.json({ message: 'Data-driven test email successfully dispatched to ishaankor@gmail.com!' });
     }
 
     // 1. Fetch all users who have subscribed to the digest
@@ -136,11 +237,9 @@ export async function GET(req: NextRequest) {
           console.warn(`Could not parse delivery channels for user ${pref.user_id}`);
         }
 
-        // We need a target email. If not in preferences, we would need to fetch it from Auth,
-        // but for now we expect the user to provide it via custom routing.
         const targetEmail = deliveryChannels.emailAddress;
         if (!targetEmail || !deliveryChannels.email) {
-          continue; // Skip if no valid routing email
+          continue;
         }
 
         // Fetch their watchlist items
@@ -150,10 +249,9 @@ export async function GET(req: NextRequest) {
           .eq('user_id', pref.user_id);
 
         if (wlError || !watchlistItems || watchlistItems.length === 0) {
-          continue; // Skip if no watchlist
+          continue;
         }
 
-        // Map DB snake_case columns to camelCase expected by the generator
         const formattedWatchlist = watchlistItems.map(item => ({
           id: item.id,
           userId: item.user_id,
@@ -174,36 +272,12 @@ export async function GET(req: NextRequest) {
           specs: item.specs
         }));
 
-        // 3. Generate HTML Payload
         const report = await generateDailyDigestReport(formattedWatchlist as any);
+        const htmlContent = buildDigestEmailHtml(report, todayStr);
 
-        const htmlContent = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0b0f19; color: #fff; padding: 20px; border-radius: 8px;">
-          <h1 style="color: #4ade80;">${report.headline}</h1>
-          <p style="font-size: 16px; color: #cbd5e1; line-height: 1.6;">${report.executiveSummary}</p>
-          <hr style="border-color: #1e293b; margin: 30px 0;" />
-          <h3 style="color: #94a3b8; margin-bottom: 20px;">Top Watchlist Updates</h3>
-          
-          ${[...report.items].sort((a, b) => a.change24h.amount - b.change24h.amount).slice(0, 3).map(item => `
-            <div style="background: #1e293b; padding: 15px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid ${item.change24h.amount < 0 ? '#4ade80' : '#475569'};">
-              <p style="margin:0; font-weight: bold; font-size: 18px;">${item.item.componentName}</p>
-              <p style="margin:5px 0 0 0; color: #cbd5e1; font-size: 14px;">Retailer: ${item.item.retailer} | Current: $${Number(item.item.currentPrice || 0).toFixed(2)}</p>
-              ${item.change24h.amount < 0 ? `<p style="margin:5px 0 0 0; color: #4ade80; font-weight: bold;">Drop: -$${Math.abs(item.change24h.amount).toFixed(2)} (${item.change24h.percentage}%)</p>` : ''}
-              ${item.isAllTimeLow ? `<p style="margin:5px 0 0 0; color: #a78bfa; font-weight: bold;">🚀 90-Day All-Time Low!</p>` : ''}
-              <a href="${item.item.productUrl}" style="display: inline-block; margin-top: 12px; color: #38bdf8; text-decoration: none; font-size: 14px; font-weight: bold;">View Deal →</a>
-            </div>
-          `).join('')}
-          
-          <div style="margin-top: 30px; font-size: 12px; color: #8b949e; text-align: center;">
-            Automated dispatch by RigScouter-AI. <a href="https://rigscouter-ai.vercel.app" style="color: #38bdf8;">Manage Preferences</a>
-          </div>
-        </div>
-        `;
-
-        // 4. Send Email
         const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
         await sendResendEmail({
-          from: `"RigScouter-AI" <${customDomain}>`,
+          from: `"RigScouter AI" <${customDomain}>`,
           to: targetEmail,
           subject: report.headline,
           html: htmlContent,

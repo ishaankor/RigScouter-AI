@@ -62,25 +62,34 @@ export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Pro
 
   const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  let headline = `RigScouter Daily Digest (${todayStr})`;
+  let headline = `Daily Hardware Briefing (${todayStr})`;
   if (biggestDrop && biggestDrop.change24h.amount < 0) {
-    headline = `🔥 ${biggestDrop.item.componentName.split(' ')[0]} ${biggestDrop.item.componentName.split(' ')[1]} dropped $${Math.abs(biggestDrop.change24h.amount)} today!`;
+    headline = `📉 ${biggestDrop.item.componentName} dropped $${Math.abs(biggestDrop.change24h.amount).toFixed(2)} to $${Number(biggestDrop.item.currentPrice).toFixed(2)}`;
   }
 
-  let executiveSummary = `Your tracked watchlist currently has ${watchlist.length} active items. We detected ${
+  let executiveSummary = `Your tracked watchlist has ${watchlist.length} active item(s). We detected ${
     itemSummaries.filter(i => (i.change24h?.amount || 0) < 0).length
   } price drop(s) in the last 24 hours. ${
-    biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} just hit a 90-day All-Time Low at $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)}.` : ''
+    biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} reached a 90-day low of $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)} on ${biggestDrop.item.retailer}.` : ''
   }`;
 
   if (groq && watchlist.length > 0) {
     try {
-      const prompt = `You are RigScouter, an expert PC hardware deal-hunter AI.
-Given the following user watchlist with price drop data, write a personalized email headline and a 1-2 paragraph executive summary.
-Keep it punchy, hype-driven, and highlight the best deals.
-Return a SINGLE valid JSON object ONLY (not an array) with the exact format {"headline": "...", "executiveSummary": "..."}.
-Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({ name: i.item.componentName, price: i.item.currentPrice, drop24h: i.change24h.amount, isATL: i.isAllTimeLow })))}
-      `;
+      const prompt = `You are RigScouter AI, a precise, data-driven PC hardware market intelligence analyst.
+Analyze the user's tracked hardware watchlist and generate:
+1. "headline": A crisp, informative, professional headline summarizing the most significant price movement or market state. (No clickbait, max 1 emoji like 📉 or ⚡).
+2. "executiveSummary": A concise 2-3 sentence executive summary providing concrete hardware market insights: mention the exact models, retailers, price movements, and whether components are at a 90-day All-Time Low. Strictly avoid marketing fluff, hype words ("beast", "powerhouse", "hottest", "grab it now"), or generic filler. Focus on actionable pricing intelligence for a PC builder.
+
+Return a SINGLE JSON object with keys "headline" and "executiveSummary".
+Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({
+  name: i.item.componentName,
+  retailer: i.item.retailer,
+  currentPrice: i.item.currentPrice,
+  previousPrice24h: i.item.previousPrice24h,
+  drop24h: i.change24h.amount,
+  dropPercent: i.change24h.percentage,
+  isATL: i.isAllTimeLow
+})))}`;
       
       const response = await groq.chat.completions.create({
         model: "groq/compound-mini",
