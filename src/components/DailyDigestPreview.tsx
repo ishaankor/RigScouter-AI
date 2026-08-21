@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary, WatchlistItem } from '@/lib/types/hardware';
-import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
+import { generateDailyDigestReport, cleanDisplayTitle } from '@/lib/ai/digest-generator';
 import { supabase } from '@/lib/db/supabase';
 import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
 
@@ -327,42 +327,76 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
               // ================= EMAIL MOCKUP =================
               <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-8 rounded-2xl shadow-2xl mx-auto border border-gray-800/80">
                 <div className="text-center mb-8 pb-6 border-b border-gray-800/60">
-                  <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">
-                    RigScouter AI Digest
-                  </h1>
-                  <p className="text-gray-400 text-sm font-medium">{report ? report.headline : 'Generating intelligence...'}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+                        ⚡ RigScouter AI
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      LIVE BRIEFING
+                    </span>
+                  </div>
+                  <h2 className="text-lg font-black text-white mt-3">{report ? report.headline : 'Generating intelligence...'}</h2>
+                  <p className="text-gray-400 text-xs mt-0.5">Automated Hardware Intelligence &bull; Today at 8:00 AM</p>
+                </div>
+
+                {/* Metrics Dashboard */}
+                <div className="grid grid-cols-3 gap-2 p-3 bg-black/40 rounded-xl border border-white/5 text-center mb-6">
+                  <div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">Tracked</div>
+                    <div className="text-sm font-black text-white mt-0.5">{report?.items?.length || 0} Items</div>
+                  </div>
+                  <div className="border-x border-white/5">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">Drops</div>
+                    <div className="text-sm font-black text-emerald-400 mt-0.5">
+                      {report?.items?.filter(i => (i.change24h?.amount || 0) < 0).length || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">24h Savings</div>
+                    <div className="text-sm font-black text-cyan-400 mt-0.5">${Number(report?.totalSavedOpportunity || 0).toFixed(2)}</div>
+                  </div>
                 </div>
                 
                 <div className="space-y-6 text-sm">
-                  <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/5">
-                    <p className="text-gray-300 leading-relaxed">{report ? report.executiveSummary : 'Analyzing market data and formulating strategy...'}</p>
+                  <div className="bg-black/30 border-l-4 border-l-cyan-500 rounded-xl p-4 border border-white/5">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1">Market Summary</div>
+                    <p className="text-gray-300 text-xs leading-relaxed">{report ? report.executiveSummary : 'Analyzing market data and formulating strategy...'}</p>
                   </div>
 
                   {report?.biggestDrop && (
-                    <div className="bg-gradient-to-r from-emerald-900/40 to-cyan-900/40 border border-emerald-500/50 p-5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.15)] transform transition-all duration-300 hover:scale-[1.01]">
-                      <div className="flex justify-between items-start mb-4">
+                    <div className="bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/40 p-5 rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.15)] transform transition-all duration-300 hover:scale-[1.01]">
+                      <div className="flex justify-between items-start mb-3">
                         <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-emerald-400 font-bold tracking-wider text-[10px] uppercase">↘ Top Daily Drop</span>
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-emerald-400 font-black tracking-wider text-[10px] uppercase bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/40">
+                              ↘ Top Daily Drop
+                            </span>
                             {report?.biggestDrop?.isAllTimeLow && (
-                              <span className="bg-emerald-500 text-emerald-950 text-[10px] px-2 py-0.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.5)] font-black">ALL-TIME LOW</span>
+                              <span className="bg-purple-950 text-purple-300 text-[10px] px-2 py-0.5 rounded font-black border border-purple-800/40">
+                                🔥 90D ALL-TIME LOW
+                              </span>
                             )}
                           </div>
-                          <h3 className="text-lg font-extrabold text-white">{report?.biggestDrop?.item?.componentName}</h3>
+                          <h3 className="text-base font-extrabold text-white">
+                            {cleanDisplayTitle(report?.biggestDrop?.item?.componentName || '')}
+                          </h3>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-4 p-3 bg-black/40 rounded-lg border border-white/5">
+                      <div className="grid grid-cols-3 gap-3 p-3 bg-black/50 rounded-xl border border-white/5">
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">New Price</span>
-                          <span className="text-emerald-400 font-black text-lg">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">New Price</span>
+                          <span className="text-emerald-400 font-black text-base">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">24h Drop</span>
-                          <span className="text-white font-bold text-lg">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">24h Drop</span>
+                          <span className="text-white font-bold text-base">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase mb-1">Retailer</span>
-                          <span className="text-cyan-400 font-bold text-lg truncate">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">Retailer</span>
+                          <span className="text-cyan-400 font-bold text-base truncate">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
                         </div>
                       </div>
                     </div>
@@ -370,24 +404,55 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
 
                   {/* Interval Comparison Breakdown Table */}
                   <div>
-                    <h4 className="text-[11px] font-black uppercase text-gray-500 tracking-wider mb-3 ml-1">Price Deltas</h4>
-                    <div className="space-y-2">
-                      {report?.items?.map((itemSummary: DigestItemSummary) => (
-                        <div key={itemSummary?.item?.id || Math.random()} className="flex flex-col sm:flex-row sm:items-center justify-between bg-black/20 p-3.5 rounded-xl border border-white/5 text-xs hover:bg-white/5 transition-colors">
-                          <div className="font-bold text-gray-200 mb-2 sm:mb-0 line-clamp-1 pr-4">{itemSummary?.item?.componentName}</div>
-                          <div className="flex items-center gap-3 text-gray-400 shrink-0">
-                            <span className="font-black text-white bg-white/10 px-2 py-1 rounded-md">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
-                            {selectedIntervals.includes('24h') && (
-                              <span className={(itemSummary?.change24h?.amount || 0) <= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-medium'}>
-                                {(itemSummary?.change24h?.amount || 0) <= 0 ? '' : '+'}${(itemSummary?.change24h?.amount || 0).toFixed(2)}
-                              </span>
-                            )}
-                            {selectedIntervals.includes('ATL') && itemSummary?.isAllTimeLow && (
-                              <span className="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-black text-[9px] border border-emerald-500/30">ATL</span>
+                    <h4 className="text-[11px] font-black uppercase text-gray-400 tracking-wider mb-3 ml-1">
+                      Tracked Watchlist Intelligence ({report?.items?.length || 0})
+                    </h4>
+                    <div className="space-y-2.5">
+                      {report?.items?.map((itemSummary: DigestItemSummary) => {
+                        const cleanName = cleanDisplayTitle(itemSummary?.item?.componentName || '');
+                        const p30 = Number(itemSummary?.item?.previousPrice30d || 0);
+                        const p7 = Number(itemSummary?.item?.previousPrice7d || 0);
+                        const p24 = Number(itemSummary?.item?.previousPrice24h || 0);
+                        const curr = Number(itemSummary?.item?.currentPrice || 0);
+                        const isDrop = (itemSummary?.change24h?.amount || 0) < 0;
+
+                        return (
+                          <div key={itemSummary?.item?.id || Math.random()} className="bg-black/30 p-3.5 rounded-xl border border-white/5 hover:border-cyan-800/40 transition-all">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-cyan-950/80 text-cyan-400 text-[10px] font-bold rounded border border-cyan-800/40">
+                                  {itemSummary?.item?.category || 'GPU'}
+                                </span>
+                                <span className="font-bold text-white text-xs">{cleanName}</span>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
+                                {isDrop ? (
+                                  <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                                    -${Math.abs(itemSummary.change24h.amount).toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500 font-medium text-xs">Stable</span>
+                                )}
+                                <span className="text-gray-400 text-xs px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
+                                  {itemSummary?.item?.retailer || 'Store'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Mini price trajectory */}
+                            {(p30 > 0 || p7 > 0 || p24 > 0) && (
+                              <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+                                <span className="uppercase text-gray-600 font-bold">History:</span>
+                                {p30 > 0 && <span>30d: <strong className="text-gray-400">${p30.toFixed(0)}</strong></span>}
+                                {p7 > 0 && <span>&rarr; 7d: <strong className="text-gray-400">${p7.toFixed(0)}</strong></span>}
+                                {p24 > 0 && <span>&rarr; 24h: <strong className="text-gray-400">${p24.toFixed(0)}</strong></span>}
+                                <span className="text-emerald-400 font-bold">&rarr; Now: ${curr.toFixed(0)}</span>
+                              </div>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -402,7 +467,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                       <div className="space-y-3 relative z-10">
                         {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
                           <div key={idx} className="text-gray-300 text-sm bg-black/40 p-3 rounded-lg border border-white/5">
-                            Replace <span className="font-bold text-white">{i.item?.componentName}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${Number(i.alternativePick?.savings || 0).toFixed(2)}</span>.
+                            Replace <span className="font-bold text-white">{cleanDisplayTitle(i.item?.componentName || '')}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${Number(i.alternativePick?.savings || 0).toFixed(2)}</span>.
                           </div>
                         ))}
                       </div>
@@ -433,7 +498,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     {report?.biggestDrop && (
                       <div className="bg-[#2f3136] border border-[#202225] rounded p-3 mb-4 border-l-4 border-l-emerald-500">
                         <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">Top Daily Drop</div>
-                        <div className="font-bold text-white text-sm mb-1">{report?.biggestDrop?.item?.componentName}</div>
+                        <div className="font-bold text-white text-sm mb-1">{cleanDisplayTitle(report?.biggestDrop?.item?.componentName || '')}</div>
                         <div className="text-xs text-[#b9bbbe]">
                           Now: <span className="text-emerald-400 font-bold">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span> • 
                           Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span> • 
@@ -446,7 +511,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     <div className="bg-[#2f3136] rounded p-2 mb-4 font-mono text-[11px]">
                       {report?.items?.map((itemSummary: DigestItemSummary, idx: number) => (
                         <div key={idx} className="flex justify-between py-1 border-b border-[#202225] last:border-0">
-                          <span className="truncate pr-2 text-[#b9bbbe]">{(itemSummary?.item?.componentName || '').substring(0, 38)}...</span>
+                          <span className="truncate pr-2 text-[#b9bbbe]">{cleanDisplayTitle(itemSummary?.item?.componentName || '')}</span>
                           <span className="text-white font-bold whitespace-nowrap">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                       ))}
@@ -459,7 +524,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                         </div>
                         {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
                           <div key={idx} className="text-xs text-[#dcddde] mt-1.5">
-                            • Replace <span className="font-bold">{i.item?.componentName?.split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${Number(i.alternativePick?.savings || 0).toFixed(0)})
+                            • Replace <span className="font-bold">{cleanDisplayTitle(i.item?.componentName || '').split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${Number(i.alternativePick?.savings || 0).toFixed(0)})
                           </div>
                         ))}
                       </div>

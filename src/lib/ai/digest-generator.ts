@@ -1,6 +1,16 @@
 import { WatchlistItem, DigestItemSummary, DailyDigestReport } from '../types/hardware';
 import Groq from 'groq-sdk';
 
+export function cleanDisplayTitle(name: string): string {
+  if (!name) return 'Hardware Component';
+  let firstPart = name.split(/\s+-\s+|\s+—\s+|\s+\|\s+/)[0].trim();
+  firstPart = firstPart.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (firstPart.length < 15 && name.length > firstPart.length) {
+    firstPart = name.slice(0, 65).replace(/[, -]+$/, '') + '...';
+  }
+  return firstPart;
+}
+
 export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Promise<DailyDigestReport> {
   let totalSavedOpportunity = 0;
 
@@ -62,13 +72,15 @@ export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Pro
 
   let headline = `Daily Hardware Briefing (${todayStr})`;
   if (biggestDrop && biggestDrop.change24h.amount < 0) {
-    headline = `📉 ${biggestDrop.item.componentName} dropped $${Math.abs(biggestDrop.change24h.amount).toFixed(2)} to $${Number(biggestDrop.item.currentPrice).toFixed(2)}`;
+    const cleanDropName = cleanDisplayTitle(biggestDrop.item.componentName || '');
+    headline = `📉 ${cleanDropName} dropped $${Math.abs(biggestDrop.change24h.amount).toFixed(2)} to $${Number(biggestDrop.item.currentPrice).toFixed(2)}`;
   }
 
+  const cleanBiggestName = biggestDrop ? cleanDisplayTitle(biggestDrop.item.componentName || '') : '';
   let executiveSummary = `Your tracked watchlist has ${watchlist.length} active item(s). We detected ${
     itemSummaries.filter(i => (i.change24h?.amount || 0) < 0).length
   } price drop(s) in the last 24 hours. ${
-    biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} reached a 90-day low of $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)} on ${biggestDrop.item.retailer}.` : ''
+    biggestDrop && biggestDrop.isAllTimeLow ? `The ${cleanBiggestName} reached a 90-day low of $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)} on ${biggestDrop.item.retailer}.` : ''
   }`;
 
   const groqApiKey = process.env.GROQ_API_KEY;
@@ -77,12 +89,13 @@ export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Pro
       const groq = new Groq({ apiKey: groqApiKey });
       const prompt = `You are RigScouter AI, a precise, data-driven PC hardware market intelligence analyst.
 Analyze the user's tracked hardware watchlist and generate:
-1. "headline": A crisp, informative, professional headline summarizing the most significant price movement or market state. (No clickbait, max 1 emoji like 📉 or ⚡).
+1. "headline": A crisp, professional headline summarizing the most significant price movement or market state (max 1 emoji like 📉 or ⚡, use concise model names like "RTX 4080 Super" instead of long SEO strings).
 2. "executiveSummary": A concise 2-3 sentence executive summary providing concrete hardware market insights: mention the exact models, retailers, price movements, and whether components are at a 90-day All-Time Low. Strictly avoid marketing fluff, hype words ("beast", "powerhouse", "hottest", "grab it now"), or generic filler. Focus on actionable pricing intelligence for a PC builder.
 
 Return a SINGLE JSON object with keys "headline" and "executiveSummary".
 Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({
-  name: i.item.componentName,
+  model: cleanDisplayTitle(i.item.componentName || ''),
+  category: i.item.category,
   retailer: i.item.retailer,
   currentPrice: i.item.currentPrice,
   previousPrice24h: i.item.previousPrice24h,
