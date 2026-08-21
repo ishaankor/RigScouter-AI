@@ -24,8 +24,7 @@ export async function GET(req: NextRequest) {
     const { data: hwCatalog } = await supabase
       .from('hardware_components')
       .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(20);
+      .order('updated_at', { ascending: false });
 
     const userHwItems = (hwCatalog || [])
       .filter(item => {

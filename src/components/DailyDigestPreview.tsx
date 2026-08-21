@@ -440,13 +440,12 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     
                     <div className="text-xs font-bold text-[#8e9297] mb-2 uppercase">Tracked Prices</div>
                     <div className="bg-[#2f3136] rounded p-2 mb-4 font-mono text-[11px]">
-                      {report?.items?.slice(0, 5).map((itemSummary: DigestItemSummary, idx: number) => (
+                      {report?.items?.map((itemSummary: DigestItemSummary, idx: number) => (
                         <div key={idx} className="flex justify-between py-1 border-b border-[#202225] last:border-0">
-                          <span className="truncate pr-2 text-[#b9bbbe]">{(itemSummary?.item?.componentName || '').substring(0, 30)}...</span>
+                          <span className="truncate pr-2 text-[#b9bbbe]">{(itemSummary?.item?.componentName || '').substring(0, 38)}...</span>
                           <span className="text-white font-bold whitespace-nowrap">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                       ))}
-                      {(report?.items?.length || 0) > 5 && <div className="text-[#72767d] text-center pt-1">+ {(report?.items?.length || 0) - 5} more items</div>}
                     </div>
 
                     {report?.items?.some((i: DigestItemSummary) => i.alternativePick) && (
