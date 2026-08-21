@@ -1,11 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rigscouter-ai",
+  "main": ".vercel/output/static/_worker.js/index.js",
   "compatibility_date": "2026-08-06",
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "rules": [
+    { "type": "ESModule", "globs": ["**/*.js"], "fallthrough": true }
+  ],
   "assets": {
-    "directory": ".vercel/output/static"
+    "directory": ".vercel/output/static",
+    "binding": "ASSETS"
   }
 }

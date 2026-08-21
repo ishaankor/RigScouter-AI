@@ -195,7 +195,7 @@ export async function GET(req: NextRequest) {
       const report = await generateDailyDigestReport(realItems);
       const htmlContent = buildDigestEmailHtml(report, todayStr);
 
-      const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
+      const customDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
       await sendResendEmail({
         from: `"RigScouter AI" <${customDomain}>`,
         to: 'ishaankor@gmail.com',
@@ -217,13 +217,13 @@ export async function GET(req: NextRequest) {
     }
 
     if (!preferences || preferences.length === 0) {
-      return NextResponse.json({ message: 'No subscribed users found', dispatchedCount: 0 });
+      return NextResponse.json({ message: 'No subscribed users found in user_preferences', dispatchedCount: 0 });
     }
 
     let dispatchedCount = 0;
     const errors: any[] = [];
 
-    // 2. For each user, fetch their watchlist and generate/send digest
+    // 2. For each user, fetch their watchlist (or top deals fallback) and send digest
     for (const pref of preferences) {
       try {
         let deliveryChannels = { email: true, emailAddress: '' };
@@ -243,39 +243,66 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch their watchlist items
-        const { data: watchlistItems, error: wlError } = await supabaseAdmin
+        const { data: watchlistItems } = await supabaseAdmin
           .from('watchlist_items')
           .select('*')
           .eq('user_id', pref.user_id);
 
-        if (wlError || !watchlistItems || watchlistItems.length === 0) {
-          continue;
+        let formattedWatchlist: any[] = [];
+        if (watchlistItems && watchlistItems.length > 0) {
+          formattedWatchlist = watchlistItems.map(item => ({
+            id: item.id,
+            userId: item.user_id,
+            componentName: item.component_name,
+            category: item.category,
+            targetPrice: item.target_price,
+            currentPrice: item.current_price,
+            previousPrice24h: item.previous_price_24h || item.current_price,
+            previousPrice7d: item.previous_price_7d || item.current_price,
+            previousPrice30d: item.previous_price_30d || item.current_price,
+            allTimeLow: item.all_time_low || item.current_price,
+            retailer: item.retailer,
+            productUrl: item.product_url,
+            imageUrl: item.image_url,
+            inStock: item.in_stock,
+            notifyOnFlashDrop: item.notify_on_flash_drop,
+            addedAt: item.added_at,
+            specs: item.specs
+          }));
+        } else {
+          // Fallback to top market deals from catalog if user watchlist is empty
+          const { data: dbItems } = await supabaseAdmin
+            .from('hardware_components')
+            .select('*')
+            .order('current_price', { ascending: true })
+            .limit(5);
+
+          formattedWatchlist = (dbItems || []).map(item => ({
+            id: item.id,
+            userId: pref.user_id,
+            componentName: item.name,
+            category: item.category || 'Hardware',
+            targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : Number(item.current_price || 100),
+            currentPrice: Number(item.current_price || 100),
+            previousPrice24h: item.lowest_price_90d ? Number(item.lowest_price_90d) : Number(item.current_price || 100),
+            previousPrice7d: Number(item.current_price || 100),
+            previousPrice30d: Number(item.current_price || 100),
+            allTimeLow: Number(item.lowest_price_90d || item.current_price || 100),
+            retailer: item.retailer || 'Amazon',
+            productUrl: item.product_url || '#',
+            imageUrl: item.image_url,
+            inStock: true,
+            notifyOnFlashDrop: true,
+            addedAt: item.updated_at
+          }));
         }
 
-        const formattedWatchlist = watchlistItems.map(item => ({
-          id: item.id,
-          userId: item.user_id,
-          componentName: item.component_name,
-          category: item.category,
-          targetPrice: item.target_price,
-          currentPrice: item.current_price,
-          previousPrice24h: item.previous_price_24h || item.current_price,
-          previousPrice7d: item.previous_price_7d || item.current_price,
-          previousPrice30d: item.previous_price_30d || item.current_price,
-          allTimeLow: item.all_time_low || item.current_price,
-          retailer: item.retailer,
-          productUrl: item.product_url,
-          imageUrl: item.image_url,
-          inStock: item.in_stock,
-          notifyOnFlashDrop: item.notify_on_flash_drop,
-          addedAt: item.added_at,
-          specs: item.specs
-        }));
+        if (formattedWatchlist.length === 0) continue;
 
         const report = await generateDailyDigestReport(formattedWatchlist as any);
         const htmlContent = buildDigestEmailHtml(report, todayStr);
 
-        const customDomain = process.env.RESEND_DOMAIN || 'updates@your-custom-domain.com';
+        const customDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
         await sendResendEmail({
           from: `"RigScouter AI" <${customDomain}>`,
           to: targetEmail,

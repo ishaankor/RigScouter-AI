@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "pages:build": "prisma generate && npx @cloudflare/next-on-pages && touch .vercel/output/static/.assetsignore",
-    "deploy": "npm run pages:build && npx wrangler pages deploy .vercel/output/static",
+    "pages:build": "prisma generate && npx @cloudflare/next-on-pages && node -e \"const fs=require('fs');let c=fs.readFileSync('.vercel/output/static/_worker.js/index.js','utf8');c=c.replace(/import\\(e\\.entrypoint\\)/g,'import(e.entrypoint.startsWith(\\\"./\\\")?e.entrypoint:\\\"./\\\"+e.entrypoint)');fs.writeFileSync('.vercel/output/static/_worker.js/index.js',c);\" && touch .vercel/output/static/.assetsignore",
+    "deploy": "npm run pages:build && npx wrangler deploy",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint"

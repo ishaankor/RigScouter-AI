@@ -1,8 +1,6 @@
 import { WatchlistItem, DigestItemSummary, DailyDigestReport } from '../types/hardware';
 import Groq from 'groq-sdk';
 
-const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
-
 export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Promise<DailyDigestReport> {
   let totalSavedOpportunity = 0;
 
@@ -73,8 +71,10 @@ export async function generateDailyDigestReport(watchlist: WatchlistItem[]): Pro
     biggestDrop && biggestDrop.isAllTimeLow ? `The ${biggestDrop.item.componentName} reached a 90-day low of $${Number(biggestDrop.item.currentPrice || 0).toFixed(2)} on ${biggestDrop.item.retailer}.` : ''
   }`;
 
-  if (groq && watchlist.length > 0) {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (groqApiKey && watchlist.length > 0) {
     try {
+      const groq = new Groq({ apiKey: groqApiKey });
       const prompt = `You are RigScouter AI, a precise, data-driven PC hardware market intelligence analyst.
 Analyze the user's tracked hardware watchlist and generate:
 1. "headline": A crisp, informative, professional headline summarizing the most significant price movement or market state. (No clickbait, max 1 emoji like 📉 or ⚡).
@@ -92,7 +92,7 @@ Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({
 })))}`;
       
       const response = await groq.chat.completions.create({
-        model: "groq/compound-mini",
+        model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" }
       });
