@@ -264,20 +264,26 @@ export async function GET(req: NextRequest) {
         let formattedWatchlist: any[] = [];
         if (watchlistItems && watchlistItems.length > 0) {
           formattedWatchlist = watchlistItems.map((item: any) => {
-            let matchedHw: any = null;
-            if (item.component_id) {
-              matchedHw = hwMap.get(item.component_id.toLowerCase());
-              if (!matchedHw) {
-                matchedHw = (allHwComponents || []).find((h: any) => 
-                  h.id && (h.id.toLowerCase().startsWith(item.component_id.toLowerCase()) || 
-                           item.component_id.toLowerCase().startsWith(h.id.toLowerCase()))
-                );
+            // Find all candidate offers from retailers for this component
+            const candidates = (allHwComponents || []).filter((h: any) => {
+              if (!h || !h.current_price) return false;
+              if (item.component_id && h.id) {
+                const compId = item.component_id.toLowerCase();
+                const hId = h.id.toLowerCase();
+                if (hId === compId || hId.startsWith(compId) || compId.startsWith(hId)) return true;
               }
-            }
-            if (!matchedHw && item.component_name) {
-              matchedHw = hwMap.get(item.component_name.toLowerCase().trim()) ||
-                (allHwComponents || []).find((h: any) => h.name && h.name.toLowerCase().includes(item.component_name.toLowerCase().slice(0, 20)));
-            }
+              if (item.component_name && h.name) {
+                const iName = item.component_name.toLowerCase().trim();
+                const hName = h.name.toLowerCase().trim();
+                if (hName === iName || hName.includes(iName.slice(0, 25)) || iName.includes(hName.slice(0, 25))) return true;
+              }
+              return false;
+            });
+
+            // Automatically pick the best / lowest price available across all stores
+            const matchedHw = candidates.length > 0 
+              ? candidates.sort((a, b) => Number(a.current_price || 0) - Number(b.current_price || 0))[0]
+              : null;
 
             const currentPrice = Number(
               matchedHw?.current_price ||
