@@ -579,16 +579,26 @@ export function WatchlistManager({
     );
   };
 
-  const getPreviousPrice = (item: WatchlistItem) => {
-    switch (selectedInterval) {
-      case '24h': return item.previousPrice24h;
-      case '7d': return item.previousPrice7d;
-      case '30d': return item.previousPrice30d;
+  const getPreviousPrice = (item: WatchlistItem, effectiveOffer?: any) => {
+    // If the active retailer offer has its own tracked previous price, use that to avoid cross-retailer fake drops
+    if (effectiveOffer && typeof effectiveOffer.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
+      return effectiveOffer.previousPrice;
     }
+    // Only use item-level previous price if the selected retailer matches the base item retailer
+    const activeRetailer = (effectiveOffer?.retailer || '').toLowerCase();
+    const baseRetailer = (item.retailer || 'amazon').toLowerCase();
+    if (!effectiveOffer || activeRetailer === baseRetailer) {
+      switch (selectedInterval) {
+        case '24h': return item.previousPrice24h;
+        case '7d': return item.previousPrice7d;
+        case '30d': return item.previousPrice30d;
+      }
+    }
+    return undefined;
   };
 
   const calculateDrop = (current: number, previous?: number) => {
-    if (!previous || previous <= 0) return { diff: 0, percent: 0 };
+    if (!previous || previous <= 0 || Math.abs(previous - current) < 0.01) return { diff: 0, percent: 0 };
     const diff = previous - current;
     const percent = (diff / previous) * 100;
     return { diff, percent };
@@ -599,25 +609,27 @@ export function WatchlistManager({
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl border border-gray-800">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Flame className="w-5 h-5 text-cyan-400" />
-            Hardware Watchlist & Price Drop Radar
-          </h2>
-          <p className="text-xs text-gray-400 mt-1">
-            Autonomous multi-retailer target price tracking & live database catalog
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-black font-heading text-white tracking-tight">Active Hardware Watchlist</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-950 text-cyan-400 border border-cyan-800/40">
+              {watchlist.length} Tracked
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1 font-medium">
+            Multi-retailer price engine tracking Amazon, Newegg, Micro Center, B&amp;H, and eBay in real time.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Interval Selector */}
-          <div className="flex bg-gray-900/80 p-1 rounded-xl border border-gray-800 text-xs">
+          {/* Interval Switcher */}
+          <div className="bg-gray-950 p-1 rounded-xl border border-gray-800 flex items-center">
             {(['24h', '7d', '30d'] as const).map(interval => (
               <button
                 key={interval}
                 onClick={() => setSelectedInterval(interval)}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   selectedInterval === interval
-                    ? 'bg-cyan-500 text-gray-950 shadow-md font-bold'
+                    ? 'bg-cyan-500 text-gray-950 shadow-sm'
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
@@ -627,54 +639,45 @@ export function WatchlistManager({
           </div>
 
           <button
-            onClick={() => {
-              if (!user && onOpenAuth) {
-                onOpenAuth();
-              } else {
-                setShowAddModal(true);
-              }
-            }}
-            className="btn-glow px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer shrink-0"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
           >
-            <Bot className="w-4 h-4" />
-            Add Hardware via Bot {!user && '(Sign In Required)'}
+            <Plus className="w-4 h-4" /> Add Component
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-800">
+      {/* Main Tabs */}
+      <div className="flex items-center gap-4 border-b border-gray-800 pb-2">
         <button
           onClick={() => setActiveTab('watchlist')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`flex items-center gap-2 pb-2 text-sm font-bold border-b-2 transition-all ${
             activeTab === 'watchlist'
               ? 'border-cyan-400 text-cyan-400'
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          <Bell className="w-4 h-4" />
-          My Watchlist ({watchlist.length})
+          <Bell className="w-4 h-4" /> My Watchlist ({watchlist.length})
         </button>
         <button
           onClick={() => setActiveTab('trending')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`flex items-center gap-2 pb-2 text-sm font-bold border-b-2 transition-all ${
             activeTab === 'trending'
               ? 'border-cyan-400 text-cyan-400'
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          Trending Deals in Database ({trendingItems.length})
+          <Sparkles className="w-4 h-4 text-amber-400" /> Trending Deals in Database ({trendingItems.length})
         </button>
       </div>
 
-      {/* Table Content */}
       {activeTab === 'watchlist' ? (
+        /* Watchlist Table */
         <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-gray-800 bg-gray-950/50 text-gray-400 uppercase text-[10px] tracking-wider font-bold">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] tracking-wider border-b border-gray-800">
+                <tr>
                   <th className="p-4">Component</th>
                   <th className="p-4">Retailer</th>
                   <th className="p-4">Current Price</th>
@@ -688,7 +691,7 @@ export function WatchlistManager({
               <tbody className="divide-y divide-gray-800/50">
                 {watchlist.map(item => {
                   const effective = getEffectiveOffer(item);
-                  const prevPrice = getPreviousPrice(item);
+                  const prevPrice = getPreviousPrice(item, effective);
                   const { diff, percent } = calculateDrop(effective.currentPrice, prevPrice);
                   const isDrop = diff > 0;
                   const isTargetHit = effective.currentPrice <= item.targetPrice;
