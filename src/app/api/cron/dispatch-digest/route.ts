@@ -7,8 +7,7 @@ export const runtime = 'edge';
 async function sendResendEmail({ from, to, subject, html }: { from: string; to: string; subject: string; html: string }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn('[Resend Email] No RESEND_API_KEY set, skipping dispatch');
-    return;
+    throw new Error('No RESEND_API_KEY set in environment');
   }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -22,6 +21,7 @@ async function sendResendEmail({ from, to, subject, html }: { from: string; to: 
     const errText = await res.text();
     throw new Error(`Resend API error (${res.status}): ${errText}`);
   }
+  return await res.json();
 }
 function buildDigestEmailHtml(report: any, dateStr: string): string {
   const sortedItems = [...report.items].sort((a: any, b: any) => (a.change24h?.amount || 0) - (b.change24h?.amount || 0));
@@ -220,7 +220,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'No subscribed users found in user_preferences', dispatchedCount: 0 });
     }
 
+    // Fetch hardware components once for catalog matching
+    const { data: allHwComponents } = await supabaseAdmin
+      .from('hardware_components')
+      .select('*');
+
+    const hwMap = new Map<string, any>();
+    (allHwComponents || []).forEach((hw: any) => {
+      if (hw.id) hwMap.set(hw.id.toLowerCase(), hw);
+      if (hw.name) hwMap.set(hw.name.toLowerCase().trim(), hw);
+      if (hw.model) hwMap.set(hw.model.toLowerCase().trim(), hw);
+    });
+
     let dispatchedCount = 0;
+    const deliveries: any[] = [];
     const errors: any[] = [];
 
     // 2. For each user, fetch their watchlist (or top deals fallback) and send digest
@@ -250,25 +263,58 @@ export async function GET(req: NextRequest) {
 
         let formattedWatchlist: any[] = [];
         if (watchlistItems && watchlistItems.length > 0) {
-          formattedWatchlist = watchlistItems.map(item => ({
-            id: item.id,
-            userId: item.user_id,
-            componentName: item.component_name,
-            category: item.category,
-            targetPrice: item.target_price,
-            currentPrice: item.current_price,
-            previousPrice24h: item.previous_price_24h || item.current_price,
-            previousPrice7d: item.previous_price_7d || item.current_price,
-            previousPrice30d: item.previous_price_30d || item.current_price,
-            allTimeLow: item.all_time_low || item.current_price,
-            retailer: item.retailer,
-            productUrl: item.product_url,
-            imageUrl: item.image_url,
-            inStock: item.in_stock,
-            notifyOnFlashDrop: item.notify_on_flash_drop,
-            addedAt: item.added_at,
-            specs: item.specs
-          }));
+          formattedWatchlist = watchlistItems.map((item: any) => {
+            let matchedHw: any = null;
+            if (item.component_id) {
+              matchedHw = hwMap.get(item.component_id.toLowerCase());
+              if (!matchedHw) {
+                matchedHw = (allHwComponents || []).find((h: any) => 
+                  h.id && (h.id.toLowerCase().startsWith(item.component_id.toLowerCase()) || 
+                           item.component_id.toLowerCase().startsWith(h.id.toLowerCase()))
+                );
+              }
+            }
+            if (!matchedHw && item.component_name) {
+              matchedHw = hwMap.get(item.component_name.toLowerCase().trim()) ||
+                (allHwComponents || []).find((h: any) => h.name && h.name.toLowerCase().includes(item.component_name.toLowerCase().slice(0, 20)));
+            }
+
+            const currentPrice = Number(
+              matchedHw?.current_price ||
+              item.current_price ||
+              item.all_time_low ||
+              item.target_price ||
+              100
+            );
+
+            const retailer = matchedHw?.retailer || item.retailer || 'Amazon';
+            const productUrl = matchedHw?.product_url || item.product_url || '#';
+            const imageUrl = matchedHw?.image_url || item.image_url;
+            const allTimeLow = Number(item.all_time_low || matchedHw?.lowest_price_90d || currentPrice);
+            const previousPrice24h = Number(item.previous_price_24h || currentPrice);
+            const previousPrice7d = Number(item.previous_price_7d || currentPrice);
+            const previousPrice30d = Number(item.previous_price_30d || currentPrice);
+
+            return {
+              id: item.id,
+              userId: item.user_id,
+              componentName: item.component_name,
+              category: item.category || matchedHw?.category || 'Hardware',
+              targetPrice: Number(item.target_price || Math.round(currentPrice * 0.9)),
+              currentPrice,
+              previousPrice24h,
+              previousPrice7d,
+              previousPrice30d,
+              allTimeLow,
+              retailer,
+              productUrl,
+              imageUrl,
+              inStock: item.in_stock ?? true,
+              notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+              addedAt: item.added_at,
+              specs: item.specs
+            };
+          });
         } else {
           // Fallback to top market deals from catalog if user watchlist is empty
           const { data: dbItems } = await supabaseAdmin
@@ -277,7 +323,7 @@ export async function GET(req: NextRequest) {
             .order('current_price', { ascending: true })
             .limit(5);
 
-          formattedWatchlist = (dbItems || []).map(item => ({
+          formattedWatchlist = (dbItems || []).map((item: any) => ({
             id: item.id,
             userId: pref.user_id,
             componentName: item.name,
@@ -303,13 +349,14 @@ export async function GET(req: NextRequest) {
         const htmlContent = buildDigestEmailHtml(report, todayStr);
 
         const customDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
-        await sendResendEmail({
+        const sendRes = await sendResendEmail({
           from: `"RigScouter AI" <${customDomain}>`,
           to: targetEmail,
           subject: report.headline,
           html: htmlContent,
         });
 
+        deliveries.push({ to: targetEmail, resendId: sendRes?.id, headline: report.headline });
         dispatchedCount++;
 
       } catch (userErr: any) {
@@ -321,6 +368,7 @@ export async function GET(req: NextRequest) {
       status: 'completed',
       timestamp: new Date().toISOString(),
       dispatchedCount,
+      deliveries: deliveries.length > 0 ? deliveries : undefined,
       errors: errors.length > 0 ? errors : undefined
     });
 
