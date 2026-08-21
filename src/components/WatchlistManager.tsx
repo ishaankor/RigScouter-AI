@@ -703,6 +703,8 @@ export function WatchlistManager({
                           <img
                             src={item.imageUrl}
                             alt={item.componentName}
+                            loading="lazy"
+                            decoding="async"
                             className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
                           />
                           <div>
