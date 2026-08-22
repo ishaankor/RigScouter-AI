@@ -178,17 +178,23 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
           .glow-card:hover {
             border-color: #0284c7 !important;
           }
+          @media only screen and (min-width: 680px) {
+            .digest-container {
+              max-width: 960px !important;
+              padding: 32px !important;
+            }
+          }
         </style>
       </head>
-      <body style="margin: 0; padding: 24px 12px; background-color: #030712; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f3f4f6;">
-        <div style="max-width: 620px; margin: 0 auto; background-color: #0b0f19; border: 1px solid #1e293b; border-radius: 20px; overflow: hidden; padding: 26px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
+      <body style="margin: 0; padding: 20px 10px; background-color: #090d16; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f3f4f6; width: 100%;">
+        <div class="digest-container" style="width: 100%; max-width: 960px; margin: 0 auto; background-color: #0d1322; border: 1px solid #1e293b; border-radius: 20px; box-sizing: border-box; padding: 24px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);">
           
           <!-- Top Header Bar -->
           <div style="border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 22px;">
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
                 <td style="vertical-align: middle;">
-                  <span style="font-size: 20px; font-weight: 900; letter-spacing: -0.5px; color: #38bdf8;">
+                  <span style="font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #38bdf8;">
                     ⚡ RigScouter AI
                   </span>
                 </td>
@@ -200,7 +206,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
               </tr>
             </table>
 
-            <h1 style="margin: 16px 0 6px 0; font-size: 22px; font-weight: 900; color: #ffffff; line-height: 1.3; letter-spacing: -0.3px;">
+            <h1 style="margin: 16px 0 6px 0; font-size: 24px; font-weight: 900; color: #ffffff; line-height: 1.3; letter-spacing: -0.3px;">
               ${report.headline}
             </h1>
             <div style="font-size: 12px; color: #64748b; font-weight: 600;">
@@ -209,31 +215,31 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
           </div>
 
           <!-- Market Dashboard Stats Grid -->
-          <div style="background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 22px;">
+          <div style="background-color: #111827; border: 1px solid #1e293b; border-radius: 14px; padding: 18px; margin-bottom: 22px;">
             <table style="width: 100%; border-collapse: collapse; text-align: center;">
               <tr>
-                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 4px;">
-                  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Tracked Items</div>
-                  <div style="font-size: 18px; font-weight: 900; color: #f8fafc; margin-top: 2px;">${sortedItems.length}</div>
+                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 6px;">
+                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Tracked Items</div>
+                  <div style="font-size: 22px; font-weight: 900; color: #f8fafc; margin-top: 2px;">${sortedItems.length}</div>
                 </td>
-                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 4px;">
-                  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Active Drops</div>
-                  <div style="font-size: 18px; font-weight: 900; color: ${activeDropsCount > 0 ? '#34d399' : '#f8fafc'}; margin-top: 2px;">${activeDropsCount}</div>
+                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 6px;">
+                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Active Drops</div>
+                  <div style="font-size: 22px; font-weight: 900; color: ${activeDropsCount > 0 ? '#34d399' : '#f8fafc'}; margin-top: 2px;">${activeDropsCount}</div>
                 </td>
-                <td style="width: 33%; padding: 4px;">
-                  <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">24h Savings</div>
-                  <div style="font-size: 18px; font-weight: 900; color: ${totalSavings > 0 ? '#38bdf8' : '#f8fafc'}; margin-top: 2px;">$${totalSavings.toFixed(2)}</div>
+                <td style="width: 33%; padding: 6px;">
+                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">24h Savings</div>
+                  <div style="font-size: 22px; font-weight: 900; color: ${totalSavings > 0 ? '#38bdf8' : '#f8fafc'}; margin-top: 2px;">$${totalSavings.toFixed(2)}</div>
                 </td>
               </tr>
             </table>
           </div>
 
           <!-- Executive Intelligence Briefing -->
-          <div style="background-color: #020617; border-left: 4px solid #06b6d4; border-radius: 4px 10px 10px 4px; padding: 16px; margin-bottom: 24px; border-top: 1px solid #1e293b; border-right: 1px solid #1e293b; border-bottom: 1px solid #1e293b;">
+          <div style="background-color: #090d16; border-left: 4px solid #06b6d4; border-radius: 4px 12px 12px 4px; padding: 18px 20px; margin-bottom: 24px; border-top: 1px solid #1e293b; border-right: 1px solid #1e293b; border-bottom: 1px solid #1e293b;">
             <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #38bdf8; letter-spacing: 0.6px; margin-bottom: 6px;">
               🧠 Executive Intelligence Summary
             </div>
-            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #cbd5e1; font-weight: 450;">
+            <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #cbd5e1; font-weight: 450;">
               ${report.executiveSummary}
             </p>
           </div>
@@ -241,7 +247,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
           <!-- Tracked Items Section -->
           <div style="margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-              <h2 style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin: 0;">
+              <h2 style="font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin: 0;">
                 Live Watchlist Intelligence (${sortedItems.length})
               </h2>
             </div>
