@@ -442,35 +442,12 @@ export async function GET(req: NextRequest) {
               specs: item.specs
             };
           });
-        } else {
-          // Fallback to top market deals from catalog if user watchlist is empty
-          const { data: dbItems } = await supabaseAdmin
-            .from('hardware_components')
-            .select('*')
-            .order('current_price', { ascending: true })
-            .limit(5);
-
-          formattedWatchlist = (dbItems || []).map((item: any) => ({
-            id: item.id,
-            userId: pref.user_id,
-            componentName: item.name,
-            category: item.category || 'Hardware',
-            targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : Number(item.current_price || 100),
-            currentPrice: Number(item.current_price || 100),
-            previousPrice24h: item.lowest_price_90d ? Number(item.lowest_price_90d) : Number(item.current_price || 100),
-            previousPrice7d: Number(item.current_price || 100),
-            previousPrice30d: Number(item.current_price || 100),
-            allTimeLow: Number(item.lowest_price_90d || item.current_price || 100),
-            retailer: item.retailer || 'Amazon',
-            productUrl: item.product_url || '#',
-            imageUrl: item.image_url,
-            inStock: true,
-            notifyOnFlashDrop: true,
-            addedAt: item.updated_at
-          }));
         }
 
-        if (formattedWatchlist.length === 0) continue;
+        if (formattedWatchlist.length === 0) {
+          // User has no tracked components; skip dispatching
+          continue;
+        }
 
         const report = await generateDailyDigestReport(formattedWatchlist as any);
         const htmlContent = buildDigestEmailHtml(report, todayStr);

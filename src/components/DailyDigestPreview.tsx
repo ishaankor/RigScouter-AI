@@ -24,80 +24,118 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   const [isGenerating, setIsGenerating] = useState(false);
 
   const fetchUserWatchlist = async (): Promise<WatchlistItem[]> => {
-    if (user?.id) {
-      const { data, error } = await supabase.from('watchlist_items').select('*').eq('user_id', user.id);
-      if (!error && data && data.length > 0) {
-        return data.map(item => {
-          const price = Number(item.current_price || item.all_time_low || item.target_price || 100);
-          return {
-            id: item.id,
-            userId: item.user_id,
-            componentName: item.component_name || 'Hardware Component',
-            category: item.category || 'GPU',
-            targetPrice: Number(item.target_price || (price * 0.9)),
-            currentPrice: price,
-            previousPrice24h: Number(item.previous_price_24h || price),
-            previousPrice7d: Number(item.previous_price_7d || price),
-            previousPrice30d: Number(item.previous_price_30d || price),
-            allTimeLow: Number(item.all_time_low || price),
-            retailer: item.retailer || 'Amazon',
-            productUrl: item.product_url || '#',
-            imageUrl: item.image_url,
-            inStock: item.in_stock ?? true,
-            notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-            addedAt: item.added_at,
-            specs: item.specs
-          };
-        });
-      }
-    }
+    if (!user?.id) return [];
 
-    // Fallback: Use top deals from live hardware_components database catalog
-    const { data: hwData } = await supabase.from('hardware_components').select('*').order('deal_score', { ascending: false }).limit(6);
-    if (hwData && hwData.length > 0) {
-      return hwData.map(item => {
-        const price = Number(item.current_price || 100);
+    let formatted: WatchlistItem[] = [];
+
+    // 1. Direct Supabase DB Table Query for user watchlist items
+    const { data: dbItems, error } = await supabase
+      .from('watchlist_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('id', { ascending: false });
+
+    if (!error && dbItems && dbItems.length > 0) {
+      formatted = dbItems.map(item => {
+        const price = Number(item.current_price || item.all_time_low || item.target_price || 100);
         return {
-          id: `hw-${item.id}`,
-          userId: user?.id || 'guest',
-          componentName: item.name,
+          id: item.id,
+          userId: item.user_id,
+          componentName: item.component_name || 'Hardware Component',
           category: item.category || 'GPU',
-          targetPrice: Number(item.msrp ? item.msrp * 0.9 : price * 0.9),
+          targetPrice: Number(item.target_price || (price * 0.9)),
           currentPrice: price,
-          previousPrice24h: price,
-          previousPrice7d: price,
-          previousPrice30d: price,
-          allTimeLow: Number(item.lowest_price_90d || price),
+          previousPrice24h: Number(item.previous_price_24h || price),
+          previousPrice7d: Number(item.previous_price_7d || price),
+          previousPrice30d: Number(item.previous_price_30d || price),
+          allTimeLow: Number(item.all_time_low || price),
           retailer: item.retailer || 'Amazon',
           productUrl: item.product_url || '#',
           imageUrl: item.image_url,
-          inStock: true,
-          notifyOnFlashDrop: true,
-          addedAt: item.updated_at,
+          inStock: item.in_stock ?? true,
+          notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+          addedAt: item.added_at,
           specs: item.specs
         };
       });
     }
 
-    return [];
+    // 2. Also check hardware_components for items user added (specs.user_watchlist === user.id)
+    const { data: hwData } = await supabase.from('hardware_components').select('*');
+    if (hwData && hwData.length > 0) {
+      const userHw = hwData.filter(item => {
+        try {
+          const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+          return specs.user_watchlist === user.id;
+        } catch {
+          return false;
+        }
+      });
+      for (const item of userHw) {
+        const price = Number(item.current_price || 100);
+        if (!formatted.some(f => (f.componentName || '').toLowerCase() === (item.name || '').toLowerCase())) {
+          formatted.push({
+            id: `hw-${item.id}`,
+            userId: user.id,
+            componentName: item.name,
+            category: item.category || 'GPU',
+            targetPrice: Number(item.msrp ? item.msrp * 0.9 : price * 0.9),
+            currentPrice: price,
+            previousPrice24h: price,
+            previousPrice7d: price,
+            previousPrice30d: price,
+            allTimeLow: Number(item.lowest_price_90d || price),
+            retailer: item.retailer || 'Amazon',
+            productUrl: item.product_url || '#',
+            imageUrl: item.image_url,
+            inStock: true,
+            notifyOnFlashDrop: true,
+            addedAt: item.updated_at,
+            specs: item.specs
+          });
+        }
+      }
+    }
+
+    return formatted;
   };
 
   useEffect(() => {
     let isMounted = true;
+    if (!user?.id) {
+      setReport(null);
+      setIsGenerating(false);
+      return;
+    }
+
+    setIsGenerating(true);
     fetchUserWatchlist().then(async items => {
-      if (items.length > 0 && isMounted) {
-        const generated = await generateDailyDigestReport(items);
-        if (isMounted) setReport(generated);
+      if (isMounted) {
+        if (items.length > 0) {
+          const generated = await generateDailyDigestReport(items);
+          if (isMounted) setReport(generated);
+        } else {
+          setReport(null);
+        }
+        setIsGenerating(false);
       }
     });
     return () => { isMounted = false; };
   }, [user?.id]);
 
   const handleRegenerate = async () => {
+    if (!user?.id) {
+      onOpenAuth?.();
+      return;
+    }
     setIsGenerating(true);
     const items = await fetchUserWatchlist();
-    const generated = await generateDailyDigestReport(items);
-    setReport(generated);
+    if (items.length > 0) {
+      const generated = await generateDailyDigestReport(items);
+      setReport(generated);
+    } else {
+      setReport(null);
+    }
     setIsGenerating(false);
   };
 
@@ -323,7 +361,47 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
 
           {/* Dynamic Mockup Body */}
           <div className="relative mt-6">
-            {deliveryChannel === 'email' ? (
+            {!user ? (
+              /* Signed Out CTA */
+              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-12 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-lg shadow-purple-500/10">
+                  <LogIn className="w-8 h-8" />
+                </div>
+                <div className="max-w-md space-y-1.5">
+                  <h3 className="text-xl font-bold font-heading text-white">Sign In to View Daily Digest</h3>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    The Daily Digest dynamically analyzes and summarizes price movements exclusively for your tracked watchlist items.
+                  </p>
+                </div>
+                <button
+                  onClick={onOpenAuth}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-gray-950 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In / Register</span>
+                </button>
+              </div>
+            ) : isGenerating ? (
+              /* Loading State */
+              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-16 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
+                <h3 className="text-base font-bold text-white">Generating AI Daily Intelligence...</h3>
+                <p className="text-xs text-gray-400">Analyzing your personal tracked hardware across multi-retailer intervals</p>
+              </div>
+            ) : !report || !report.items || report.items.length === 0 ? (
+              /* Logged In with Empty Watchlist */
+              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-12 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 shadow-lg">
+                  <Calendar className="w-8 h-8 text-cyan-400" />
+                </div>
+                <div className="max-w-md space-y-1.5">
+                  <h3 className="text-xl font-bold font-heading text-white">No Tracked Components Found</h3>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Your personal watchlist has 0 tracked items. Add components in the <strong>Watchlist Tracker</strong> tab to generate your real-time daily price digest.
+                  </p>
+                </div>
+              </div>
+            ) : deliveryChannel === 'email' ? (
               // ================= EMAIL MOCKUP =================
               <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-8 rounded-2xl shadow-2xl mx-auto border border-gray-800/80">
                 <div className="text-center mb-8 pb-6 border-b border-gray-800/60">
