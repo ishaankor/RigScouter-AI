@@ -17,7 +17,9 @@ import {
   Loader2,
   Search,
   Globe,
-  Database
+  Database,
+  Lock,
+  LogIn
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
@@ -190,79 +192,83 @@ export function WatchlistManager({
     };
   };
 
-  // Fetch watchlist & trending items directly from Supabase DB on mount
+  // Fetch watchlist & trending items directly from Supabase DB on mount / auth change
   useEffect(() => {
-    async function loadDatabaseWatchlist() { console.log("running loadDatabaseWatchlist!");
+    async function loadDatabaseWatchlist() {
       setIsLoading(true);
       try {
-        const userId = user?.id || 'demo-user-123';
-
-        // 1. Direct Supabase DB Table Query for user watchlist items
-        const { data: dbItems } = await supabase
-          .from('watchlist_items')
-          .select('*')
-          .order('id', { ascending: false });
-
         let formatted: WatchlistItem[] = [];
-        if (dbItems && dbItems.length > 0) {
-          // Group by canonical component name so multiple retailer rows show up as ONE consolidated item with retailer dropdown
-          const groupedMap = new Map<string, any>();
-          
-          dbItems.forEach((item: any) => {
-            const key = getNormalizedKey(item);
-            if (!key) return;
-            
-            if (!groupedMap.has(key)) {
-              groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
-            } else {
-              const existing = groupedMap.get(key);
-              if (item.id && !existing.dbRowIds.includes(item.id)) {
-                existing.dbRowIds.push(item.id);
-              }
-              // Prefer lowest price
-              if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
-                existing.all_time_low = item.all_time_low;
-                existing.target_price = item.target_price;
-              }
-            }
-          });
 
-          formatted = Array.from(groupedMap.values()).map((group: any) => ({
-            id: group.id,
-            dbRowIds: group.dbRowIds,
-            userId: group.user_id,
-            componentName: group.component_name,
-            category: group.category || 'GPU',
-            targetPrice: group.target_price || 0,
-            currentPrice: group.all_time_low || group.target_price || 0,
-            previousPrice24h: group.previous_price_24h,
-            previousPrice7d: group.previous_price_7d,
-            previousPrice30d: group.previous_price_30d,
-            allTimeLow: group.all_time_low,
-            retailer: 'Amazon',
-            productUrl: '#',
-            imageUrl: getCategoryImage(group.category || 'GPU'),
-            inStock: true,
-            notifyOnFlashDrop: true,
-            addedAt: group.added_at,
-            specs: { RetailerOffers: group.RetailerOffers || [] }
-          }));
+        // 1. Direct Supabase DB Table Query for user watchlist items ONLY if user is authenticated
+        if (user?.id) {
+          const userId = user.id;
+          const { data: dbItems } = await supabase
+            .from('watchlist_items')
+            .select('*')
+            .eq('user_id', userId)
+            .order('id', { ascending: false });
+
+          if (dbItems && dbItems.length > 0) {
+            // Group by canonical component name so multiple retailer rows show up as ONE consolidated item with retailer dropdown
+            const groupedMap = new Map<string, any>();
+            
+            dbItems.forEach((item: any) => {
+              const key = getNormalizedKey(item);
+              if (!key) return;
+              
+              if (!groupedMap.has(key)) {
+                groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
+              } else {
+                const existing = groupedMap.get(key);
+                if (item.id && !existing.dbRowIds.includes(item.id)) {
+                  existing.dbRowIds.push(item.id);
+                }
+                // Prefer lowest price
+                if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
+                  existing.all_time_low = item.all_time_low;
+                  existing.target_price = item.target_price;
+                }
+              }
+            });
+
+            formatted = Array.from(groupedMap.values()).map((group: any) => ({
+              id: group.id,
+              dbRowIds: group.dbRowIds,
+              userId: group.user_id,
+              componentName: group.component_name,
+              category: group.category || 'GPU',
+              targetPrice: group.target_price || 0,
+              currentPrice: group.all_time_low || group.target_price || 0,
+              previousPrice24h: group.previous_price_24h,
+              previousPrice7d: group.previous_price_7d,
+              previousPrice30d: group.previous_price_30d,
+              allTimeLow: group.all_time_low,
+              retailer: 'Amazon',
+              productUrl: '#',
+              imageUrl: getCategoryImage(group.category || 'GPU'),
+              inStock: true,
+              notifyOnFlashDrop: true,
+              addedAt: group.added_at,
+              specs: { RetailerOffers: group.RetailerOffers || [] }
+            }));
+          }
         }
 
-        // 2. Direct Supabase DB Table Query for trending hardware catalog
+        // 2. Direct Supabase DB Table Query for trending hardware catalog (publicly accessible)
         const { data: hwCatalog } = await supabase
           .from('hardware_components')
           .select('*')
           .order('updated_at', { ascending: false })
           .limit(500);
 
-        // Also merge any user items saved in hardware_components
-        if (hwCatalog && hwCatalog.length > 0) {
+        // Also merge any user items saved in hardware_components if user is logged in
+        if (user?.id && hwCatalog && hwCatalog.length > 0) {
+          const userId = user.id;
           const userHwMap = new Map<string, any>();
           hwCatalog.forEach((item: any) => {
             try {
               const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-              const isUserItem = specs.user_watchlist === userId || specs.source === 'User Watchlist Addition';
+              const isUserItem = specs.user_watchlist === userId;
               if (isUserItem) {
                 const key = getNormalizedKey(item);
                 if (key && !formatted.some(f => getNormalizedKey(f) === key) && !userHwMap.has(key)) {
@@ -292,23 +298,29 @@ export function WatchlistManager({
           formatted = [...formatted, ...Array.from(userHwMap.values())];
         }
 
-        // Recover pending scrapes from sessionStorage to survive Safari tab suspend & Fast Refresh
+        // Recover pending scrapes from sessionStorage if user is signed in
         let recoveredPending: WatchlistItem[] = [];
-        try {
-          const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
-          const now = Date.now();
-          
-          const activePending = stored.filter((p: WatchlistItem) => {
-            const isOld = now - new Date(p.addedAt).getTime() > 3 * 60 * 1000; // Drop after 3 mins
-            const isInDb = formatted.some((f) => (f.id && p.id && f.id.includes(p.id)) || (f.componentName || '').toLowerCase() === (p.componentName || '').toLowerCase());
-            return !isOld && !isInDb;
-          });
-          
-          sessionStorage.setItem('pendingScrapes', JSON.stringify(activePending));
-          recoveredPending = activePending;
-        } catch (e) {}
+        if (user?.id) {
+          try {
+            const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+            const now = Date.now();
+            
+            const activePending = stored.filter((p: WatchlistItem) => {
+              const isOld = now - new Date(p.addedAt).getTime() > 3 * 60 * 1000; // Drop after 3 mins
+              const isInDb = formatted.some((f) => (f.id && p.id && f.id.includes(p.id)) || (f.componentName || '').toLowerCase() === (p.componentName || '').toLowerCase());
+              return !isOld && !isInDb;
+            });
+            
+            sessionStorage.setItem('pendingScrapes', JSON.stringify(activePending));
+            recoveredPending = activePending;
+          } catch (e) {}
+        } else {
+          try {
+            sessionStorage.removeItem('pendingScrapes');
+          } catch (e) {}
+        }
 
-        setWatchlist([...recoveredPending, ...formatted]);
+        setWatchlist(user?.id ? [...recoveredPending, ...formatted] : []);
 
         if (hwCatalog && hwCatalog.length > 0) {
           const formattedTrending = hwCatalog.map((item: any) => {
@@ -360,6 +372,12 @@ export function WatchlistManager({
   // 100% Autonomous Bot Add-to-Watchlist Handler (NO manual form filling)
   const handleAutonomousAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setShowAddModal(false);
+      onOpenAuth?.();
+      return;
+    }
+
     const queryToScrape = liveQuery.trim();
     if (!queryToScrape) return;
 
@@ -367,7 +385,7 @@ export function WatchlistManager({
     setScrapeNotice(null);
 
     const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
-    const userId = user?.id || 'demo-user-123';
+    const userId = user.id;
     const pendingId = `w-${Date.now()}`;
     const category = autoDetectCategory(queryToScrape);
 
@@ -614,7 +632,7 @@ export function WatchlistManager({
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-black font-heading text-white tracking-tight">Active Hardware Watchlist</h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-950 text-cyan-400 border border-cyan-800/40">
-              {watchlist.length} Tracked
+              {user ? `${watchlist.length} Tracked` : 'Guest Mode'}
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-1 font-medium">
@@ -641,7 +659,13 @@ export function WatchlistManager({
           </div>
 
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              if (!user) {
+                onOpenAuth?.();
+              } else {
+                setShowAddModal(true);
+              }
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Add Component
@@ -659,7 +683,7 @@ export function WatchlistManager({
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          <Bell className="w-4 h-4" /> My Watchlist ({watchlist.length})
+          <Bell className="w-4 h-4" /> My Watchlist ({user ? watchlist.length : 0})
         </button>
         <button
           onClick={() => setActiveTab('trending')}
@@ -674,139 +698,199 @@ export function WatchlistManager({
       </div>
 
       {activeTab === 'watchlist' ? (
-        /* Watchlist Table */
-        <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] tracking-wider border-b border-gray-800">
-                <tr>
-                  <th className="p-4">Component</th>
-                  <th className="p-4">Retailer</th>
-                  <th className="p-4">Current Price</th>
-                  <th className="p-4">Target Alert</th>
-                  <th className="p-4">{selectedInterval.toUpperCase()} Price Delta</th>
-                  <th className="p-4">90-Day Low</th>
-                  <th className="p-4 text-center">Alerts</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800/50">
-                {watchlist.map(item => {
-                  const effective = getEffectiveOffer(item);
-                  const prevPrice = getPreviousPrice(item, effective);
-                  const { diff, percent } = calculateDrop(effective.currentPrice, prevPrice);
-                  const isDrop = diff > 0;
-                  const isTargetHit = effective.currentPrice <= item.targetPrice;
-
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.componentName}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
-                          />
-                          <div>
-                            <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>
-                            <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
-                              {item.category}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Dynamic Retailer Dropdown Selector */}
-                      <td className="p-4">
-                          <select
-                            value={effective.retailer}
-                            onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
-                            className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
-                          >
-                            {effective.availableRetailers.map(rName => {
-                              const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
-                              const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
-                              return (
-                                <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
-                                  {rName}{priceTag}
-                                </option>
-                              );
-                            })}
-                          </select>
-                      </td>
-
-                      <td className="p-4">
-                        <div className="text-sm font-black text-white">${Number(effective.currentPrice || 0).toFixed(2)}</div>
-                        {isTargetHit && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
-                            <TrendingDown className="w-3 h-3" /> Target Price Met!
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="p-4 font-mono font-bold text-gray-300">${Number(item.targetPrice || 0).toFixed(2)}</td>
-
-                      <td className="p-4">
-                        {prevPrice && prevPrice > 0 && prevPrice !== effective.currentPrice ? (
-                          <>
-                            <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
-                              <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
-                          </>
-                        ) : (
-                          <div className="text-gray-500 font-medium text-[11px] flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/60 animate-pulse"></span>
-                            Baseline Tracked
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="p-4 font-mono text-gray-400">${Number(item.allTimeLow || 0).toFixed(2)}</td>
-
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => toggleNotification(item.id)}
-                          className={`p-2 rounded-xl border transition-all ${
-                            item.notifyOnFlashDrop
-                              ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
-                              : 'bg-gray-900 border-gray-800 text-gray-600'
-                          }`}
-                        >
-                          <Bell className="w-4 h-4" />
-                        </button>
-                      </td>
-
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <a
-                            href={effective.productUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 bg-gray-900 hover:bg-cyan-950/80 border border-gray-800 hover:border-cyan-700/60 rounded-xl text-gray-300 hover:text-cyan-300 transition-colors"
-                            title={`View Direct Listing at ${effective.retailer}`}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                          <button
-                            onClick={() => removeItem(item.id)}
-                            className="p-2 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
-                            title="Remove from Watchlist"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        !user ? (
+          /* Logged Out / Guest Prompt */
+          <div className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-cyan-950/60 border border-cyan-800/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/10">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div className="max-w-md space-y-1.5">
+              <h3 className="text-xl font-bold font-heading text-white">Sign In to Track Components</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Create a free account or sign in to build your custom hardware watchlist, track real-time price drops across major retailers, and receive automated digests.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={onOpenAuth}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl shadow-md shadow-cyan-500/20 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Sign In / Register</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('trending')}
+                className="px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white font-bold text-xs rounded-xl border border-gray-800 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Browse Trending Deals</span>
+              </button>
+            </div>
           </div>
-        </div>
+        ) : watchlist.length === 0 ? (
+          /* Logged In but Empty Watchlist */
+          <div className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-cyan-400 shadow-lg">
+              <Bell className="w-8 h-8" />
+            </div>
+            <div className="max-w-md space-y-1.5">
+              <h3 className="text-xl font-bold font-heading text-white">Your Watchlist is Empty</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                You haven&apos;t added any hardware components to track yet. Click below to scrape and monitor GPUs, CPUs, RAM, and SSDs in real time.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl shadow-md shadow-cyan-500/20 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Component</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('trending')}
+                className="px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white font-bold text-xs rounded-xl border border-gray-800 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Browse Trending Deals</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Watchlist Table */
+          <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] tracking-wider border-b border-gray-800">
+                  <tr>
+                    <th className="p-4">Component</th>
+                    <th className="p-4">Retailer</th>
+                    <th className="p-4">Current Price</th>
+                    <th className="p-4">Target Alert</th>
+                    <th className="p-4">{selectedInterval.toUpperCase()} Price Delta</th>
+                    <th className="p-4">90-Day Low</th>
+                    <th className="p-4 text-center">Alerts</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800/50">
+                  {watchlist.map(item => {
+                    const effective = getEffectiveOffer(item);
+                    const prevPrice = getPreviousPrice(item, effective);
+                    const { diff, percent } = calculateDrop(effective.currentPrice, prevPrice);
+                    const isDrop = diff > 0;
+                    const isTargetHit = effective.currentPrice <= item.targetPrice;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.componentName}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
+                            />
+                            <div>
+                              <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>
+                              <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                                {item.category}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Dynamic Retailer Dropdown Selector */}
+                        <td className="p-4">
+                            <select
+                              value={effective.retailer}
+                              onChange={(e) => setSelectedRetailers(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
+                            >
+                              {effective.availableRetailers.map(rName => {
+                                const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
+                                const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
+                                return (
+                                  <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
+                                    {rName}{priceTag}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="text-sm font-black text-white">${Number(effective.currentPrice || 0).toFixed(2)}</div>
+                          {isTargetHit && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
+                              <TrendingDown className="w-3 h-3" /> Target Price Met!
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-4 font-mono font-bold text-gray-300">${Number(item.targetPrice || 0).toFixed(2)}</td>
+
+                        <td className="p-4">
+                          {prevPrice && prevPrice > 0 && prevPrice !== effective.currentPrice ? (
+                            <>
+                              <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
+                                <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
+                            </>
+                          ) : (
+                            <div className="text-gray-500 font-medium text-[11px] flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/60 animate-pulse"></span>
+                              Baseline Tracked
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-4 font-mono text-gray-400">${Number(item.allTimeLow || 0).toFixed(2)}</td>
+
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => toggleNotification(item.id)}
+                            className={`p-2 rounded-xl border transition-all ${
+                              item.notifyOnFlashDrop
+                                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
+                                : 'bg-gray-900 border-gray-800 text-gray-600'
+                            }`}
+                          >
+                            <Bell className="w-4 h-4" />
+                          </button>
+                        </td>
+
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={effective.productUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 bg-gray-900 hover:bg-cyan-950/80 border border-gray-800 hover:border-cyan-700/60 rounded-xl text-gray-300 hover:text-cyan-300 transition-colors"
+                              title={`View Direct Listing at ${effective.retailer}`}
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="p-2 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
+                              title="Remove from Watchlist"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
       ) : (
         /* Trending Items Grid (Individual Retailer Deals) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -10,48 +10,55 @@ export const runtime = 'edge';
  */
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get('userId') || 'demo-user-123';
+    const userId = req.nextUrl.searchParams.get('userId');
 
-    // 1. Fetch User Watchlist Items from watchlist_items table
-    const { data: userWatchlist } = await supabase
-      .from('watchlist_items')
-      .select('*')
-      .order('id', { ascending: false });
+    // 1. Fetch User Watchlist Items ONLY if a valid userId is provided
+    let rawWatchlist: any[] = [];
+    if (userId && userId !== 'guest') {
+      const { data: userWatchlist } = await supabase
+        .from('watchlist_items')
+        .select('*')
+        .eq('user_id', userId)
+        .order('id', { ascending: false });
 
-    let rawWatchlist = userWatchlist || [];
+      rawWatchlist = userWatchlist || [];
+    }
 
-    // 2. Also fetch any user-added items stored in hardware_components
+    // 2. Fetch catalog items for trending hardware
     const { data: hwCatalog } = await supabase
       .from('hardware_components')
       .select('*')
       .order('updated_at', { ascending: false });
 
-    const userHwItems = (hwCatalog || [])
-      .filter(item => {
-        try {
-          const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-          return specs.user_watchlist === userId || specs.source === 'User Watchlist Addition';
-        } catch {
-          return false;
-        }
-      })
-      .map(item => ({
-        id: `w-${item.id}`,
-        user_id: userId,
-        component_name: item.name,
-        category: item.category,
-        target_price: item.target_price || (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price),
-        current_price: item.current_price,
-        previous_price_24h: item.previous_price_24h || undefined,
-        previous_price_7d: item.previous_price_7d || undefined,
-        previous_price_30d: item.previous_price_30d || undefined,
-        all_time_low: item.lowest_price_90d || item.current_price,
-        retailer: item.retailer,
-        product_url: item.product_url,
-        image_url: item.image_url,
-        in_stock: true,
-        notify_on_flash_drop: true,
-      }));
+    let userHwItems: any[] = [];
+    if (userId && userId !== 'guest') {
+      userHwItems = (hwCatalog || [])
+        .filter(item => {
+          try {
+            const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+            return specs.user_watchlist === userId;
+          } catch {
+            return false;
+          }
+        })
+        .map(item => ({
+          id: `w-${item.id}`,
+          user_id: userId,
+          component_name: item.name,
+          category: item.category,
+          target_price: item.target_price || (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price),
+          current_price: item.current_price,
+          previous_price_24h: item.previous_price_24h || undefined,
+          previous_price_7d: item.previous_price_7d || undefined,
+          previous_price_30d: item.previous_price_30d || undefined,
+          all_time_low: item.lowest_price_90d || item.current_price,
+          retailer: item.retailer,
+          product_url: item.product_url,
+          image_url: item.image_url,
+          in_stock: true,
+          notify_on_flash_drop: true,
+        }));
+    }
 
     // Merge without duplicates
     const combinedMap = new Map();
@@ -62,28 +69,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    let combinedList = Array.from(combinedMap.values());
-
-    // If still empty, present latest catalog deals
-    if (combinedList.length === 0 && hwCatalog && hwCatalog.length > 0) {
-      combinedList = hwCatalog.slice(0, 6).map(item => ({
-        id: `w-${item.id}`,
-        user_id: userId,
-        component_name: item.name,
-        category: item.category,
-        target_price: item.target_price || (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price),
-        current_price: item.current_price,
-        previous_price_24h: item.previous_price_24h || undefined,
-        previous_price_7d: item.previous_price_7d || undefined,
-        previous_price_30d: item.previous_price_30d || undefined,
-        all_time_low: item.lowest_price_90d || item.current_price,
-        retailer: item.retailer,
-        product_url: item.product_url,
-        image_url: item.image_url,
-        in_stock: true,
-        notify_on_flash_drop: true,
-      }));
-    }
+    const combinedList = Array.from(combinedMap.values());
 
     const formattedWatchlist = combinedList.map(item => ({
       id: item.id,

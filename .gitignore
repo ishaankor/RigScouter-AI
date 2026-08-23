@@ -28,3 +28,12 @@ yarn-error.log*
 *.pem
 scratch/**
 scratch-test.ts
+RigScouter-AI.code-workspace
+.github/workflows/supabase-keep-alive.yml
+supabase/config.toml
+.gitignore
+supabase/keep_alive_cron.sql
+supabase/.temp/cli-latest
+supabase/.temp/linked-project.json
+tsconfig.json
+tsconfig.json
