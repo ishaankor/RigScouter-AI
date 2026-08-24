@@ -190,7 +190,21 @@ export function WatchlistManager({
     const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : Number(item.msrp ?? currentPrice));
     const productUrl = matchedOffer ? (matchedOffer.url || '#') : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));
     const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : activeRetailer;
-    const title = matchedOffer ? (matchedOffer.title ?? item.componentName ?? item.name ?? 'Component') : (item.componentName ?? item.name ?? 'Component');
+    
+    let cleanName = item.componentName ?? item.name ?? 'Component';
+    if (cleanName.startsWith('http://') || cleanName.startsWith('https://')) {
+      if (matchedOffer?.title && !matchedOffer.title.startsWith('http')) {
+        cleanName = matchedOffer.title;
+      } else {
+        try {
+          const u = new URL(cleanName);
+          const parts = u.pathname.split('/').filter(Boolean);
+          const slug = parts.find(p => p.length > 5 && !['dp', 'product', 'p', 'itm'].includes(p.toLowerCase())) || parts[0] || '';
+          cleanName = decodeURIComponent(slug).replace(/[-_]+/g, ' ').replace(/\b(dp|p|product)\b/gi, '').trim();
+        } catch (e) {}
+      }
+    }
+    const title = (matchedOffer?.title && !matchedOffer.title.startsWith('http')) ? matchedOffer.title : cleanName;
     const inStock = matchedOffer ? Boolean(matchedOffer.inStock) : false;
 
     const availableRetailers = Array.from(new Set(finalOffers.map(o => o?.retailer))).filter((r): r is string => Boolean(r));
@@ -535,6 +549,33 @@ export function WatchlistManager({
               message: payload.summary || `No live retailer listings found for "${payload.original_query || payload.query || queryToScrape}".`,
               query: payload.original_query || payload.query || queryToScrape
             });
+          } else {
+            // Update the pending item with bestOffer details (especially critical for direct URL scrapes!)
+            const bo = payload.bestOffer;
+            setWatchlist(prev => prev.map(item => {
+              if (item.id !== pendingId) return item;
+              const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+              return {
+                ...item,
+                componentName: bo.title || payload.query || item.componentName,
+                category: payload.category || item.category,
+                currentPrice: bo.price,
+                targetPrice: Math.round(bo.price * 0.9 * 100) / 100,
+                retailer: bo.retailer,
+                productUrl: bo.url,
+                inStock: bo.inStock,
+                specs: {
+                  ...currentSpecs,
+                  RetailerOffers: payload.allOffers && payload.allOffers.length > 0 ? payload.allOffers : [{
+                    retailer: bo.retailer,
+                    price: bo.price,
+                    title: bo.title,
+                    url: bo.url,
+                    inStock: bo.inStock
+                  }]
+                }
+              };
+            }));
           }
           es.close();
         }
