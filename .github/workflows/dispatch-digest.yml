@@ -1,0 +1,32 @@
+name: "Daily Hardware Digest Dispatcher"
+
+on:
+  schedule:
+    # Runs every day at 08:00 UTC (evaluates daily, every_3_days, weekly, and flash_only subscribers)
+    - cron: "0 8 * * *"
+  workflow_dispatch: # Allows manual click-to-run from GitHub UI
+
+jobs:
+  dispatch-digest:
+    name: "Dispatch Hardware Digest"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Ping Cloudflare Pages Digest Endpoint"
+        env:
+          APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || 'https://rigscouter.ishaankoradia.com' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'rigscouter-cron-secret' }}
+        run: |
+          echo "======================================================="
+          echo "⚡ Dispatching RigScouter Hardware Digest Cron"
+          echo "Timestamp: $(date -u)"
+          echo "Target: $APP_URL/api/cron/dispatch-digest"
+          echo "======================================================="
+
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\nTIME_TOTAL:%{time_total}s" \
+            -X GET "$APP_URL/api/cron/dispatch-digest?key=$CRON_SECRET")
+
+          echo "$RESPONSE"
+
+          echo "======================================================="
+          echo "✅ Digest dispatch cycle completed."
+          echo "======================================================="

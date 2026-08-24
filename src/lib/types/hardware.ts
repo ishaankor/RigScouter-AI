@@ -91,6 +91,8 @@ export interface DailyDigestReport {
   biggestDrop: DigestItemSummary | null;
   items: DigestItemSummary[];
   totalSavedOpportunity: number;
+  frequency?: DigestFrequency;
+  comparisonIntervals?: ComparisonInterval[];
 }
 
 export interface RigBuildRequirement {

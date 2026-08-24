@@ -44,18 +44,35 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
 }
 
 function buildDigestEmailHtml(report: any, dateStr: string): string {
-  const sortedItems = [...report.items].sort((a: any, b: any) => (a.change24h?.amount || 0) - (b.change24h?.amount || 0));
-  const activeDropsCount = sortedItems.filter((entry: any) => (entry.change24h?.amount || 0) < 0).length;
-  const totalSavings = sortedItems
-    .filter((entry: any) => (entry.change24h?.amount || 0) < 0)
-    .reduce((sum: number, entry: any) => sum + Math.abs(entry.change24h?.amount || 0), 0);
+  const freq = report.frequency || 'daily';
+  const isWeekly = freq === 'weekly';
+  const is3Days = freq === 'every_3_days';
+  const isFlash = freq === 'flash_only';
+
+  const sortedItems = [...report.items].sort((a: any, b: any) => {
+    if (isWeekly) return (a.change7d?.amount || 0) - (b.change7d?.amount || 0);
+    return (a.change24h?.amount || 0) - (b.change24h?.amount || 0);
+  });
+
+  const activeDropsCount = sortedItems.filter((entry: any) => {
+    if (isWeekly) return (entry.change7d?.amount || 0) < 0;
+    return (entry.change24h?.amount || 0) < 0 || (isFlash && entry.isAllTimeLow);
+  }).length;
+
+  const totalSavings = report.totalSavedOpportunity || sortedItems
+    .filter((entry: any) => isWeekly ? (entry.change7d?.amount || 0) < 0 : (entry.change24h?.amount || 0) < 0)
+    .reduce((sum: number, entry: any) => sum + Math.abs(isWeekly ? (entry.change7d?.amount || 0) : (entry.change24h?.amount || 0)), 0);
+
+  const deltaLabel = isWeekly ? '7-Day Price Movement:' : is3Days ? '3-Day Movement:' : isFlash ? 'Live Price Movement:' : '24h Price Movement:';
+  const savingsLabel = isWeekly ? 'Weekly Savings' : is3Days ? '3-Day Savings' : isFlash ? 'Flash Savings' : '24h Savings';
+  const badgeLabel = isWeekly ? 'WEEKLY DIGEST' : is3Days ? '3-DAY BRIEFING' : isFlash ? '⚡ FLASH DEAL ALERT' : 'LIVE BRIEFING';
 
   const itemsHtml = sortedItems.map((entry: any) => {
     const item = entry.item;
     const cleanTitle = cleanDisplayTitle(item.componentName || item.name);
     const currentPrice = Number(item.currentPrice || 0).toFixed(2);
-    const dropAmount = entry.change24h?.amount || 0;
-    const dropPercent = entry.change24h?.percentage || 0;
+    const dropAmount = isWeekly ? (entry.change7d?.amount || 0) : (entry.change24h?.amount || 0);
+    const dropPercent = isWeekly ? (entry.change7d?.percentage || 0) : (entry.change24h?.percentage || 0);
     const isDrop = dropAmount < 0;
     const rBadge = getRetailerBadgeStyle(item.retailer);
 
@@ -107,7 +124,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
               </td>
             </tr>
             <tr>
-              <td style="color: #94a3b8; font-size: 13px; padding-top: 6px;">24h Price Movement:</td>
+              <td style="color: #94a3b8; font-size: 13px; padding-top: 6px;">${deltaLabel}</td>
               <td style="text-align: right; font-weight: 800; font-size: 14px; padding-top: 6px;">
                 ${isDrop ? `
                   <span style="color: #34d399; background: #064e3b44; padding: 2px 8px; border-radius: 4px; border: 1px solid #05966955;">
@@ -200,7 +217,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
                 </td>
                 <td style="text-align: right; vertical-align: middle;">
                   <span style="font-size: 11px; font-weight: 700; color: #34d399; background: #064e3b55; border: 1px solid #05966966; padding: 4px 10px; border-radius: 20px;">
-                    <span class="pulse-indicator"></span> LIVE BRIEFING
+                    <span class="pulse-indicator"></span> ${badgeLabel}
                   </span>
                 </td>
               </tr>
@@ -227,7 +244,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
                   <div style="font-size: 22px; font-weight: 900; color: ${activeDropsCount > 0 ? '#34d399' : '#f8fafc'}; margin-top: 2px;">${activeDropsCount}</div>
                 </td>
                 <td style="width: 33%; padding: 6px;">
-                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">24h Savings</div>
+                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">${savingsLabel}</div>
                   <div style="font-size: 22px; font-weight: 900; color: ${totalSavings > 0 ? '#38bdf8' : '#f8fafc'}; margin-top: 2px;">$${totalSavings.toFixed(2)}</div>
                 </td>
               </tr>
@@ -353,11 +370,14 @@ export async function GET(req: NextRequest) {
       if (hw.model) hwMap.set(hw.model.toLowerCase().trim(), hw);
     });
 
+    const forceDispatch = req.nextUrl.searchParams.get('force') === 'true';
+
     let dispatchedCount = 0;
     const deliveries: any[] = [];
+    const skipped: any[] = [];
     const errors: any[] = [];
 
-    // 2. For each user, fetch their watchlist (or top deals fallback) and send digest
+    // 2. For each user, evaluate frequency eligibility, watchlist, and send digest
     for (const pref of preferences) {
       try {
         let deliveryChannels = { email: true, emailAddress: '' };
@@ -374,6 +394,37 @@ export async function GET(req: NextRequest) {
         const targetEmail = deliveryChannels.emailAddress;
         if (!targetEmail || !deliveryChannels.email) {
           continue;
+        }
+
+        const frequency = pref.summary_frequency || 'daily';
+
+        // 3. Frequency & Interval Eligibility Throttling Check
+        if (!forceDispatch) {
+          const { data: lastDigest } = await supabaseAdmin
+            .from('daily_digests')
+            .select('generated_at')
+            .eq('user_id', pref.user_id)
+            .order('generated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const lastSentTime = lastDigest?.generated_at ? new Date(lastDigest.generated_at).getTime() : 0;
+          const hoursSinceLast = lastSentTime > 0 ? (Date.now() - lastSentTime) / (1000 * 60 * 60) : Infinity;
+
+          if (frequency === 'daily' && hoursSinceLast < 20) {
+            skipped.push({ userId: pref.user_id, frequency, reason: `Sent ${hoursSinceLast.toFixed(1)}h ago (daily threshold is 20h)` });
+            continue;
+          }
+
+          if (frequency === 'every_3_days' && hoursSinceLast < 68) {
+            skipped.push({ userId: pref.user_id, frequency, reason: `Sent ${hoursSinceLast.toFixed(1)}h ago (3-day threshold is 68h)` });
+            continue;
+          }
+
+          if (frequency === 'weekly' && hoursSinceLast < 160) {
+            skipped.push({ userId: pref.user_id, frequency, reason: `Sent ${hoursSinceLast.toFixed(1)}h ago (weekly threshold is 160h)` });
+            continue;
+          }
         }
 
         // Fetch their watchlist items
@@ -449,7 +500,32 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
-        const report = await generateDailyDigestReport(formattedWatchlist as any);
+        // For 'flash_only' frequency: check if any component dropped in price or hit all-time low
+        if (!forceDispatch && frequency === 'flash_only') {
+          const hasDrop = formattedWatchlist.some((item: any) => {
+            const drop24h = (item.previousPrice24h || 0) - item.currentPrice;
+            const isATL = item.currentPrice <= item.allTimeLow;
+            return drop24h > 0 || isATL;
+          });
+
+          if (!hasDrop) {
+            skipped.push({ userId: pref.user_id, frequency: 'flash_only', reason: 'No active 24h price drops or all-time lows on watchlist' });
+            continue;
+          }
+        }
+
+        let comparisonIntervals: any = ['24h', '7d', '30d', 'ATL'];
+        try {
+          if (typeof pref.comparison_intervals === 'string') {
+            comparisonIntervals = JSON.parse(pref.comparison_intervals);
+          } else if (Array.isArray(pref.comparison_intervals)) {
+            comparisonIntervals = pref.comparison_intervals;
+          }
+        } catch {
+          // fallback default
+        }
+
+        const report = await generateDailyDigestReport(formattedWatchlist as any, frequency as any, comparisonIntervals);
         const htmlContent = buildDigestEmailHtml(report, todayStr);
 
         const customDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
@@ -460,7 +536,20 @@ export async function GET(req: NextRequest) {
           html: htmlContent,
         });
 
-        deliveries.push({ to: targetEmail, resendId: sendRes?.id, headline: report.headline });
+        // 4. Log sent digest into daily_digests table for interval tracking and history
+        try {
+          await supabaseAdmin.from('daily_digests').insert({
+            user_id: pref.user_id,
+            headline: report.headline,
+            executive_summary: report.executiveSummary,
+            report_data: report,
+            total_saved_opportunity: report.totalSavedOpportunity
+          });
+        } catch (dbErr: any) {
+          console.warn(`Could not log daily_digest record for user ${pref.user_id}:`, dbErr.message);
+        }
+
+        deliveries.push({ to: targetEmail, frequency, resendId: sendRes?.id, headline: report.headline });
         dispatchedCount++;
 
       } catch (userErr: any) {
@@ -473,6 +562,7 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
       dispatchedCount,
       deliveries: deliveries.length > 0 ? deliveries : undefined,
+      skipped: skipped.length > 0 ? skipped : undefined,
       errors: errors.length > 0 ? errors : undefined
     });
 

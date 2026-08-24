@@ -112,7 +112,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     fetchUserWatchlist().then(async items => {
       if (isMounted) {
         if (items.length > 0) {
-          const generated = await generateDailyDigestReport(items);
+          const generated = await generateDailyDigestReport(items, frequency, selectedIntervals);
           if (isMounted) setReport(generated);
         } else {
           setReport(null);
@@ -121,7 +121,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
       }
     });
     return () => { isMounted = false; };
-  }, [user?.id]);
+  }, [user?.id, frequency, JSON.stringify(selectedIntervals)]);
 
   const handleRegenerate = async () => {
     if (!user?.id) {
@@ -131,7 +131,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     setIsGenerating(true);
     const items = await fetchUserWatchlist();
     if (items.length > 0) {
-      const generated = await generateDailyDigestReport(items);
+      const generated = await generateDailyDigestReport(items, frequency, selectedIntervals);
       setReport(generated);
     } else {
       setReport(null);
@@ -413,11 +413,19 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     </div>
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      LIVE BRIEFING
+                      {frequency === 'weekly' ? 'WEEKLY DIGEST' : frequency === 'every_3_days' ? '3-DAY BRIEFING' : frequency === 'flash_only' ? '⚡ FLASH ALERT' : 'LIVE BRIEFING'}
                     </span>
                   </div>
                   <h2 className="text-lg font-black text-white mt-3">{report ? report.headline : 'Generating intelligence...'}</h2>
-                  <p className="text-gray-400 text-xs mt-0.5">Automated Hardware Intelligence &bull; Today at 8:00 AM</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    {frequency === 'weekly'
+                      ? 'Automated Hardware Intelligence • Weekly Digest'
+                      : frequency === 'every_3_days'
+                      ? 'Automated Hardware Intelligence • 3-Day Momentum'
+                      : frequency === 'flash_only'
+                      ? 'High-Priority Alert • Flash Deals & Lows'
+                      : 'Automated Hardware Intelligence • Today at 8:00 AM'}
+                  </p>
                 </div>
 
                 {/* Metrics Dashboard */}
@@ -427,20 +435,28 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     <div className="text-sm font-black text-white mt-0.5">{report?.items?.length || 0} Items</div>
                   </div>
                   <div className="border-x border-white/5">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">Drops</div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">
+                      {frequency === 'weekly' ? '7d Drops' : frequency === 'every_3_days' ? '3d Drops' : frequency === 'flash_only' ? 'Flash Deals' : '24h Drops'}
+                    </div>
                     <div className="text-sm font-black text-emerald-400 mt-0.5">
-                      {report?.items?.filter(i => (i.change24h?.amount || 0) < 0).length || 0}
+                      {frequency === 'weekly'
+                        ? (report?.items?.filter(i => (i.change7d?.amount || 0) < 0).length || 0)
+                        : (report?.items?.filter(i => (i.change24h?.amount || 0) < 0 || (frequency === 'flash_only' && i.isAllTimeLow)).length || 0)}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">24h Savings</div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">
+                      {frequency === 'weekly' ? 'Weekly Savings' : frequency === 'every_3_days' ? '3-Day Savings' : frequency === 'flash_only' ? 'Flash Savings' : '24h Savings'}
+                    </div>
                     <div className="text-sm font-black text-cyan-400 mt-0.5">${Number(report?.totalSavedOpportunity || 0).toFixed(2)}</div>
                   </div>
                 </div>
                 
                 <div className="space-y-6 text-sm">
                   <div className="bg-black/30 border-l-4 border-l-cyan-500 rounded-xl p-4 border border-white/5">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1">Market Summary</div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1">
+                      {frequency === 'weekly' ? 'Weekly Intelligence Summary' : frequency === 'every_3_days' ? '3-Day Market Momentum' : frequency === 'flash_only' ? 'Flash Deal Intelligence' : 'Executive Intelligence Summary'}
+                    </div>
                     <p className="text-gray-300 text-xs leading-relaxed">{report ? report.executiveSummary : 'Analyzing market data and formulating strategy...'}</p>
                   </div>
 
@@ -450,7 +466,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
                             <span className="text-emerald-400 font-black tracking-wider text-[10px] uppercase bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/40">
-                              ↘ Top Daily Drop
+                              {frequency === 'weekly' ? '↘ Top Weekly Drop' : frequency === 'every_3_days' ? '↘ Top 3-Day Drop' : frequency === 'flash_only' ? '⚡ Flash Drop' : '↘ Top Daily Drop'}
                             </span>
                             {report?.biggestDrop?.isAllTimeLow && (
                               <span className="bg-purple-950 text-purple-300 text-[10px] px-2 py-0.5 rounded font-black border border-purple-800/40">
@@ -469,8 +485,12 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                           <span className="text-emerald-400 font-black text-base">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">24h Drop</span>
-                          <span className="text-white font-bold text-base">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">
+                            {frequency === 'weekly' ? '7d Drop' : frequency === 'every_3_days' ? '3d Drop' : 'Drop'}
+                          </span>
+                          <span className="text-white font-bold text-base">
+                            -${Math.abs(frequency === 'weekly' ? (report?.biggestDrop?.change7d?.amount || 0) : (report?.biggestDrop?.change24h?.amount || 0)).toFixed(2)}
+                          </span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-gray-500 text-[10px] font-bold uppercase">Retailer</span>
@@ -492,7 +512,8 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                         const p7 = Number(itemSummary?.item?.previousPrice7d || 0);
                         const p24 = Number(itemSummary?.item?.previousPrice24h || 0);
                         const curr = Number(itemSummary?.item?.currentPrice || 0);
-                        const isDrop = (itemSummary?.change24h?.amount || 0) < 0;
+                        const displayDrop = frequency === 'weekly' ? (itemSummary?.change7d?.amount || 0) : (itemSummary?.change24h?.amount || 0);
+                        const isDrop = displayDrop < 0;
 
                         return (
                           <div key={itemSummary?.item?.id || Math.random()} className="bg-black/30 p-3.5 rounded-xl border border-white/5 hover:border-cyan-800/40 transition-all">
@@ -507,7 +528,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                                 <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
                                 {isDrop ? (
                                   <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                                    -${Math.abs(itemSummary.change24h.amount).toFixed(2)}
+                                    -${Math.abs(displayDrop).toFixed(2)} {frequency === 'weekly' ? '(7d)' : ''}
                                   </span>
                                 ) : (
                                   <span className="text-gray-500 font-medium text-xs">Stable</span>
@@ -566,7 +587,9 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     <span className="bg-[#5865F2] text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
                       <Check className="w-3 h-3" /> Bot
                     </span>
-                    <span className="text-xs text-[#72767d] ml-1">Today at 8:00 AM</span>
+                    <span className="text-xs text-[#72767d] ml-1">
+                      {frequency === 'weekly' ? 'Weekly Digest' : frequency === 'every_3_days' ? '3-Day Digest' : frequency === 'flash_only' ? 'Flash Alert' : 'Daily Digest'}
+                    </span>
                   </div>
                   
                   <div className="pl-1">
@@ -575,11 +598,13 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                     
                     {report?.biggestDrop && (
                       <div className="bg-[#2f3136] border border-[#202225] rounded p-3 mb-4 border-l-4 border-l-emerald-500">
-                        <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">Top Daily Drop</div>
+                        <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">
+                          {frequency === 'weekly' ? 'Top Weekly Drop' : frequency === 'every_3_days' ? 'Top 3-Day Drop' : 'Top Deal Drop'}
+                        </div>
                         <div className="font-bold text-white text-sm mb-1">{cleanDisplayTitle(report?.biggestDrop?.item?.componentName || '')}</div>
                         <div className="text-xs text-[#b9bbbe]">
                           Now: <span className="text-emerald-400 font-bold">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span> • 
-                          Drop: <span className="text-white font-bold">-${Math.abs(report?.biggestDrop?.change24h?.amount || 0).toFixed(2)}</span> • 
+                          Drop: <span className="text-white font-bold">-${Math.abs(frequency === 'weekly' ? (report?.biggestDrop?.change7d?.amount || 0) : (report?.biggestDrop?.change24h?.amount || 0)).toFixed(2)}</span> • 
                           <span className="text-[#00b0f4] ml-1">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
                         </div>
                       </div>
