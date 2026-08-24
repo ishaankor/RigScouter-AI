@@ -126,6 +126,10 @@ export function DealRadar() {
         if (payload.bestOffer) refreshDeals();
       });
 
+      es.addEventListener('agent_error', () => {
+        setCurrentlyScraping(null);
+      });
+
       es.addEventListener('scheduler_error', () => {
         setCurrentlyScraping(null);
       });

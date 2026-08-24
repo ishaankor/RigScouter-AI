@@ -19,7 +19,8 @@ import {
   Globe,
   Database,
   Lock,
-  LogIn
+  LogIn,
+  X
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
@@ -48,6 +49,20 @@ export function WatchlistManager({
   const [liveQuery, setLiveQuery] = useState('');
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeNotice, setScrapeNotice] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<{
+    title: string;
+    message: string;
+    query?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (searchError) {
+      const timer = setTimeout(() => {
+        setSearchError(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchError]);
 
   // Dynamic Retailer selection state (itemId -> retailerName)
   const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
@@ -475,19 +490,56 @@ export function WatchlistManager({
       }
     });
 
-    es.addEventListener('agent_complete', (e: MessageEvent) => {
-      const payload = JSON.parse(e.data);
-      const isMatch = (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
-                      payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
-                      payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
-                      queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
-                      
-      if (isMatch) {
-        setIsScraping(false);
-        if (payload.summary && !payload.bestOffer) {
-          setScrapeNotice(payload.summary);
+    es.addEventListener('agent_error', (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const isMatch = (payload.pending_id && payload.pending_id === pendingId) ||
+                        (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) ||
+                        (payload.query && payload.query.toLowerCase() === queryToScrape.toLowerCase());
+        if (isMatch) {
+          setIsScraping(false);
+          // Remove pending placeholder item from watchlist
+          setWatchlist(prev => prev.filter(item => item.id !== pendingId));
+          setSearchError({
+            title: payload.error_type === 'GENERIC_QUERY_ERROR' ? 'Search Too Broad' :
+                   payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ? 'Item Not Supported' :
+                   'Search Error',
+            message: payload.message || payload.error || `Could not find live pricing for "${payload.original_query || payload.query || queryToScrape}".`,
+            query: payload.original_query || payload.query || queryToScrape
+          });
+          es.close();
         }
-        es.close();
+      } catch (err) {
+        console.warn('agent_error parse error:', err);
+      }
+    });
+
+    es.addEventListener('agent_complete', (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const isMatch = (payload.pending_id && payload.pending_id === pendingId) ||
+                        (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
+                        payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
+                        payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
+                        queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
+                        
+        if (isMatch) {
+          setIsScraping(false);
+          if (!payload.bestOffer || payload.is_error) {
+            // Remove the empty/pending placeholder card from the watchlist
+            setWatchlist(prev => prev.filter(item => item.id !== pendingId));
+            setSearchError({
+              title: payload.error_type === 'GENERIC_QUERY_ERROR' ? 'Search Too Broad' :
+                     payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ? 'Item Not Supported' :
+                     'No Live Prices Found',
+              message: payload.summary || `No live retailer listings found for "${payload.original_query || payload.query || queryToScrape}".`,
+              query: payload.original_query || payload.query || queryToScrape
+            });
+          }
+          es.close();
+        }
+      } catch (err) {
+        console.warn('agent_complete parse error:', err);
       }
     });
 
@@ -672,6 +724,36 @@ export function WatchlistManager({
           </button>
         </div>
       </div>
+
+      {/* Search Error / Warning Notice */}
+      {searchError && (
+        <div className="bg-amber-950/70 border border-amber-500/50 p-4 rounded-2xl flex items-start justify-between gap-3 shadow-xl shadow-amber-950/40 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-amber-200">{searchError.title}</h4>
+                {searchError.query && (
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-black/50 text-amber-300 border border-amber-800/50">
+                    &quot;{searchError.query}&quot;
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-amber-300/90 mt-1 leading-relaxed">
+                {searchError.message}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSearchError(null)}
+            className="text-amber-400/60 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-900/40 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Main Tabs */}
       <div className="flex items-center gap-4 border-b border-gray-800 pb-2">
