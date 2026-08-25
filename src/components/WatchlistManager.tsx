@@ -20,7 +20,9 @@ import {
   Database,
   Lock,
   LogIn,
-  X
+  X,
+  Edit3,
+  Check
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
@@ -686,10 +688,78 @@ export function WatchlistManager({
     }
   };
 
-  const toggleNotification = (id: string) => {
+  // Target Alert Editing State
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [tempTargetPrice, setTempTargetPrice] = useState<string>('');
+
+  const startEditingTarget = (item: WatchlistItem, currentEffectivePrice: number) => {
+    setEditingTargetId(item.id);
+    const initialVal = item.targetPrice && item.targetPrice > 0 
+      ? item.targetPrice 
+      : (currentEffectivePrice > 0 ? Math.round(currentEffectivePrice * 0.9 * 100) / 100 : 0);
+    setTempTargetPrice(initialVal > 0 ? String(initialVal) : '');
+  };
+
+  const saveTargetPrice = async (itemId: string) => {
+    const newPrice = parseFloat(tempTargetPrice);
+    if (isNaN(newPrice) || newPrice <= 0) {
+      setEditingTargetId(null);
+      return;
+    }
+
+    const targetItem = watchlist.find(i => i.id === itemId);
+    setWatchlist(prev => prev.map(i => i.id === itemId ? { ...i, targetPrice: newPrice } : i));
+    setEditingTargetId(null);
+
+    if (targetItem) {
+      const collectedIds: string[] = [];
+      if (targetItem.id) collectedIds.push(targetItem.id);
+      if (targetItem.dbRowIds && Array.isArray(targetItem.dbRowIds)) {
+        collectedIds.push(...targetItem.dbRowIds);
+      }
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validUuids = Array.from(new Set(collectedIds.filter(i => uuidRegex.test(i))));
+
+      if (validUuids.length > 0) {
+        try {
+          await supabase
+            .from('watchlist_items')
+            .update({ target_price: newPrice })
+            .in('id', validUuids);
+        } catch (e) {
+          console.warn('Failed to persist target price to DB:', e);
+        }
+      }
+    }
+  };
+
+  const toggleNotification = async (id: string) => {
+    const targetItem = watchlist.find(item => item.id === id);
+    if (!targetItem) return;
+    const newStatus = !targetItem.notifyOnFlashDrop;
+
     setWatchlist(prev =>
-      prev.map(item => (item.id === id ? { ...item, notifyOnFlashDrop: !item.notifyOnFlashDrop } : item))
+      prev.map(item => (item.id === id ? { ...item, notifyOnFlashDrop: newStatus } : item))
     );
+
+    const collectedIds: string[] = [];
+    if (targetItem.id) collectedIds.push(targetItem.id);
+    if (targetItem.dbRowIds && Array.isArray(targetItem.dbRowIds)) {
+      collectedIds.push(...targetItem.dbRowIds);
+    }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = Array.from(new Set(collectedIds.filter(i => uuidRegex.test(i))));
+
+    if (validUuids.length > 0) {
+      try {
+        await supabase
+          .from('watchlist_items')
+          .update({ notify_on_flash_drop: newStatus })
+          .in('id', validUuids);
+      } catch (e) {
+        console.warn('Failed to persist alert status to DB:', e);
+      }
+    }
   };
 
   const getPreviousPrice = (item: WatchlistItem, effectiveOffer?: any) => {
@@ -711,10 +781,14 @@ export function WatchlistManager({
   };
 
   const calculateDrop = (current: number, previous?: number) => {
-    if (!previous || previous <= 0 || Math.abs(previous - current) < 0.01) return { diff: 0, percent: 0 };
-    const diff = previous - current;
-    const percent = (diff / previous) * 100;
-    return { diff, percent };
+    if (!previous || previous <= 0 || Math.abs(previous - current) < 0.01) {
+      return { diff: 0, percent: 0, isDrop: false, isIncrease: false };
+    }
+    const diff = previous - current; // positive if dropped, negative if increased
+    const percent = (Math.abs(diff) / previous) * 100;
+    const isDrop = diff > 0;
+    const isIncrease = diff < 0;
+    return { diff: Math.abs(diff), percent, isDrop, isIncrease };
   };
 
   return (
@@ -900,9 +974,13 @@ export function WatchlistManager({
                   {watchlist.map(item => {
                     const effective = getEffectiveOffer(item);
                     const prevPrice = getPreviousPrice(item, effective);
-                    const { diff, percent } = calculateDrop(effective.currentPrice, prevPrice);
-                    const isDrop = diff > 0;
-                    const isTargetHit = effective.currentPrice <= item.targetPrice;
+                    const { diff, percent, isDrop, isIncrease } = calculateDrop(effective.currentPrice, prevPrice);
+                    const isTargetHit = effective.currentPrice > 0 && item.targetPrice > 0 && effective.currentPrice <= item.targetPrice;
+
+                    const rawATL = Number(item.allTimeLow || 0);
+                    const currentP = Number(effective.currentPrice || 0);
+                    const atl = rawATL > 0 ? (currentP > 0 && currentP < rawATL ? currentP : rawATL) : (currentP > 0 ? currentP : (Number(item.currentPrice || 0)));
+                    const isCurrentATL = currentP > 0 && currentP <= atl;
 
                     return (
                       <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
@@ -952,14 +1030,81 @@ export function WatchlistManager({
                           )}
                         </td>
 
-                        <td className="p-4 font-mono font-bold text-gray-300">${Number(item.targetPrice || 0).toFixed(2)}</td>
-
+                        {/* 1. Interactive Inline Target Alert Editor */}
                         <td className="p-4">
-                          {prevPrice && prevPrice > 0 && prevPrice !== effective.currentPrice ? (
+                          {editingTargetId === item.id ? (
+                            <div className="flex flex-col gap-1.5 min-w-[140px]">
+                              <div className="flex items-center gap-1">
+                                <span className="text-gray-400 font-bold text-xs">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  autoFocus
+                                  value={tempTargetPrice}
+                                  onChange={(e) => setTempTargetPrice(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveTargetPrice(item.id);
+                                    if (e.key === 'Escape') setEditingTargetId(null);
+                                  }}
+                                  className="w-20 bg-black/90 border border-cyan-500/70 text-white font-mono text-xs px-2 py-1 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                                />
+                                <button
+                                  onClick={() => saveTargetPrice(item.id)}
+                                  className="p-1 bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 rounded-md border border-cyan-500/50 transition-colors cursor-pointer"
+                                  title="Save Target Alert"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingTargetId(null)}
+                                  className="p-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-md border border-gray-700 transition-colors cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {/* Quick discount presets */}
+                              {effective.currentPrice > 0 && (
+                                <div className="flex items-center gap-1">
+                                  {[-5, -10, -20].map((pct) => {
+                                    const presetPrice = (effective.currentPrice * (1 + pct / 100)).toFixed(2);
+                                    return (
+                                      <button
+                                        key={pct}
+                                        type="button"
+                                        onClick={() => setTempTargetPrice(presetPrice)}
+                                        className="text-[9px] px-1.5 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-cyan-800/60 text-cyan-400 font-bold transition-all cursor-pointer"
+                                      >
+                                        {pct}%
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => startEditingTarget(item, effective.currentPrice)}
+                              className="group inline-flex items-center gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-gray-800/60 border border-transparent hover:border-gray-700 transition-all"
+                              title="Click to set custom target price alert"
+                            >
+                              <span className="font-mono font-bold text-gray-200 group-hover:text-cyan-300 transition-colors">
+                                ${Number(item.targetPrice || 0).toFixed(2)}
+                              </span>
+                              <Edit3 className="w-3 h-3 text-gray-500 group-hover:text-cyan-400 opacity-40 group-hover:opacity-100 transition-all" />
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 2. Price Delta with Correct Math & Direction */}
+                        <td className="p-4">
+                          {prevPrice && prevPrice > 0 && Math.abs(prevPrice - effective.currentPrice) >= 0.01 ? (
                             <>
                               <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
-                                <span>${Math.abs(diff || 0).toFixed(2)} ({Number(percent || 0).toFixed(1)}%)</span>
+                                <span>
+                                  {isDrop ? '-' : '+'}${Number(diff || 0).toFixed(2)} ({isDrop ? '-' : '+'}{Number(percent || 0).toFixed(1)}%)
+                                </span>
                               </div>
                               <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
                             </>
@@ -971,18 +1116,32 @@ export function WatchlistManager({
                           )}
                         </td>
 
-                        <td className="p-4 font-mono text-gray-400">${Number(item.allTimeLow || 0).toFixed(2)}</td>
+                        {/* 3. 90-Day Low (Guaranteed non-zero fallback & ATL badge) */}
+                        <td className="p-4 font-mono">
+                          <div className="flex items-center gap-1.5">
+                            <span className={isCurrentATL ? 'text-purple-300 font-bold' : 'text-gray-400'}>
+                              ${atl > 0 ? atl.toFixed(2) : Number(effective.currentPrice || 0).toFixed(2)}
+                            </span>
+                            {isCurrentATL && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-800/50 flex items-center gap-0.5">
+                                <Flame className="w-2.5 h-2.5 text-purple-400" /> LOW
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
+                        {/* 4. Alerts Bell Button (Persisted to Database) */}
                         <td className="p-4 text-center">
                           <button
                             onClick={() => toggleNotification(item.id)}
-                            className={`p-2 rounded-xl border transition-all ${
+                            className={`p-2 rounded-xl border transition-all cursor-pointer ${
                               item.notifyOnFlashDrop
-                                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400'
-                                : 'bg-gray-900 border-gray-800 text-gray-600'
+                                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                                : 'bg-gray-900 border-gray-800 text-gray-600 hover:text-gray-400'
                             }`}
+                            title={item.notifyOnFlashDrop ? 'Flash Drop Alert Enabled (Active)' : 'Click to Enable Flash Drop Alert'}
                           >
-                            <Bell className="w-4 h-4" />
+                            <Bell className={`w-4 h-4 ${item.notifyOnFlashDrop ? 'fill-cyan-400/20' : ''}`} />
                           </button>
                         </td>
 
