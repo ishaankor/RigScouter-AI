@@ -275,28 +275,57 @@ export async function PATCH(req: NextRequest) {
       .map(i => String(i).replace(/^(w-|hw-|comp-)/, ''))
       .filter(i => uuidRegex.test(i));
 
+    // 1. Find existing rows matching the UUIDs or component name
+    let matchedRows: any[] = [];
     if (validUuids.length > 0) {
-      await supabaseAdmin
+      const { data: byId } = await supabaseAdmin
         .from('watchlist_items')
-        .update(updates)
+        .select('*')
         .in('id', validUuids);
+      if (byId && byId.length > 0) {
+        matchedRows.push(...byId);
+      }
     }
 
-    if (userId && componentName) {
-      await supabaseAdmin
+    if (userId && componentName && matchedRows.length === 0) {
+      const cleanName = String(componentName).replace(/[^a-zA-Z0-9\s]/g, ' ').trim().slice(0, 30);
+      const { data: byName } = await supabaseAdmin
         .from('watchlist_items')
-        .update(updates)
+        .select('*')
         .eq('user_id', userId)
-        .ilike('component_name', `%${String(componentName).slice(0, 30)}%`);
+        .ilike('component_name', `%${cleanName}%`);
+      if (byName && byName.length > 0) {
+        matchedRows.push(...byName);
+      }
     }
 
-    // Also update hardware_components if user-tagged
+    // 2. Perform atomic replace (delete + insert) to bypass PostgreSQL RLS update restrictions
+    for (const row of matchedRows) {
+      await supabaseAdmin.from('watchlist_items').delete().eq('id', row.id);
+      const updatedRow = {
+        user_id: row.user_id,
+        component_id: row.component_id,
+        component_name: row.component_name,
+        category: row.category,
+        target_price: updates.target_price !== undefined ? updates.target_price : row.target_price,
+        previous_price_24h: row.previous_price_24h,
+        previous_price_7d: row.previous_price_7d,
+        previous_price_30d: row.previous_price_30d,
+        all_time_low: row.all_time_low,
+        created_at: row.created_at,
+        added_at: row.added_at,
+      };
+      await supabaseAdmin.from('watchlist_items').insert(updatedRow);
+    }
+
+    // 3. Also update hardware_components if user-tagged
     if (userId && componentName && typeof targetPrice === 'number') {
       try {
+        const cleanName = String(componentName).replace(/[^a-zA-Z0-9\s]/g, ' ').trim().slice(0, 30);
         const { data: hwItems } = await supabaseAdmin
           .from('hardware_components')
           .select('id, specs')
-          .ilike('name', `%${String(componentName).slice(0, 30)}%`);
+          .ilike('name', `%${cleanName}%`);
 
         if (hwItems && hwItems.length > 0) {
           for (const h of hwItems) {
@@ -315,7 +344,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, updates });
+    return NextResponse.json({ success: true, updates, updatedCount: matchedRows.length });
   } catch (e: any) {
     console.error('[/api/watchlist PATCH Error]:', e?.message || e);
     return NextResponse.json({ error: e?.message || 'Watchlist update failed' }, { status: 500 });
