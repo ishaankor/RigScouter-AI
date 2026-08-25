@@ -352,27 +352,22 @@ export function WatchlistManager({
 
         // Recover pending scrapes from sessionStorage if user is signed in
         let recoveredPending: WatchlistItem[] = [];
-        if (user?.id) {
-          try {
-            const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
-            const now = Date.now();
-            
-            const activePending = stored.filter((p: WatchlistItem) => {
-              const isOld = now - new Date(p.addedAt).getTime() > 3 * 60 * 1000; // Drop after 3 mins
-              const isInDb = formatted.some((f) => (f.id && p.id && f.id.includes(p.id)) || (f.componentName || '').toLowerCase() === (p.componentName || '').toLowerCase());
-              return !isOld && !isInDb;
-            });
-            
-            sessionStorage.setItem('pendingScrapes', JSON.stringify(activePending));
-            recoveredPending = activePending;
-          } catch (e) {}
-        } else {
-          try {
-            sessionStorage.removeItem('pendingScrapes');
-          } catch (e) {}
-        }
+        const rawList = user?.id ? [...recoveredPending, ...formatted] : [];
+        const seenIds = new Set<string>();
+        const seenKeys = new Set<string>();
+        const dedupedList: WatchlistItem[] = [];
 
-        setWatchlist(user?.id ? [...recoveredPending, ...formatted] : []);
+        rawList.forEach((item) => {
+          const normKey = getNormalizedKey(item);
+          const rawId = item.id || `gen-${normKey}`;
+          if (normKey && !seenKeys.has(normKey) && !seenIds.has(rawId)) {
+            seenKeys.add(normKey);
+            seenIds.add(rawId);
+            dedupedList.push(item);
+          }
+        });
+
+        setWatchlist(dedupedList);
 
         if (hwCatalog && hwCatalog.length > 0) {
           const formattedTrending = hwCatalog.map((item: any) => {
@@ -1138,7 +1133,7 @@ export function WatchlistManager({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/50">
-                  {watchlist.map(item => {
+                  {watchlist.map((item, idx) => {
                     const effective = getEffectiveOffer(item);
                     const prevPrice = getPreviousPrice(item, effective);
                     const { diff, percent, isDrop, isIncrease } = calculateDrop(effective.currentPrice, prevPrice);
@@ -1150,7 +1145,7 @@ export function WatchlistManager({
                     const isCurrentATL = currentP > 0 && currentP <= atl;
 
                     return (
-                      <tr key={item.id} className="hover:bg-gray-900/40 transition-colors">
+                      <tr key={`${item.id || 'item'}-${idx}`} className="hover:bg-gray-900/40 transition-colors">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <img
@@ -1343,12 +1338,12 @@ export function WatchlistManager({
       ) : (
         /* Trending Items Grid (Individual Retailer Deals) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {trendingItems.map(item => {
+          {trendingItems.map((item, idx) => {
             const price = Number(item.currentPrice || 0);
             const msrp = Number(item.msrp || price);
 
             return (
-              <div key={item.id} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
+              <div key={`${item.id || 'trending'}-${idx}`} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/40">

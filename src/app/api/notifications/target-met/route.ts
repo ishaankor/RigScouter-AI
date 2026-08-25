@@ -218,7 +218,8 @@ export async function POST(req: NextRequest) {
       imageUrl
     });
 
-    const fromAddress = process.env.RESEND_FROM_EMAIL || 'RigScouter Alerts <alerts@updates.ishaankoradia.com>';
+    const senderDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
+    const fromAddress = process.env.RESEND_FROM_EMAIL || `RigScouter Alerts <${senderDomain}>`;
     const subject = `🎯 Target Price Met! ${componentName} is $${currentPrice.toFixed(2)} at ${retailer}`;
 
     const resendResult = await sendResendEmail({
