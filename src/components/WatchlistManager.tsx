@@ -254,10 +254,13 @@ export function WatchlistManager({
                 if (item.id && !existing.dbRowIds.includes(item.id)) {
                   existing.dbRowIds.push(item.id);
                 }
-                // Prefer lowest price
+                // Preserve valid target_price
+                if ((!existing.target_price || Number(existing.target_price) <= 0) && item.target_price && Number(item.target_price) > 0) {
+                  existing.target_price = item.target_price;
+                }
+                // Prefer lowest price for all_time_low
                 if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
                   existing.all_time_low = item.all_time_low;
-                  existing.target_price = item.target_price;
                 }
               }
             });
@@ -268,8 +271,8 @@ export function WatchlistManager({
               userId: group.user_id,
               componentName: group.component_name,
               category: group.category || 'GPU',
-              targetPrice: group.target_price || 0,
-              currentPrice: group.all_time_low || group.target_price || 0,
+              targetPrice: Number(group.target_price || 0),
+              currentPrice: Number(group.all_time_low || group.target_price || 0),
               previousPrice24h: group.previous_price_24h,
               previousPrice7d: group.previous_price_7d,
               previousPrice30d: group.previous_price_30d,
@@ -278,7 +281,7 @@ export function WatchlistManager({
               productUrl: '#',
               imageUrl: getCategoryImage(group.category || 'GPU'),
               inStock: true,
-              notifyOnFlashDrop: true,
+              notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
               addedAt: group.added_at,
               specs: { RetailerOffers: group.RetailerOffers || [] }
             }));
@@ -303,12 +306,13 @@ export function WatchlistManager({
               if (isUserItem) {
                 const key = getNormalizedKey(item);
                 if (key && !formatted.some(f => getNormalizedKey(f) === key) && !userHwMap.has(key)) {
+                  const savedTarget = Number(specs.target_price || item.target_price || 0);
                   userHwMap.set(key, {
                     id: `w-${item.id}`,
                     userId: userId,
                     componentName: item.name,
                     category: item.category || 'GPU',
-                    targetPrice: item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price || 0,
+                    targetPrice: savedTarget > 0 ? savedTarget : (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price || 0),
                     currentPrice: item.current_price || 0,
                     previousPrice24h: undefined,
                     previousPrice7d: undefined,
@@ -711,23 +715,78 @@ export function WatchlistManager({
     setWatchlist(prev => prev.map(i => i.id === itemId ? { ...i, targetPrice: newPrice } : i));
     setEditingTargetId(null);
 
-    if (targetItem) {
-      const collectedIds: string[] = [];
-      if (targetItem.id) collectedIds.push(targetItem.id);
-      if (targetItem.dbRowIds && Array.isArray(targetItem.dbRowIds)) {
-        collectedIds.push(...targetItem.dbRowIds);
-      }
+    if (targetItem && user?.id) {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const validUuids = Array.from(new Set(collectedIds.filter(i => uuidRegex.test(i))));
+      const rawIds = [targetItem.id, ...(targetItem.dbRowIds || [])];
+      const validUuids: string[] = [];
+      
+      rawIds.forEach(idStr => {
+        if (!idStr) return;
+        const clean = String(idStr).replace(/^(w-|hw-|comp-)/, '');
+        if (uuidRegex.test(clean)) {
+          validUuids.push(clean);
+        }
+      });
 
-      if (validUuids.length > 0) {
-        try {
+      // 1. Direct Supabase client update
+      try {
+        if (validUuids.length > 0) {
           await supabase
             .from('watchlist_items')
             .update({ target_price: newPrice })
             .in('id', validUuids);
-        } catch (e) {
-          console.warn('Failed to persist target price to DB:', e);
+        }
+
+        if (targetItem.componentName) {
+          await supabase
+            .from('watchlist_items')
+            .update({ target_price: newPrice })
+            .eq('user_id', user.id)
+            .ilike('component_name', `%${targetItem.componentName.slice(0, 30)}%`);
+        }
+      } catch (e: any) {
+        console.warn('Direct Supabase update notice:', e?.message || e);
+      }
+
+      // 2. Server API PATCH fallback (uses supabaseAdmin to guarantee persistence)
+      try {
+        await fetch('/api/watchlist', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetItem.id,
+            ids: targetItem.dbRowIds || [],
+            userId: user.id,
+            componentName: targetItem.componentName,
+            targetPrice: newPrice
+          })
+        });
+      } catch (patchErr) {
+        console.warn('PATCH /api/watchlist notice:', patchErr);
+      }
+
+      // 3. If target price is met and alerts are enabled, send immediate alert email!
+      const effectiveOffer = getEffectiveOffer(targetItem);
+      const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
+      if (currentPrice > 0 && newPrice >= currentPrice && targetItem.notifyOnFlashDrop) {
+        try {
+          fetch('/api/notifications/target-met', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user.id,
+              userEmail: user.email,
+              componentName: targetItem.componentName,
+              category: targetItem.category,
+              targetPrice: newPrice,
+              currentPrice: currentPrice,
+              retailer: effectiveOffer.retailer || targetItem.retailer || 'Amazon',
+              productUrl: effectiveOffer.productUrl || targetItem.productUrl || '#',
+              imageUrl: targetItem.imageUrl
+            })
+          }).catch(err => console.warn('Instant alert trigger error:', err));
+        } catch (alertErr) {
+          console.warn('Instant alert trigger exception:', alertErr);
         }
       }
     }
@@ -742,22 +801,82 @@ export function WatchlistManager({
       prev.map(item => (item.id === id ? { ...item, notifyOnFlashDrop: newStatus } : item))
     );
 
-    const collectedIds: string[] = [];
-    if (targetItem.id) collectedIds.push(targetItem.id);
-    if (targetItem.dbRowIds && Array.isArray(targetItem.dbRowIds)) {
-      collectedIds.push(...targetItem.dbRowIds);
-    }
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const validUuids = Array.from(new Set(collectedIds.filter(i => uuidRegex.test(i))));
+    if (targetItem && user?.id) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const rawIds = [targetItem.id, ...(targetItem.dbRowIds || [])];
+      const validUuids: string[] = [];
+      
+      rawIds.forEach(idStr => {
+        if (!idStr) return;
+        const clean = String(idStr).replace(/^(w-|hw-|comp-)/, '');
+        if (uuidRegex.test(clean)) {
+          validUuids.push(clean);
+        }
+      });
 
-    if (validUuids.length > 0) {
+      // 1. Direct Supabase client update
       try {
-        await supabase
-          .from('watchlist_items')
-          .update({ notify_on_flash_drop: newStatus })
-          .in('id', validUuids);
-      } catch (e) {
-        console.warn('Failed to persist alert status to DB:', e);
+        if (validUuids.length > 0) {
+          await supabase
+            .from('watchlist_items')
+            .update({ notify_on_flash_drop: newStatus })
+            .in('id', validUuids);
+        }
+
+        if (targetItem.componentName) {
+          await supabase
+            .from('watchlist_items')
+            .update({ notify_on_flash_drop: newStatus })
+            .eq('user_id', user.id)
+            .ilike('component_name', `%${targetItem.componentName.slice(0, 30)}%`);
+        }
+      } catch (e: any) {
+        console.warn('Direct Supabase update notice:', e?.message || e);
+      }
+
+      // 2. Server API PATCH fallback (guarantees persistence)
+      try {
+        await fetch('/api/watchlist', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetItem.id,
+            ids: targetItem.dbRowIds || [],
+            userId: user.id,
+            componentName: targetItem.componentName,
+            notifyOnFlashDrop: newStatus
+          })
+        });
+      } catch (patchErr) {
+        console.warn('PATCH /api/watchlist notice:', patchErr);
+      }
+
+      // 3. If toggled ON and target price is already met, dispatch immediate alert email!
+      if (newStatus) {
+        const effectiveOffer = getEffectiveOffer(targetItem);
+        const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
+        const targetP = targetItem.targetPrice || 0;
+        if (currentPrice > 0 && targetP > 0 && currentPrice <= targetP) {
+          try {
+            fetch('/api/notifications/target-met', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: user.id,
+                userEmail: user.email,
+                componentName: targetItem.componentName,
+                category: targetItem.category,
+                targetPrice: targetP,
+                currentPrice: currentPrice,
+                retailer: effectiveOffer.retailer || targetItem.retailer || 'Amazon',
+                productUrl: effectiveOffer.productUrl || targetItem.productUrl || '#',
+                imageUrl: targetItem.imageUrl
+              })
+            }).catch(err => console.warn('Instant alert trigger error:', err));
+          } catch (alertErr) {
+            console.warn('Instant alert trigger exception:', alertErr);
+          }
+        }
       }
     }
   };

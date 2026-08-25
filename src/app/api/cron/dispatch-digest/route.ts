@@ -500,16 +500,17 @@ export async function GET(req: NextRequest) {
           continue;
         }
 
-        // For 'flash_only' frequency: check if any component dropped in price or hit all-time low
+        // For 'flash_only' frequency: check if any component dropped in price, hit all-time low, or met target price
         if (!forceDispatch && frequency === 'flash_only') {
           const hasDrop = formattedWatchlist.some((item: any) => {
             const drop24h = (item.previousPrice24h || 0) - item.currentPrice;
             const isATL = item.currentPrice <= item.allTimeLow;
-            return drop24h > 0 || isATL;
+            const isTargetMet = item.targetPrice > 0 && item.currentPrice <= item.targetPrice;
+            return drop24h > 0 || isATL || isTargetMet;
           });
 
           if (!hasDrop) {
-            skipped.push({ userId: pref.user_id, frequency: 'flash_only', reason: 'No active 24h price drops or all-time lows on watchlist' });
+            skipped.push({ userId: pref.user_id, frequency: 'flash_only', reason: 'No active price drops, 90-day lows, or target alert hits in watchlist' });
             continue;
           }
         }

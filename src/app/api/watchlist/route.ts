@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
+import { supabaseAdmin } from '@/lib/db/supabase-admin';
 
 export const runtime = 'edge';
 
@@ -242,3 +243,79 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'Watchlist addition failed' }, { status: 500 });
   }
 }
+
+/**
+ * PATCH /api/watchlist
+ * Updates target_price and/or notify_on_flash_drop for watchlist items.
+ * Uses supabaseAdmin to guarantee updates succeed without RLS blocks.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, ids, userId, componentName, targetPrice, notifyOnFlashDrop } = body;
+
+    const updates: any = {};
+    if (typeof targetPrice === 'number' && targetPrice > 0) {
+      updates.target_price = targetPrice;
+    }
+    if (typeof notifyOnFlashDrop === 'boolean') {
+      updates.notify_on_flash_drop = notifyOnFlashDrop;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No valid updates provided' }, { status: 400 });
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const rawIds = [...(Array.isArray(ids) ? ids : []), id].filter(Boolean);
+    const validUuids = rawIds
+      .map(i => String(i).replace(/^(w-|hw-|comp-)/, ''))
+      .filter(i => uuidRegex.test(i));
+
+    if (validUuids.length > 0) {
+      await supabaseAdmin
+        .from('watchlist_items')
+        .update(updates)
+        .in('id', validUuids);
+    }
+
+    if (userId && componentName) {
+      await supabaseAdmin
+        .from('watchlist_items')
+        .update(updates)
+        .eq('user_id', userId)
+        .ilike('component_name', `%${String(componentName).slice(0, 30)}%`);
+    }
+
+    // Also update hardware_components if user-tagged
+    if (userId && componentName && typeof targetPrice === 'number') {
+      try {
+        const { data: hwItems } = await supabaseAdmin
+          .from('hardware_components')
+          .select('id, specs')
+          .ilike('name', `%${String(componentName).slice(0, 30)}%`);
+
+        if (hwItems && hwItems.length > 0) {
+          for (const h of hwItems) {
+            const specs = typeof h.specs === 'string' ? JSON.parse(h.specs || '{}') : (h.specs || {});
+            if (specs.user_watchlist === userId) {
+              specs.target_price = targetPrice;
+              await supabaseAdmin
+                .from('hardware_components')
+                .update({ specs: JSON.stringify(specs) })
+                .eq('id', h.id);
+            }
+          }
+        }
+      } catch (hwErr) {
+        console.warn('hardware_components target update notice:', hwErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, updates });
+  } catch (e: any) {
+    console.error('[/api/watchlist PATCH Error]:', e?.message || e);
+    return NextResponse.json({ error: e?.message || 'Watchlist update failed' }, { status: 500 });
+  }
+}
+
