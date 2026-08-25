@@ -230,61 +230,78 @@ export function WatchlistManager({
       try {
         let formatted: WatchlistItem[] = [];
 
-        // 1. Direct Supabase DB Table Query for user watchlist items ONLY if user is authenticated
+        // 1. Fetch user watchlist items ONLY if user is authenticated
         if (user?.id) {
           const userId = user.id;
-          const { data: dbItems } = await supabase
-            .from('watchlist_items')
-            .select('*')
-            .eq('user_id', userId)
-            .order('id', { ascending: false });
 
-          if (dbItems && dbItems.length > 0) {
-            // Group by canonical component name so multiple retailer rows show up as ONE consolidated item with retailer dropdown
-            const groupedMap = new Map<string, any>();
-            
-            dbItems.forEach((item: any) => {
-              const key = getNormalizedKey(item);
-              if (!key) return;
-              
-              if (!groupedMap.has(key)) {
-                groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
-              } else {
-                const existing = groupedMap.get(key);
-                if (item.id && !existing.dbRowIds.includes(item.id)) {
-                  existing.dbRowIds.push(item.id);
-                }
-                // Preserve valid target_price
-                if ((!existing.target_price || Number(existing.target_price) <= 0) && item.target_price && Number(item.target_price) > 0) {
-                  existing.target_price = item.target_price;
-                }
-                // Prefer lowest price for all_time_low
-                if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
-                  existing.all_time_low = item.all_time_low;
-                }
+          // Try fetching from /api/watchlist (uses supabaseAdmin service role)
+          try {
+            const apiRes = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
+            if (apiRes.ok) {
+              const apiData = await apiRes.json();
+              if (apiData.items && Array.isArray(apiData.items) && apiData.items.length > 0) {
+                formatted = apiData.items;
               }
-            });
+            }
+          } catch (apiErr) {
+            console.warn('/api/watchlist fetch fallback:', apiErr);
+          }
 
-            formatted = Array.from(groupedMap.values()).map((group: any) => ({
-              id: group.id,
-              dbRowIds: group.dbRowIds,
-              userId: group.user_id,
-              componentName: group.component_name,
-              category: group.category || 'GPU',
-              targetPrice: Number(group.target_price || 0),
-              currentPrice: Number(group.all_time_low || group.target_price || 0),
-              previousPrice24h: group.previous_price_24h,
-              previousPrice7d: group.previous_price_7d,
-              previousPrice30d: group.previous_price_30d,
-              allTimeLow: group.all_time_low,
-              retailer: 'Amazon',
-              productUrl: '#',
-              imageUrl: getCategoryImage(group.category || 'GPU'),
-              inStock: true,
-              notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
-              addedAt: group.added_at,
-              specs: { RetailerOffers: group.RetailerOffers || [] }
-            }));
+          // Fallback to direct client query if server API returned empty
+          if (formatted.length === 0) {
+            const { data: dbItems } = await supabase
+              .from('watchlist_items')
+              .select('*')
+              .eq('user_id', userId)
+              .order('id', { ascending: false });
+
+            if (dbItems && dbItems.length > 0) {
+              // Group by canonical component name so multiple retailer rows show up as ONE consolidated item with retailer dropdown
+              const groupedMap = new Map<string, any>();
+              
+              dbItems.forEach((item: any) => {
+                const key = getNormalizedKey(item);
+                if (!key) return;
+                
+                if (!groupedMap.has(key)) {
+                  groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
+                } else {
+                  const existing = groupedMap.get(key);
+                  if (item.id && !existing.dbRowIds.includes(item.id)) {
+                    existing.dbRowIds.push(item.id);
+                  }
+                  // Preserve valid target_price
+                  if ((!existing.target_price || Number(existing.target_price) <= 0) && item.target_price && Number(item.target_price) > 0) {
+                    existing.target_price = item.target_price;
+                  }
+                  // Prefer lowest price for all_time_low
+                  if (item.all_time_low && (!existing.all_time_low || item.all_time_low < existing.all_time_low)) {
+                    existing.all_time_low = item.all_time_low;
+                  }
+                }
+              });
+
+              formatted = Array.from(groupedMap.values()).map((group: any) => ({
+                id: group.id,
+                dbRowIds: group.dbRowIds,
+                userId: group.user_id,
+                componentName: group.component_name,
+                category: group.category || 'GPU',
+                targetPrice: Number(group.target_price || 0),
+                currentPrice: Number(group.all_time_low || group.target_price || 0),
+                previousPrice24h: group.previous_price_24h,
+                previousPrice7d: group.previous_price_7d,
+                previousPrice30d: group.previous_price_30d,
+                allTimeLow: group.all_time_low,
+                retailer: 'Amazon',
+                productUrl: '#',
+                imageUrl: getCategoryImage(group.category || 'GPU'),
+                inStock: true,
+                notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
+                addedAt: group.added_at,
+                specs: { RetailerOffers: group.RetailerOffers || [] }
+              }));
+            }
           }
         }
 
@@ -765,7 +782,23 @@ export function WatchlistManager({
         console.warn('PATCH /api/watchlist notice:', patchErr);
       }
 
-      // 3. If target price is met and alerts are enabled, send immediate alert email!
+      // 3. Backend Proxy PATCH (guarantees DB persistence across environments)
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      try {
+        fetch(`${BACKEND_URL}/api/watchlist`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetItem.id,
+            ids: targetItem.dbRowIds || [],
+            userId: user.id,
+            componentName: targetItem.componentName,
+            targetPrice: newPrice
+          })
+        }).catch(() => {});
+      } catch (e) {}
+
+      // 4. If target price is met and alerts are enabled, send immediate alert email!
       const effectiveOffer = getEffectiveOffer(targetItem);
       const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
       if (currentPrice > 0 && newPrice >= currentPrice && targetItem.notifyOnFlashDrop) {
@@ -850,6 +883,21 @@ export function WatchlistManager({
       } catch (patchErr) {
         console.warn('PATCH /api/watchlist notice:', patchErr);
       }
+
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      try {
+        fetch(`${BACKEND_URL}/api/watchlist`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: targetItem.id,
+            ids: targetItem.dbRowIds || [],
+            userId: user.id,
+            componentName: targetItem.componentName,
+            notifyOnFlashDrop: newStatus
+          })
+        }).catch(() => {});
+      } catch (e) {}
 
       // 3. If toggled ON and target price is already met, dispatch immediate alert email!
       if (newStatus) {

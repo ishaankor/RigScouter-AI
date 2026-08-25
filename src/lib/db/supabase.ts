@@ -5,7 +5,7 @@ export function getSupabase(): SupabaseClient {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
                       process.env.SUPABASE_ANON_KEY || 
                       process.env.SUPABASE_SERVICE_ROLE_KEY || 
-                      '';
+                      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mem9reGZmaG1lZHZ0dWh5a2R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjY1NjIsImV4cCI6MjEwMTU0MjU2Mn0.pkKw3G6EbD0A3cUydWPA79WE07RJElQdWkRcQXjkUoQ';
   return createClient(supabaseUrl, supabaseKey);
 }
 

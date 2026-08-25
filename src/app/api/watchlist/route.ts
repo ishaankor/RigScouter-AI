@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch User Watchlist Items ONLY if a valid userId is provided
     let rawWatchlist: any[] = [];
     if (userId && userId !== 'guest') {
-      const { data: userWatchlist } = await supabase
+      const { data: userWatchlist } = await supabaseAdmin
         .from('watchlist_items')
         .select('*')
         .eq('user_id', userId)
@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Fetch catalog items for trending hardware
-    const { data: hwCatalog } = await supabase
-      .from('hardware_components')
-      .select('*')
-      .order('updated_at', { ascending: false });
+    const { data: hwCatalog } = await supabaseAdmin
+        .from('hardware_components')
+        .select('*')
+        .order('updated_at', { ascending: false });
 
     let userHwItems: any[] = [];
     if (userId && userId !== 'guest') {
@@ -42,23 +42,26 @@ export async function GET(req: NextRequest) {
             return false;
           }
         })
-        .map(item => ({
-          id: `w-${item.id}`,
-          user_id: userId,
-          component_name: item.name,
-          category: item.category,
-          target_price: item.target_price || (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price),
-          current_price: item.current_price,
-          previous_price_24h: item.previous_price_24h || undefined,
-          previous_price_7d: item.previous_price_7d || undefined,
-          previous_price_30d: item.previous_price_30d || undefined,
-          all_time_low: item.lowest_price_90d || item.current_price,
-          retailer: item.retailer,
-          product_url: item.product_url,
-          image_url: item.image_url,
-          in_stock: true,
-          notify_on_flash_drop: true,
-        }));
+        .map(item => {
+          const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+          return {
+            id: `w-${item.id}`,
+            user_id: userId,
+            component_name: item.name,
+            category: item.category,
+            target_price: Number(specs.target_price || item.target_price || (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price)),
+            current_price: item.current_price,
+            previous_price_24h: item.previous_price_24h || undefined,
+            previous_price_7d: item.previous_price_7d || undefined,
+            previous_price_30d: item.previous_price_30d || undefined,
+            all_time_low: item.lowest_price_90d || item.current_price,
+            retailer: item.retailer,
+            product_url: item.product_url,
+            image_url: item.image_url,
+            in_stock: true,
+            notify_on_flash_drop: true,
+          };
+        });
     }
 
     // Merge without duplicates
