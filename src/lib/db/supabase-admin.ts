@@ -1,12 +1,25 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+let supabaseAdminInstance: SupabaseClient | null = null;
+
 export function getSupabaseAdmin(): SupabaseClient {
+  if (supabaseAdminInstance) return supabaseAdminInstance;
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mfzokxffhmedvtuhykdw.supabase.co';
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
                       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
                       process.env.SUPABASE_ANON_KEY || 
                       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mem9reGZmaG1lZHZ0dWh5a2R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NjY1NjIsImV4cCI6MjEwMTU0MjU2Mn0.pkKw3G6EbD0A3cUydWPA79WE07RJElQdWkRcQXjkUoQ';
-  return createClient(supabaseUrl, supabaseKey);
+
+  supabaseAdminInstance = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    }
+  });
+
+  return supabaseAdminInstance;
 }
 
 export const supabaseAdmin = new Proxy({} as SupabaseClient, {
