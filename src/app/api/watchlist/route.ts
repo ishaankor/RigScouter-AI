@@ -75,24 +75,92 @@ export async function GET(req: NextRequest) {
 
     const combinedList = Array.from(combinedMap.values());
 
-    const formattedWatchlist = combinedList.map(item => ({
-      id: item.id,
-      userId: item.user_id || userId,
-      componentName: item.component_name || item.name,
-      category: item.category || 'GPU',
-      targetPrice: item.target_price,
-      currentPrice: item.current_price,
-      previousPrice24h: item.previous_price_24h || undefined,
-      previousPrice7d: item.previous_price_7d || undefined,
-      previousPrice30d: item.previous_price_30d || undefined,
-      allTimeLow: item.all_time_low || item.current_price,
-      retailer: item.retailer || 'Amazon',
-      productUrl: item.product_url || '#',
-      imageUrl: item.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-      inStock: item.in_stock ?? true,
-      notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-      addedAt: undefined
-    }));
+    const retailerPriority: Record<string, number> = {
+      'Amazon': 1,
+      'Micro Center': 2,
+      'Newegg': 3,
+      'B&H': 4,
+      'Best Buy': 5,
+      'eBay': 6
+    };
+
+    const formattedWatchlist = combinedList.map(item => {
+      const cId = (item.component_id || item.id || '').toLowerCase();
+      const cName = (item.component_name || item.name || '').toLowerCase();
+
+      // Find all matching hardware catalog rows
+      const matches: any[] = [];
+      (hwCatalog || []).forEach((h: any) => {
+        const hId = (h.id || '').toLowerCase();
+        if (hId && cId && (hId === cId || hId.startsWith(cId) || cId.startsWith(hId) || hId.includes(cId) || cId.includes(hId))) {
+          matches.push(h);
+        }
+      });
+
+      if (matches.length === 0) {
+        const cleanName = cName.replace(/[^a-z0-9\s]/g, ' ');
+        const tokens = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'super', 'dual', 'triple'].includes(t));
+        if (tokens.length >= 2) {
+          (hwCatalog || []).forEach((h: any) => {
+            const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''}`.toLowerCase();
+            const score = tokens.filter((t: string) => hText.includes(t)).length;
+            if (score >= 2 && !matches.some((m: any) => m.id === h.id)) {
+              matches.push(h);
+            }
+          });
+        }
+      }
+
+      // Sort matches by retailer reliability & lowest price
+      matches.sort((a: any, b: any) => {
+        const urlA = a.product_url && a.product_url.startsWith('http') ? 0 : 1;
+        const urlB = b.product_url && b.product_url.startsWith('http') ? 0 : 1;
+        if (urlA !== urlB) return urlA - urlB;
+        const pA = retailerPriority[a.retailer] || 99;
+        const pB = retailerPriority[b.retailer] || 99;
+        if (pA !== pB) return pA - pB;
+        return (Number(a.current_price) || 999999) - (Number(b.current_price) || 999999);
+      });
+
+      const bestMatch = matches[0];
+
+      const retailerOffers = matches.map((m: any) => ({
+        id: m.id,
+        retailer: m.retailer,
+        price: Number(m.current_price || 0),
+        originalPrice: Number(m.msrp || m.current_price || 0),
+        title: m.name,
+        url: m.product_url || '#',
+        inStock: true
+      }));
+
+      const finalPrice = bestMatch ? Number(bestMatch.current_price || 0) : Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0);
+      const finalRetailer = bestMatch ? (bestMatch.retailer || 'Amazon') : (item.retailer || 'Amazon');
+      const finalProductUrl = bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#');
+      const finalImageUrl = bestMatch?.image_url || item.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
+
+      return {
+        id: item.id,
+        userId: item.user_id || userId,
+        componentName: item.component_name || item.name,
+        category: item.category || bestMatch?.category || 'GPU',
+        targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.9 * 100) / 100 : 0)),
+        currentPrice: finalPrice,
+        previousPrice24h: item.previous_price_24h || undefined,
+        previousPrice7d: item.previous_price_7d || undefined,
+        previousPrice30d: item.previous_price_30d || undefined,
+        allTimeLow: Number(item.all_time_low || finalPrice),
+        retailer: finalRetailer,
+        productUrl: finalProductUrl,
+        imageUrl: finalImageUrl,
+        inStock: item.in_stock ?? true,
+        notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+        addedAt: item.added_at,
+        specs: {
+          RetailerOffers: retailerOffers
+        }
+      };
+    });
 
     const formattedTrending = (hwCatalog || []).map(item => {
       const current = item.current_price || 0;

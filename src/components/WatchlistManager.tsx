@@ -103,13 +103,19 @@ export function WatchlistManager({
       return (ramMatch[1] + (ramMatch[2] ? ' ' + ramMatch[2] : '')).replace(/[^a-z0-9]+/g, ' ').trim();
     }
 
-    // 5. Fallback: Cleaned alphanumeric slug
+    // 5. Cooler / AIO / Cooling Pattern (e.g. Liquid Freezer III, Kraken, Peerless Assassin, NH-D15, NexXxoS)
+    const coolerMatch = text.match(/\b(liquid\s*freezer\s*(?:iii|ii|pro)?(?:\s*\d{3})?|kraken\s*(?:elite|\d{3})?|peerless\s*assassin|phantom\s*spirit|nh\s*[-_]?d15|nexxxos\s*[a-z0-9]*|masterliquid|icue\s*link|pure\s*loop|arctic\s*acfre[a-z0-9]*)\b/i);
+    if (coolerMatch) {
+      return coolerMatch[0].replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    // 6. Fallback: Cleaned alphanumeric slug
     const cleanId = compId.replace(/^(w-|comp-)/, '').replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
     if (cleanId && cleanId.length > 3) return cleanId;
 
     return text
-      .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake|lenovo|arch memory)\s+/i, '')
-      .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread)\b/gi, ' ')
+      .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake|lenovo|arch memory|arctic)\s+/i, '')
+      .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread|aio|cooler|cpu cooler|water cooling|radiator)\b/gi, ' ')
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
   };
@@ -166,32 +172,34 @@ export function WatchlistManager({
 
     const itemRetailer = item.retailer || '';
     if (itemRetailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === itemRetailer.toLowerCase())) {
-      combinedOffers.push({
-        retailer: itemRetailer,
-        price: Number(item.currentPrice || item.current_price || 0),
-        originalPrice: Number(item.msrp || item.currentPrice || item.current_price || 0),
-        title: item.componentName || item.name || 'Component',
-        url: item.productUrl || item.product_url || '#',
-        inStock: item.inStock ?? true
-      });
+      const explicitPrice = Number(item.currentPrice || item.current_price || item.allTimeLow || item.all_time_low || item.previousPrice24h || item.targetPrice || item.target_price || 0);
+      if (explicitPrice > 0) {
+        combinedOffers.push({
+          retailer: itemRetailer,
+          price: explicitPrice,
+          originalPrice: Number(item.msrp || explicitPrice),
+          title: item.componentName || item.name || 'Component',
+          url: item.productUrl || item.product_url || '#',
+          inStock: item.inStock ?? true
+        });
+      }
     }
 
     // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty)
-    const validOffers = combinedOffers.filter(o => o && o.retailer && o.price > 0 && o.url && o.url !== '#');
+    const validOffers = combinedOffers.filter(o => o && o.retailer && Number(o.price) > 0);
     const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer) || []);
 
-    const defaultFallbackRetailer = item.retailer || finalOffers[0]?.retailer || 'Amazon';
+    const defaultFallbackRetailer = finalOffers[0]?.retailer || item.retailer || 'Amazon';
     const activeRetailer = selectedRetailers[item.id] || defaultFallbackRetailer;
     const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || 
                          finalOffers.find(o => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase()) || 
                          finalOffers[0];
 
-    const isExplicitlySelected = !!selectedRetailers[item.id];
-    
-    const currentPrice = matchedOffer ? Number(matchedOffer.price || 0) : (isExplicitlySelected ? 0 : Number(item.currentPrice ?? item.current_price ?? 0));
-    const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (isExplicitlySelected ? 0 : Number(item.msrp ?? currentPrice));
-    const productUrl = matchedOffer ? (matchedOffer.url || '#') : (isExplicitlySelected ? '#' : (item.productUrl ?? item.product_url ?? '#'));
-    const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : activeRetailer;
+    const rawFallbackPrice = Number(item.currentPrice ?? item.current_price ?? item.allTimeLow ?? item.all_time_low ?? item.previousPrice24h ?? item.targetPrice ?? item.target_price ?? 0);
+    const currentPrice = matchedOffer ? Number(matchedOffer.price || 0) : rawFallbackPrice;
+    const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (item.msrp ? Number(item.msrp) : currentPrice);
+    const productUrl = matchedOffer ? (matchedOffer.url || '#') : (item.productUrl ?? item.product_url ?? '#');
+    const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : (item.retailer || activeRetailer || 'Amazon');
     
     let cleanName = item.componentName ?? item.name ?? 'Component';
     if (cleanName.startsWith('http://') || cleanName.startsWith('https://')) {
@@ -207,7 +215,7 @@ export function WatchlistManager({
       }
     }
     const title = (matchedOffer?.title && !matchedOffer.title.startsWith('http')) ? matchedOffer.title : cleanName;
-    const inStock = matchedOffer ? Boolean(matchedOffer.inStock) : false;
+    const inStock = matchedOffer ? Boolean(matchedOffer.inStock) : true;
 
     const availableRetailers = Array.from(new Set(finalOffers.map(o => o?.retailer))).filter((r): r is string => Boolean(r));
 
