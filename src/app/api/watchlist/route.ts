@@ -84,31 +84,59 @@ export async function GET(req: NextRequest) {
       'eBay': 6
     };
 
+    const PRIMARY_BRANDS = [
+      'asus', 'gigabyte', 'msi', 'zotac', 'pny', 'evga', 'sapphire', 'powercolor', 'xfx', 
+      'asrock', 'inno3d', 'gainward', 'palit', 'galax', 'kfa2', 'samsung', 'western digital', 
+      'wd', 'seagate', 'crucial', 'sk hynix', 'sabrent', 'corsair', 'g.skill', 'gskill', 
+      'kingston', 'teamgroup', 'patriot', 'adata', 'noctua', 'be quiet', 'lian li', 'nzxt', 
+      'fractal', 'thermalright', 'deepcool', 'arctic', 'seasonic', 'super flower', 
+      'thermaltake', 'silverstone', 'cooler master', 'montech', 'phanteks', 'antec', 'logitech', 
+      'razer', 'steelseries', 'wooting', 'keychron', 'hyperx', 'shure', 'elgato', 'rode', 
+      'audio-technica', 'ducky', 'epomaker', 'glorious'
+    ];
+
     const formattedWatchlist = combinedList.map(item => {
       const cId = (item.component_id || item.id || '').toLowerCase();
       const cName = (item.component_name || item.name || '').toLowerCase();
 
-      // Find all matching hardware catalog rows
+      const hasDirectUrl = Boolean(item.product_url && typeof item.product_url === 'string' && item.product_url.startsWith('http') && item.product_url !== '#');
+
+      // Find all matching hardware catalog rows with strict brand and model checks
       const matches: any[] = [];
       (hwCatalog || []).forEach((h: any) => {
         const hId = (h.id || '').toLowerCase();
-        if (hId && cId && (hId === cId || hId.startsWith(cId) || cId.startsWith(hId) || hId.includes(cId) || cId.includes(hId))) {
+        if (hId && cId && (hId === cId || hId.startsWith(cId) || cId.startsWith(hId))) {
           matches.push(h);
         }
       });
 
       if (matches.length === 0) {
-        const cleanName = cName.replace(/[^a-z0-9\s]/g, ' ');
-        const tokens = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'super', 'dual', 'triple'].includes(t));
-        if (tokens.length >= 2) {
-          (hwCatalog || []).forEach((h: any) => {
-            const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''}`.toLowerCase();
-            const score = tokens.filter((t: string) => hText.includes(t)).length;
-            if (score >= 2 && !matches.some((m: any) => m.id === h.id)) {
+        const cBrands = PRIMARY_BRANDS.filter((b: string) => new RegExp(`\\b${b}\\b`, 'i').test(cName));
+        const cleanName = cName.replace(/[^a-z0-9\s]/g, ' ').replace(/\b\d+\s*(?:gb|tb|mb|mhz|ghz|w|bit)\b/g, '');
+        const tokens: string[] = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'super', 'dual', 'triple', 'graphics', 'card', 'desktop', 'processor', 'solid', 'state', 'drive', 'internal', 'nvme', 'power', 'supply', 'memory'].includes(t));
+        const modelTokens = tokens.filter((t: string) => /\d/.test(t) || t.length >= 4);
+
+        (hwCatalog || []).forEach((h: any) => {
+          const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''} ${h.brand || ''}`.toLowerCase();
+          
+          // Brand conflict check: If item specifies brand A, do not match candidate with brand B
+          if (cBrands.length > 0) {
+            const hasBrand = cBrands.some((b: string) => new RegExp(`\\b${b}\\b`, 'i').test(hText));
+            const hasConflict = PRIMARY_BRANDS.some((b: string) => !cBrands.includes(b) && new RegExp(`\\b${b}\\b`, 'i').test(hText));
+            if (!hasBrand && hasConflict) return;
+          }
+
+          // Model token check: All critical digit tokens must match
+          if (modelTokens.length > 0) {
+            const digitTokens = modelTokens.filter((t: string) => /\d/.test(t));
+            if (digitTokens.length > 0 && !digitTokens.every((d: string) => hText.includes(d))) return;
+
+            const score = modelTokens.filter((t: string) => hText.includes(t)).length;
+            if (score >= Math.max(1, modelTokens.length - 1) && !matches.some((m: any) => m.id === h.id)) {
               matches.push(h);
             }
-          });
-        }
+          }
+        });
       }
 
       // Sort matches by retailer reliability & lowest price
@@ -134,10 +162,20 @@ export async function GET(req: NextRequest) {
         inStock: true
       }));
 
-      const finalPrice = bestMatch ? Number(bestMatch.current_price || 0) : Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0);
-      const finalRetailer = bestMatch ? (bestMatch.retailer || 'Amazon') : (item.retailer || 'Amazon');
-      const finalProductUrl = bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#');
-      const finalImageUrl = bestMatch?.image_url || item.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
+      // If user provided a direct verified URL, preserve it; otherwise use bestMatch
+      const finalPrice = hasDirectUrl 
+        ? Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0)
+        : (bestMatch ? Number(bestMatch.current_price || 0) : Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0));
+
+      const finalRetailer = hasDirectUrl 
+        ? (item.retailer || 'Online Retailer')
+        : (bestMatch ? (bestMatch.retailer || 'Amazon') : (item.retailer || 'Amazon'));
+
+      const finalProductUrl = hasDirectUrl 
+        ? item.product_url
+        : (bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#'));
+
+      const finalImageUrl = item.image_url || bestMatch?.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
 
       return {
         id: item.id,
