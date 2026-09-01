@@ -408,7 +408,10 @@ export async function GET(req: NextRequest) {
             .limit(1)
             .maybeSingle();
 
-          const lastSentTime = lastDigest?.generated_at ? new Date(lastDigest.generated_at).getTime() : 0;
+          const dbLastSentTime = lastDigest?.generated_at ? new Date(lastDigest.generated_at).getTime() : 0;
+          const channelLastSentTime = (deliveryChannels as any)?.last_sent_at ? new Date((deliveryChannels as any).last_sent_at).getTime() : 0;
+          const lastSentTime = Math.max(dbLastSentTime, channelLastSentTime);
+
           const hoursSinceLast = lastSentTime > 0 ? (Date.now() - lastSentTime) / (1000 * 60 * 60) : Infinity;
 
           if (frequency === 'daily' && hoursSinceLast < 20) {
@@ -539,15 +542,29 @@ export async function GET(req: NextRequest) {
 
         // 4. Log sent digest into daily_digests table for interval tracking and history
         try {
-          await supabaseAdmin.from('daily_digests').insert({
+          const { error: insertErr } = await supabaseAdmin.from('daily_digests').insert({
             user_id: pref.user_id,
             headline: report.headline,
             executive_summary: report.executiveSummary,
             report_data: report,
             total_saved_opportunity: report.totalSavedOpportunity
           });
+          if (insertErr) {
+            console.error(`[Digest DB Insert Error] User ${pref.user_id}:`, insertErr.message || insertErr);
+          }
         } catch (dbErr: any) {
           console.warn(`Could not log daily_digest record for user ${pref.user_id}:`, dbErr.message);
+        }
+
+        // 5. Update user_preferences delivery_channels with last_sent_at as a fallback safety tracker
+        try {
+          const updatedChannels = { ...deliveryChannels, last_sent_at: new Date().toISOString() };
+          await supabaseAdmin
+            .from('user_preferences')
+            .update({ delivery_channels: updatedChannels, updated_at: new Date().toISOString() })
+            .eq('user_id', pref.user_id);
+        } catch (prefUpdateErr: any) {
+          console.warn(`Could not update last_sent_at in user_preferences for user ${pref.user_id}:`, prefUpdateErr.message);
         }
 
         deliveries.push({ to: targetEmail, frequency, resendId: sendRes?.id, headline: report.headline });

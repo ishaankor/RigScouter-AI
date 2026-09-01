@@ -48,7 +48,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
           body: JSON.stringify({
             api_key: activeKey,
             query: searchQuery,
-            search_depth: 'advanced',
+            search_depth: 'basic',
             max_results: 1,
             include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
           })

@@ -11,7 +11,26 @@
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
--- 2. Unschedule previous digest cron if it exists
+-- 2. Ensure daily_digests table exists and has open RLS policies
+CREATE TABLE IF NOT EXISTS daily_digests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    headline TEXT NOT NULL,
+    executive_summary TEXT NOT NULL,
+    report_data JSONB NOT NULL,
+    total_saved_opportunity DECIMAL(10, 2) DEFAULT 0.00,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE daily_digests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on daily_digests" ON daily_digests;
+CREATE POLICY "Allow all on daily_digests" ON daily_digests FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on user_preferences" ON user_preferences;
+CREATE POLICY "Allow all on user_preferences" ON user_preferences FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. Unschedule previous digest cron if it exists
 DO $$
 DECLARE
     r RECORD;
@@ -21,11 +40,11 @@ BEGIN
     END LOOP;
 END $$;
 
--- 3. Schedule daily dispatch trigger at 08:00 UTC
+-- 4. Schedule daily dispatch trigger at 08:00 UTC
 -- The endpoint on Cloudflare Pages automatically handles interval filtering for:
 -- - 'daily' (every 24h)
--- - 'every_3_days' (every 72h)
--- - 'weekly' (every 7 days)
+-- - 'every_3_days' (every 72h / 68h threshold)
+-- - 'weekly' (every 7 days / 160h threshold)
 -- - 'flash_only' (active price drops only)
 SELECT cron.schedule(
     'dispatch_hardware_digest',
@@ -37,5 +56,5 @@ SELECT cron.schedule(
     $$
 );
 
--- 4. View active cron jobs status
+-- 5. View active cron jobs status
 SELECT jobid, jobname, schedule, active, command FROM cron.job;
