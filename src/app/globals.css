@@ -96,3 +96,54 @@ h1, h2, h3, h4, .font-heading {
   box-shadow: 0 0 30px rgba(79, 172, 254, 0.6);
   transform: translateY(-1px);
 }
+
+/* Secondary Glass Button */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f3f4f6;
+  transition: all 0.2s ease;
+}
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(79, 172, 254, 0.4);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Marquee / Live Ticker Animation */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 35s linear infinite;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
+/* Subtle Pulse Glow */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.03);
+  }
+}
+
+.glow-sphere {
+  animation: pulse-glow 8s ease-in-out infinite;
+}
+

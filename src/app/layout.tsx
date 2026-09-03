@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'RigScouter-AI | Intelligent PC Deal Finder & Automated Price Tracker',
-  description: 'AI agent for scoring PC hardware deals, building custom rigs, and automated daily price digests across major retailers.',
+  title: 'RigScouter-AI | Autonomous PC Hardware Deal Intelligence & Price Tracker',
+  description: 'Autonomous PC hardware deal scouting platform featuring multi-retailer scraping, AI deal scoring, and automated daily price digests across Micro Center, Amazon, Newegg, Best Buy, and B&H Photo.',
 };
 
 export default function RootLayout({
