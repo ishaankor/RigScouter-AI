@@ -45,33 +45,23 @@ export default function DashboardPage() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Header Bar */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-gray-800">
-        <div className="flex items-center gap-4">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-800">
+        <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-900 border border-gray-800 text-gray-400 hover:text-white hover:border-gray-700 text-xs font-semibold transition-all group"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-white hover:border-gray-700 text-xs font-semibold transition-all group"
           >
             <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
             <span>Home</span>
           </Link>
 
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <Cpu className="w-6 h-6 text-white" />
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+              <Cpu className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-black font-heading tracking-tight gradient-text-blue">
-                  RigScouter<span className="text-white">-AI</span>
-                </h1>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
-                  Live App
-                </span>
-              </div>
-              <p className="text-xs text-gray-400">
-                Multi-Retailer Hardware Tracker • AI Deal Scorer • Automated Daily Digest
-              </p>
-            </div>
+            <span className="text-lg font-black font-heading tracking-tight text-white">
+              RigScouter<span className="text-cyan-400">-AI</span>
+            </span>
           </Link>
         </div>
 
