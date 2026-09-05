@@ -164,6 +164,7 @@ export async function GET(req: NextRequest) {
               originalPrice: Number(m.msrp || m.current_price || 0),
               title: m.name,
               url: m.product_url || '#',
+              imageUrl: m.image_url,
               inStock: true
             });
           }
@@ -183,6 +184,7 @@ export async function GET(req: NextRequest) {
                     originalPrice: Number(ro.originalPrice || ro.price || 0),
                     title: ro.title || m.name,
                     url: ro.url || '#',
+                    imageUrl: ro.imageUrl || ro.image_url || m.image_url,
                     inStock: ro.inStock ?? true
                   });
                 }

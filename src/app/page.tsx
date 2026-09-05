@@ -136,27 +136,81 @@ export default function HomePage() {
       </header>
 
       {/* ── Hero Section ───────────────────────────────────────────────── */}
-      <section className="relative pt-16 pb-16 md:pt-24 md:pb-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+      <section className="relative pt-16 pb-16 md:pt-24 md:pb-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6 overflow-visible">
         
+        {/* Overhead Spotlight Beam casting down onto the Title */}
+        <div className="absolute -top-12 sm:-top-20 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[440px] pointer-events-none overflow-visible flex items-center justify-center z-0">
+          {/* Ambient soft glow aura */}
+          <div className="absolute top-2 sm:top-6 w-[340px] sm:w-[580px] h-[240px] bg-gradient-to-b from-cyan-400/25 via-blue-500/10 to-transparent blur-[85px] rounded-full" />
+          
+          {/* Volumetric spotlight cone */}
+          <svg
+            className="w-[520px] sm:w-[780px] md:w-[920px] h-[380px] sm:h-[450px] opacity-80"
+            viewBox="0 0 900 450"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g filter="url(#hero-spotlight-filter)">
+              {/* Expanding conical light beam */}
+              <path
+                d="M450 15 L100 445 L800 445 Z"
+                fill="url(#hero-spotlight-gradient)"
+                fillOpacity="0.45"
+              />
+              {/* Overhead light emitter source */}
+              <ellipse cx="450" cy="22" rx="150" ry="24" fill="#00f2fe" fillOpacity="0.8" />
+              <ellipse cx="450" cy="20" rx="75" ry="12" fill="#ffffff" fillOpacity="0.95" />
+            </g>
+            <defs>
+              <filter
+                id="hero-spotlight-filter"
+                x="-80"
+                y="-50"
+                width="1060"
+                height="550"
+                filterUnits="userSpaceOnUse"
+                colorInterpolationFilters="sRGB"
+              >
+                <feGaussianBlur stdDeviation="40" result="blur" />
+              </filter>
+              <linearGradient
+                id="hero-spotlight-gradient"
+                x1="450"
+                y1="15"
+                x2="450"
+                y2="445"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stopColor="#00f2fe" stopOpacity="0.95" />
+                <stop offset="0.35" stopColor="#38bdf8" stopOpacity="0.55" />
+                <stop offset="0.7" stopColor="#4facfe" stopOpacity="0.2" />
+                <stop offset="1" stopColor="#7928ca" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
         {/* Pill Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold">
+        <div className="relative z-10 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold backdrop-blur-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
           <span>Real-Time PC Hardware Deal Intelligence</span>
         </div>
 
         {/* Master Headline */}
-        <h1 className="text-4xl sm:text-6xl font-black font-heading tracking-tight text-white leading-tight">
-          Scout PC Hardware Deals.{' '}
-          <span className="gradient-text-blue">Never Overpay.</span>
+        <h1 className="relative z-10 text-4xl sm:text-6xl lg:text-7xl font-black font-heading tracking-tight text-white leading-tight">
+          Scout PC Hardware Deals.
+          <span className="block mt-2 sm:mt-3 gradient-text-blue">
+            Never Overpay.
+          </span>
         </h1>
 
         {/* Subheadline */}
-        <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
-          RigScouter continuously crawls Micro Center, Amazon, Newegg, Best Buy, and B&H Photo. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord.
+        <p className="relative z-10 text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
+          RigScouter continuously crawls Amazon and eBay in real-time, with Micro Center, Newegg, Best Buy, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord.
         </p>
 
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <div className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <Link
             href="/dashboard"
             className="w-full sm:w-auto btn-glow px-7 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
@@ -178,8 +232,8 @@ export default function HomePage() {
         {/* Clean Metrics Strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-8 max-w-3xl mx-auto text-center">
           <div className="glass-card p-3.5 rounded-xl border border-gray-800">
-            <div className="text-xl font-black font-heading text-white">5 Retailers</div>
-            <div className="text-[11px] text-gray-400 mt-0.5">Micro Center, Amazon & more</div>
+            <div className="text-xl font-black font-heading text-white">Multi-Retailer</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">Amazon, eBay (Live) + More</div>
           </div>
           <div className="glass-card p-3.5 rounded-xl border border-gray-800">
             <div className="text-xl font-black font-heading text-cyan-400">&lt; 20ms</div>
@@ -290,11 +344,11 @@ export default function HomePage() {
               {/* Retailer Chips */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 {[
-                  { name: 'Micro Center', price: '$549.99', stock: 'In Stock', isLowest: true },
-                  { name: 'Amazon', price: '$589.99', stock: 'In Stock', isLowest: false },
-                  { name: 'Newegg', price: '$599.99', stock: 'In Stock', isLowest: false },
-                  { name: 'Best Buy', price: '$599.99', stock: 'In Stock', isLowest: false },
-                  { name: 'B&H Photo', price: '$619.99', stock: 'Backorder', isLowest: false },
+                  { name: 'Amazon', price: '$549.99', stock: 'In Stock', isLowest: true, active: true },
+                  { name: 'eBay', price: '$569.00', stock: 'In Stock', isLowest: false, active: true },
+                  { name: 'Micro Center', price: '$549.99', stock: 'In-Store', isLowest: false, active: false },
+                  { name: 'Best Buy', price: '$599.99', stock: 'In Stock', isLowest: false, active: false },
+                  { name: 'Newegg', price: '$589.99', stock: 'In Stock', isLowest: false, active: false },
                 ].map((ret) => (
                   <button
                     key={ret.name}
@@ -305,13 +359,17 @@ export default function HomePage() {
                         : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-white">{ret.name}</span>
-                      {ret.isLowest && (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-semibold text-white truncate">{ret.name}</span>
+                      {ret.isLowest ? (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold shrink-0">
                           Lowest
                         </span>
-                      )}
+                      ) : !ret.active ? (
+                        <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
+                          Soon
+                        </span>
+                      ) : null}
                     </div>
                     <div className="text-base font-bold text-cyan-400 font-heading mt-1">{ret.price}</div>
                     <div className="text-[10px] text-gray-400">{ret.stock}</div>
@@ -535,18 +593,41 @@ export default function HomePage() {
         <div className="text-center space-y-1">
           <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">Supported Retailers</span>
           <h2 className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight">
-            Monitored 24/7 Across 5 Destinations
+            Multi-Retailer Pricing Engine
           </h2>
+          <p className="text-xs text-gray-400 max-w-md mx-auto">
+            Real-time automated pricing across active retailers, with additional major hardware destinations rolling out soon.
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {['Micro Center', 'Amazon', 'Newegg', 'Best Buy', 'B&H Photo'].map((name) => (
-            <div key={name} className="glass-card p-4 rounded-xl border border-gray-800 text-center space-y-1">
-              <div className="font-bold text-white text-xs">{name}</div>
-              <div className="text-[10px] text-emerald-400 flex items-center justify-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Active</span>
-              </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          {[
+            { name: 'Amazon', active: true },
+            { name: 'eBay', active: true },
+            { name: 'Best Buy', active: false },
+            { name: 'Micro Center', active: false },
+            { name: 'Newegg', active: false },
+            { name: 'B&H Photo', active: false },
+          ].map((ret) => (
+            <div
+              key={ret.name}
+              className={`glass-card p-4 rounded-xl border text-center space-y-2 transition-all ${
+                ret.active
+                  ? 'border-cyan-500/30 bg-cyan-950/20 shadow-sm shadow-cyan-500/10'
+                  : 'border-gray-800/80 bg-gray-950/40 opacity-75'
+              }`}
+            >
+              <div className="font-bold text-white text-xs">{ret.name}</div>
+              {ret.active ? (
+                <div className="text-[10px] text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Live</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span>Coming Soon</span>
+                </div>
+              )}
             </div>
           ))}
         </div>

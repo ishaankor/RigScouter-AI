@@ -139,7 +139,7 @@ export function WatchlistManager({
     const baseOffers = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
     
     // Always clone to avoid mutating state object in memory
-    const combinedOffers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; inStock: boolean }> = [...baseOffers];
+    const combinedOffers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; imageUrl?: string; inStock: boolean }> = [...baseOffers];
 
     const itemKey = getNormalizedKey(item);
     if (trendingItems.length > 0) {
@@ -164,6 +164,7 @@ export function WatchlistManager({
             originalPrice: Number(sib.msrp || sib.currentPrice || 0),
             title: sib.name,
             url: sib.productUrl || '#',
+            imageUrl: sib.imageUrl,
             inStock: true
           });
         }
@@ -180,6 +181,7 @@ export function WatchlistManager({
           originalPrice: Number(item.msrp || explicitPrice),
           title: item.componentName || item.name || 'Component',
           url: item.productUrl || item.product_url || '#',
+          imageUrl: item.imageUrl || item.image_url,
           inStock: item.inStock ?? true
         });
       }
@@ -219,11 +221,14 @@ export function WatchlistManager({
 
     const availableRetailers = Array.from(new Set(finalOffers.map(o => o?.retailer))).filter((r): r is string => Boolean(r));
 
+    const activeImage = matchedOffer?.imageUrl || (matchedOffer as any)?.image_url || item.imageUrl || item.image_url || getCategoryImage(item.category || 'GPU');
+
     return {
       title,
       currentPrice,
       msrp,
       productUrl,
+      imageUrl: activeImage,
       retailer: retailer || 'Amazon',
       inStock,
       availableRetailers: availableRetailers.length > 0 ? availableRetailers : [retailer || 'Amazon'],
@@ -238,7 +243,14 @@ export function WatchlistManager({
       try {
         let formatted: WatchlistItem[] = [];
 
-        // 1. Fetch user watchlist items ONLY if user is authenticated
+        // 1. Direct Supabase DB Table Query for hardware catalog (publicly accessible) to have genuine image URLs
+        const { data: hwCatalog } = await supabase
+          .from('hardware_components')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(500);
+
+        // 2. Fetch user watchlist items ONLY if user is authenticated
         if (user?.id) {
           const userId = user.id;
 
@@ -289,36 +301,51 @@ export function WatchlistManager({
                 }
               });
 
-              formatted = Array.from(groupedMap.values()).map((group: any) => ({
-                id: group.id,
-                dbRowIds: group.dbRowIds,
-                userId: group.user_id,
-                componentName: group.component_name,
-                category: group.category || 'GPU',
-                targetPrice: Number(group.target_price || 0),
-                currentPrice: Number(group.all_time_low || group.target_price || 0),
-                previousPrice24h: group.previous_price_24h,
-                previousPrice7d: group.previous_price_7d,
-                previousPrice30d: group.previous_price_30d,
-                allTimeLow: group.all_time_low,
-                retailer: 'Amazon',
-                productUrl: '#',
-                imageUrl: getCategoryImage(group.category || 'GPU'),
-                inStock: true,
-                notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
-                addedAt: group.added_at,
-                specs: { RetailerOffers: group.RetailerOffers || [] }
-              }));
+              formatted = Array.from(groupedMap.values()).map((group: any) => {
+                const gKey = getNormalizedKey(group);
+                const gCompId = (group.component_id || group.id || '').toLowerCase();
+                const matchingHw = (hwCatalog || []).find((h: any) => {
+                  const hId = (h.id || '').toLowerCase();
+                  if (hId && gCompId && (hId === gCompId || hId.startsWith(gCompId) || gCompId.startsWith(hId))) return true;
+                  const hKey = getNormalizedKey(h);
+                  return Boolean(gKey && hKey && (gKey === hKey || (gKey.length > 5 && hKey.includes(gKey))));
+                });
+
+                const catalogImage = matchingHw?.image_url;
+                const activePrice = Number(matchingHw?.current_price || group.all_time_low || group.target_price || 0);
+
+                let parsedOffers: any[] = [];
+                if (matchingHw?.specs) {
+                  try {
+                    const s = typeof matchingHw.specs === 'string' ? JSON.parse(matchingHw.specs) : matchingHw.specs;
+                    if (Array.isArray(s.RetailerOffers)) parsedOffers = s.RetailerOffers;
+                  } catch (e) {}
+                }
+
+                return {
+                  id: group.id,
+                  dbRowIds: group.dbRowIds,
+                  userId: group.user_id,
+                  componentName: matchingHw?.name || group.component_name,
+                  category: group.category || matchingHw?.category || 'GPU',
+                  targetPrice: Number(group.target_price || 0),
+                  currentPrice: activePrice,
+                  previousPrice24h: group.previous_price_24h,
+                  previousPrice7d: group.previous_price_7d,
+                  previousPrice30d: group.previous_price_30d,
+                  allTimeLow: group.all_time_low || activePrice,
+                  retailer: matchingHw?.retailer || 'Amazon',
+                  productUrl: matchingHw?.product_url || '#',
+                  imageUrl: catalogImage || group.image_url || getCategoryImage(group.category || 'GPU'),
+                  inStock: true,
+                  notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
+                  addedAt: group.added_at,
+                  specs: { RetailerOffers: parsedOffers.length > 0 ? parsedOffers : (group.RetailerOffers || []) }
+                };
+              });
             }
           }
         }
-
-        // 2. Direct Supabase DB Table Query for trending hardware catalog (publicly accessible)
-        const { data: hwCatalog } = await supabase
-          .from('hardware_components')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(500);
 
         // Also merge any user items saved in hardware_components if user is logged in
         if (user?.id && hwCatalog && hwCatalog.length > 0) {
@@ -487,12 +514,14 @@ export function WatchlistManager({
                       queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
                       
       if (isMatch) {
+        const offerImage = payload.imageUrl || (payload.offer && (payload.offer.imageUrl || payload.offer.image_url));
         const newOffer = {
           retailer: payload.retailer,
           price: payload.price,
-          originalPrice: null as number | null,
+          originalPrice: payload.originalPrice || null as number | null,
           title: payload.title,
           url: payload.url,
+          imageUrl: offerImage,
           inStock: payload.inStock,
         };
 
@@ -522,6 +551,7 @@ export function WatchlistManager({
               targetPrice: Math.round(payload.price * 0.9 * 100) / 100,
               retailer: payload.retailer,
               productUrl: payload.url,
+              imageUrl: offerImage || item.imageUrl,
               inStock: payload.inStock,
             } : {}),
             specs: { ...currentSpecs, RetailerOffers: updatedOffers },
@@ -578,6 +608,7 @@ export function WatchlistManager({
           } else {
             // Update the pending item with bestOffer details (especially critical for direct URL scrapes!)
             const bo = payload.bestOffer;
+            const boImage = bo.imageUrl || bo.image_url || (payload.allOffers && (payload.allOffers[0]?.imageUrl || payload.allOffers[0]?.image_url));
             setWatchlist(prev => prev.map(item => {
               if (item.id !== pendingId) return item;
               const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
@@ -589,6 +620,7 @@ export function WatchlistManager({
                 targetPrice: Math.round(bo.price * 0.9 * 100) / 100,
                 retailer: bo.retailer,
                 productUrl: bo.url,
+                imageUrl: boImage || item.imageUrl,
                 inStock: bo.inStock,
                 specs: {
                   ...currentSpecs,
@@ -597,6 +629,7 @@ export function WatchlistManager({
                     price: bo.price,
                     title: bo.title,
                     url: bo.url,
+                    imageUrl: boImage || item.imageUrl,
                     inStock: bo.inStock
                   }]
                 }
@@ -973,7 +1006,7 @@ export function WatchlistManager({
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-1 font-medium">
-            Multi-retailer price engine tracking Amazon, Newegg, Micro Center, B&amp;H, and eBay in real time.
+            Multi-retailer price engine tracking Amazon and eBay in real-time (Micro Center, Newegg, Best Buy coming soon).
           </p>
         </div>
 
@@ -1157,11 +1190,16 @@ export function WatchlistManager({
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <img
-                              src={item.imageUrl}
-                              alt={item.componentName}
+                              src={effective.imageUrl || item.imageUrl || getCategoryImage(item.category || 'GPU')}
+                              alt={effective.title || item.componentName}
                               loading="lazy"
                               decoding="async"
                               className="w-10 h-10 rounded-lg object-cover border border-gray-800 bg-gray-900"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.onerror = null;
+                                target.src = getCategoryImage(item.category || 'GPU');
+                              }}
                             />
                             <div>
                               <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>

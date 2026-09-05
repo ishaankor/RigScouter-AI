@@ -325,9 +325,14 @@ export function DealRadar() {
 
                     <div className="flex gap-3 mb-3">
                       <img
-                        src={item.imageUrl}
+                        src={item.imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80'}
                         alt={item.name}
                         className="w-14 h-14 rounded-lg object-cover bg-gray-950 border border-gray-800 shrink-0"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
+                        }}
                       />
                       <div>
                         <h3 className="text-sm font-semibold text-white line-clamp-2">{item.name}</h3>

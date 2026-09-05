@@ -126,7 +126,7 @@ export default function FeaturesPage() {
             Autonomous Multi-Retailer Web Scraper
           </h2>
           <p className="text-sm text-gray-300 leading-relaxed">
-            RigScouter-AI renders dynamic JavaScript web pages natively in headless cloud browsers, bypassing anti-bot checks across Micro Center, Amazon, Newegg, Best Buy, and B&H Photo.
+            RigScouter-AI connects directly to live pricing across Amazon and eBay, with automated scraper pipelines for Best Buy, Micro Center, Newegg, and B&H Photo rolling out soon.
           </p>
           <ul className="space-y-2 text-xs text-gray-300 pt-2">
             <li className="flex items-center gap-2">
