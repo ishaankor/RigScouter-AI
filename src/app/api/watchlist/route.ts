@@ -152,15 +152,47 @@ export async function GET(req: NextRequest) {
 
       const bestMatch = matches[0];
 
-      const retailerOffers = matches.map((m: any) => ({
-        id: m.id,
-        retailer: m.retailer,
-        price: Number(m.current_price || 0),
-        originalPrice: Number(m.msrp || m.current_price || 0),
-        title: m.name,
-        url: m.product_url || '#',
-        inStock: true
-      }));
+      const retailerOffersMap = new Map<string, any>();
+      matches.forEach((m: any) => {
+        if (m && m.retailer && Number(m.current_price) > 0) {
+          const rKey = m.retailer.toLowerCase();
+          if (!retailerOffersMap.has(rKey)) {
+            retailerOffersMap.set(rKey, {
+              id: m.id,
+              retailer: m.retailer,
+              price: Number(m.current_price || 0),
+              originalPrice: Number(m.msrp || m.current_price || 0),
+              title: m.name,
+              url: m.product_url || '#',
+              inStock: true
+            });
+          }
+        }
+        // Also unpack specs.RetailerOffers if stored inside row
+        try {
+          const mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {});
+          if (Array.isArray(mSpecs.RetailerOffers)) {
+            mSpecs.RetailerOffers.forEach((ro: any) => {
+              if (ro && ro.retailer && Number(ro.price) > 0) {
+                const roKey = ro.retailer.toLowerCase();
+                if (!retailerOffersMap.has(roKey)) {
+                  retailerOffersMap.set(roKey, {
+                    id: ro.id || `${m.id}-${roKey}`,
+                    retailer: ro.retailer,
+                    price: Number(ro.price || 0),
+                    originalPrice: Number(ro.originalPrice || ro.price || 0),
+                    title: ro.title || m.name,
+                    url: ro.url || '#',
+                    inStock: ro.inStock ?? true
+                  });
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      });
+
+      const retailerOffers = Array.from(retailerOffersMap.values());
 
       // If user provided a direct verified URL, preserve it; otherwise use bestMatch
       const finalPrice = hasDirectUrl 
