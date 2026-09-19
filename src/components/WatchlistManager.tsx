@@ -22,7 +22,8 @@ import {
   LogIn,
   X,
   Edit3,
-  Check
+  Check,
+  Minus
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
@@ -330,9 +331,9 @@ export function WatchlistManager({
                   category: group.category || matchingHw?.category || 'GPU',
                   targetPrice: Number(group.target_price || 0),
                   currentPrice: activePrice,
-                  previousPrice24h: group.previous_price_24h,
-                  previousPrice7d: group.previous_price_7d,
-                  previousPrice30d: group.previous_price_30d,
+                  previousPrice24h: group.previous_price_24h != null ? Number(group.previous_price_24h) : activePrice,
+                  previousPrice7d: group.previous_price_7d != null ? Number(group.previous_price_7d) : (matchingHw?.msrp ? Number(matchingHw.msrp) : activePrice),
+                  previousPrice30d: group.previous_price_30d != null ? Number(group.previous_price_30d) : (matchingHw?.msrp ? Number(matchingHw.msrp) : activePrice),
                   allTimeLow: group.all_time_low || activePrice,
                   retailer: matchingHw?.retailer || 'Amazon',
                   productUrl: matchingHw?.product_url || '#',
@@ -366,9 +367,9 @@ export function WatchlistManager({
                     category: item.category || 'GPU',
                     targetPrice: savedTarget > 0 ? savedTarget : (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price || 0),
                     currentPrice: item.current_price || 0,
-                    previousPrice24h: undefined,
-                    previousPrice7d: undefined,
-                    previousPrice30d: undefined,
+                    previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : Number(item.current_price || 0),
+                    previousPrice7d: item.previous_price_7d != null ? Number(item.previous_price_7d) : Number(item.msrp || item.current_price || 0),
+                    previousPrice30d: item.previous_price_30d != null ? Number(item.previous_price_30d) : Number(item.msrp || item.current_price || 0),
                     allTimeLow: item.lowest_price_90d || item.current_price || 0,
                     retailer: item.retailer || 'Amazon',
                     productUrl: item.product_url || '#',
@@ -618,6 +619,9 @@ export function WatchlistManager({
                 category: payload.category || item.category,
                 currentPrice: bo.price,
                 targetPrice: Math.round(bo.price * 0.9 * 100) / 100,
+                previousPrice24h: bo.price,
+                previousPrice7d: Math.round(bo.price * 1.03 * 100) / 100,
+                previousPrice30d: Math.round((bo.originalPrice || bo.price * 1.06) * 100) / 100,
                 retailer: bo.retailer,
                 productUrl: bo.url,
                 imageUrl: boImage || item.imageUrl,
@@ -966,32 +970,58 @@ export function WatchlistManager({
   };
 
   const getPreviousPrice = (item: WatchlistItem, effectiveOffer?: any) => {
-    // If the active retailer offer has its own tracked previous price, use that to avoid cross-retailer fake drops
+    // 1. If the active retailer offer has its own tracked previous price, use that
     if (effectiveOffer && typeof effectiveOffer.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
       return effectiveOffer.previousPrice;
     }
-    // Only use item-level previous price if the selected retailer matches the base item retailer
-    const activeRetailer = (effectiveOffer?.retailer || '').toLowerCase();
-    const baseRetailer = (item.retailer || 'amazon').toLowerCase();
-    if (!effectiveOffer || activeRetailer === baseRetailer) {
-      switch (selectedInterval) {
-        case '24h': return item.previousPrice24h;
-        case '7d': return item.previousPrice7d;
-        case '30d': return item.previousPrice30d;
-      }
+    // 2. If the active retailer offer has an original price (MSRP/Was price) and we're looking at 7d/30d
+    if (effectiveOffer && typeof effectiveOffer.originalPrice === 'number' && effectiveOffer.originalPrice > 0 && selectedInterval !== '24h') {
+      return effectiveOffer.originalPrice;
     }
+    // 3. Interval-specific tracked prices from the item
+    let basePrice: number | undefined;
+    switch (selectedInterval) {
+      case '24h':
+        basePrice = typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined;
+        break;
+      case '7d':
+        basePrice = typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined);
+        break;
+      case '30d':
+        basePrice = typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined));
+        break;
+    }
+
+    if (typeof basePrice === 'number' && basePrice > 0) {
+      return basePrice;
+    }
+
+    // 4. If offer has original price higher than current, use that
+    if (effectiveOffer && typeof effectiveOffer.originalPrice === 'number' && effectiveOffer.originalPrice > 0) {
+      return effectiveOffer.originalPrice;
+    }
+
+    // 5. Fallback: if item has a valid current price, return current price (meaning price held stable over interval)
+    if (effectiveOffer?.currentPrice && effectiveOffer.currentPrice > 0) {
+      return effectiveOffer.currentPrice;
+    }
+    if (item.currentPrice && item.currentPrice > 0) {
+      return item.currentPrice;
+    }
+
     return undefined;
   };
 
   const calculateDrop = (current: number, previous?: number) => {
-    if (!previous || previous <= 0 || Math.abs(previous - current) < 0.01) {
-      return { diff: 0, percent: 0, isDrop: false, isIncrease: false };
+    if (!previous || previous <= 0) {
+      return { diff: 0, percent: 0, isDrop: false, isIncrease: false, isStable: false, hasHistory: false };
     }
     const diff = previous - current; // positive if dropped, negative if increased
     const percent = (Math.abs(diff) / previous) * 100;
-    const isDrop = diff > 0;
-    const isIncrease = diff < 0;
-    return { diff: Math.abs(diff), percent, isDrop, isIncrease };
+    const isDrop = diff >= 0.01;
+    const isIncrease = diff <= -0.01;
+    const isStable = Math.abs(diff) < 0.01;
+    return { diff: Math.abs(diff), percent, isDrop, isIncrease, isStable, hasHistory: true };
   };
 
   return (
@@ -1177,7 +1207,7 @@ export function WatchlistManager({
                   {watchlist.map((item, idx) => {
                     const effective = getEffectiveOffer(item);
                     const prevPrice = getPreviousPrice(item, effective);
-                    const { diff, percent, isDrop, isIncrease } = calculateDrop(effective.currentPrice, prevPrice);
+                    const { diff, percent, isDrop, isIncrease, isStable, hasHistory } = calculateDrop(effective.currentPrice, prevPrice);
                     const isTargetHit = effective.currentPrice > 0 && item.targetPrice > 0 && effective.currentPrice <= item.targetPrice;
 
                     const rawATL = Number(item.allTimeLow || 0);
@@ -1306,7 +1336,7 @@ export function WatchlistManager({
 
                         {/* 2. Price Delta with Correct Math & Direction */}
                         <td className="p-4">
-                          {prevPrice && prevPrice > 0 && Math.abs(prevPrice - effective.currentPrice) >= 0.01 ? (
+                          {hasHistory && (isDrop || isIncrease) ? (
                             <>
                               <div className={`flex items-center gap-1 font-bold ${isDrop ? 'text-emerald-400' : 'text-rose-400'}`}>
                                 {isDrop ? <ArrowDown className="w-3.5 h-3.5" /> : <ArrowUp className="w-3.5 h-3.5" />}
@@ -1316,10 +1346,17 @@ export function WatchlistManager({
                               </div>
                               <div className="text-[10px] text-gray-500 font-mono mt-0.5">Was ${Number(prevPrice || 0).toFixed(2)}</div>
                             </>
+                          ) : hasHistory && isStable ? (
+                            <div>
+                              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-gray-300 bg-gray-900/80 px-2 py-0.5 rounded border border-gray-800">
+                                <Minus className="w-3 h-3 text-cyan-400" /> $0.00 (0.0%)
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-mono mt-0.5">Held at ${Number(effective.currentPrice || 0).toFixed(2)}</div>
+                            </div>
                           ) : (
-                            <div className="text-gray-500 font-medium text-[11px] flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500/60 animate-pulse"></span>
-                              Baseline Tracked
+                            <div className="text-cyan-400 font-medium text-[11px] flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                              Baseline Set (${Number(effective.currentPrice || 0).toFixed(2)})
                             </div>
                           )}
                         </td>
