@@ -336,8 +336,8 @@ export async function POST(req: NextRequest) {
       category,
       target_price: target,
       previous_price_24h: price,
-      previous_price_7d: Math.round(price * 1.03 * 100) / 100,
-      previous_price_30d: Math.round(price * 1.06 * 100) / 100,
+      previous_price_7d: price,
+      previous_price_30d: price,
       all_time_low: price,
     };
     if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
