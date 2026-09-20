@@ -30,8 +30,45 @@ export default function HomePage() {
   
   // Clean 2-mode demo tab
   const [demoTab, setDemoTab] = useState<'comparison' | 'digest'>('comparison');
-  const [selectedRetailer, setSelectedRetailer] = useState<string>('Micro Center');
+  const [selectedRetailer, setSelectedRetailer] = useState<string>('eBay');
   const [digestChannel, setDigestChannel] = useState<'discord' | 'email'>('discord');
+
+  // Hardware Ticker Deals Data (dynamically hydrated from DB)
+  const [tickerDeals, setTickerDeals] = useState<any[]>([
+    { name: 'AMD Ryzen 7 5800XT 8-Core', price: '$220.00', save: '$29', retailer: 'Amazon', score: 95 },
+    { name: 'ASUS TUF RTX 3060 Ti V2 OC', price: '$314.99', save: '$45', retailer: 'Amazon', score: 99 },
+    { name: 'King 95 PRO Dual-Chamber Mid-Tower', price: '$100.00', save: '$60', retailer: 'eBay', score: 99 },
+    { name: 'NV3 1TB M.2 2280 NVMe SSD', price: '$74.99', save: '$87', retailer: 'eBay', score: 99 },
+    { name: 'B650M D3HP AX AM5 Motherboard', price: '$70.00', save: '$50', retailer: 'eBay', score: 99 },
+    { name: 'GeForce RTX 4080 Super 16G', price: '$1200.00', save: '$295', retailer: 'eBay', score: 90 },
+  ]);
+
+  // Top Hardware Deals Data (dynamically hydrated from DB)
+  const [topDeals, setTopDeals] = useState<any[]>([
+    { id: '1', name: 'King 95 PRO Dual-Chamber ATX Mid-Tower Case', category: 'Case', price: 100.00, msrp: 159.88, retailer: 'eBay', score: 99, cut: '-37%' },
+    { id: '2', name: 'B650M D3HP AX AMD AM5 mATX Motherboard', category: 'Motherboard', price: 70.00, msrp: 119.99, retailer: 'eBay', score: 99, cut: '-42%' },
+    { id: '3', name: 'NV3 1TB M.2 2280 NVMe SSD PCIe 4.0', category: 'Storage', price: 74.99, msrp: 162.00, retailer: 'eBay', score: 99, cut: '-54%' },
+    { id: '4', name: 'Ryzen 5 8500G 6-Core Desktop Processor', category: 'CPU', price: 66.50, msrp: 146.99, retailer: 'eBay', score: 99, cut: '-55%' },
+    { id: '5', name: 'ASUS TUF Gaming GeForce RTX 3060 Ti V2', category: 'GPU', price: 314.99, msrp: 359.99, retailer: 'Amazon', score: 99, cut: '-13%' },
+    { id: '6', name: 'AMD Ryzen 7 5800XT 8-Core Processor', category: 'CPU', price: 220.00, msrp: 249.00, retailer: 'Amazon', score: 95, cut: '-12%' },
+  ]);
+
+  // Featured Comparison Data (dynamically hydrated from DB)
+  const [featuredComparison, setFeaturedComparison] = useState<any>({
+    name: 'AMD Ryzen 7 5800XT 8-Core Desktop Processor',
+    category: 'CPU',
+    score: 95,
+    dealTag: 'Epic Deal',
+    lowestPrice: '$155.00',
+    msrp: '$249.00',
+    retailers: [
+      { name: 'eBay', price: '$155.00', stock: 'In Stock', isLowest: true, active: true },
+      { name: 'Amazon', price: '$220.00', stock: 'In Stock', isLowest: false, active: true },
+      { name: 'Best Buy', price: '$239.00', stock: 'In Stock', isLowest: false, active: false, status: 'testing' },
+      { name: 'Micro Center', price: '$219.99', stock: 'In-Store', isLowest: false, active: false, status: 'soon' },
+      { name: 'Newegg', price: '$229.99', stock: 'In Stock', isLowest: false, active: false, status: 'soon' },
+    ]
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -42,6 +79,26 @@ export default function HomePage() {
       setUser(session?.user ?? null);
     });
 
+    // Hydrate market data directly from Supabase database via API route
+    fetch('/api/market-preview')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          if (data.topDeals && data.topDeals.length > 0) {
+            setTopDeals(data.topDeals);
+          }
+          if (data.tickerDeals && data.tickerDeals.length > 0) {
+            setTickerDeals(data.tickerDeals);
+          }
+          if (data.featuredComparison) {
+            setFeaturedComparison(data.featuredComparison);
+            const lowest = data.featuredComparison.retailers?.find((r: any) => r.isLowest);
+            if (lowest) setSelectedRetailer(lowest.name);
+          }
+        }
+      })
+      .catch(err => console.warn('Market preview fetch fallback:', err));
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -49,26 +106,6 @@ export default function HomePage() {
     await supabase.auth.signOut();
     setUser(null);
   };
-
-  // Hardware Ticker Deals Data
-  const tickerDeals = [
-    { name: 'ASUS Dual RTX 4070 Super 12GB', price: '$549.99', save: '$50', retailer: 'Micro Center', score: 94 },
-    { name: 'AMD Ryzen 7 7800X3D Gaming CPU', price: '$349.99', save: '$99', retailer: 'Amazon', score: 96 },
-    { name: 'Corsair Vengeance RGB 32GB DDR5-6000', price: '$102.99', save: '$17', retailer: 'Newegg', score: 89 },
-    { name: 'Samsung 990 Pro 2TB NVMe SSD', price: '$149.99', save: '$40', retailer: 'B&H Photo', score: 93 },
-    { name: 'MSI MAG B650 Tomahawk WiFi AM5', price: '$199.99', save: '$20', retailer: 'Best Buy', score: 88 },
-    { name: 'Sapphire Pulse RX 7900 XTX 24GB', price: '$889.99', save: '$110', retailer: 'Micro Center', score: 95 },
-  ];
-
-  // Top Hardware Deals Data
-  const topDeals = [
-    { name: 'NVIDIA GeForce RTX 4070 Super 12GB', category: 'GPU', price: 549.99, msrp: 599.99, retailer: 'Micro Center', score: 94, cut: '-8%' },
-    { name: 'AMD Radeon RX 7900 XTX 24GB', category: 'GPU', price: 889.99, msrp: 999.99, retailer: 'Newegg', score: 95, cut: '-11%' },
-    { name: 'AMD Ryzen 7 7800X3D 8-Core AM5', category: 'CPU', price: 349.99, msrp: 449.00, retailer: 'Amazon', score: 96, cut: '-22%' },
-    { name: 'Intel Core i7-14700K 20-Core', category: 'CPU', price: 359.99, msrp: 419.00, retailer: 'Best Buy', score: 90, cut: '-14%' },
-    { name: 'Corsair Vengeance 32GB DDR5-6000', category: 'RAM', price: 102.99, msrp: 119.99, retailer: 'Newegg', score: 89, cut: '-14%' },
-    { name: 'Samsung 990 Pro 2TB Gen4 M.2 SSD', category: 'Storage', price: 149.99, msrp: 189.99, retailer: 'B&H Photo', score: 93, cut: '-21%' },
-  ];
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-gray-100 selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -206,7 +243,7 @@ export default function HomePage() {
 
         {/* Subheadline */}
         <p className="relative z-10 text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
-          RigScouter continuously crawls Amazon and eBay in real-time, with Micro Center, Newegg, Best Buy, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord.
+          RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in testing and Micro Center, Newegg, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord.
         </p>
 
         {/* CTAs */}
@@ -325,10 +362,10 @@ export default function HomePage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold text-white font-heading">
-                      NVIDIA GeForce RTX 4070 Super 12GB
+                      {featuredComparison.name}
                     </h3>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold">
-                      Score: 94/100 (Epic Deal)
+                      Score: {featuredComparison.score}/100 ({featuredComparison.dealTag})
                     </span>
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">
@@ -337,19 +374,16 @@ export default function HomePage() {
                 </div>
                 <div className="text-left sm:text-right">
                   <div className="text-[11px] text-gray-400">Lowest Price</div>
-                  <div className="text-xl font-black text-cyan-400 font-heading">$549.99 <span className="text-xs text-gray-500 line-through">$599.99 MSRP</span></div>
+                  <div className="text-xl font-black text-cyan-400 font-heading">
+                    {featuredComparison.lowestPrice}{' '}
+                    <span className="text-xs text-gray-500 line-through">{featuredComparison.msrp} MSRP</span>
+                  </div>
                 </div>
               </div>
 
               {/* Retailer Chips */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                {[
-                  { name: 'Amazon', price: '$549.99', stock: 'In Stock', isLowest: true, active: true },
-                  { name: 'eBay', price: '$569.00', stock: 'In Stock', isLowest: false, active: true },
-                  { name: 'Micro Center', price: '$549.99', stock: 'In-Store', isLowest: false, active: false },
-                  { name: 'Best Buy', price: '$599.99', stock: 'In Stock', isLowest: false, active: false },
-                  { name: 'Newegg', price: '$589.99', stock: 'In Stock', isLowest: false, active: false },
-                ].map((ret) => (
+                {featuredComparison.retailers.map((ret: any) => (
                   <button
                     key={ret.name}
                     onClick={() => setSelectedRetailer(ret.name)}
@@ -365,7 +399,12 @@ export default function HomePage() {
                         <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold shrink-0">
                           Lowest
                         </span>
-                      ) : !ret.active ? (
+                      ) : ret.name === 'Best Buy' || ret.status === 'testing' ? (
+                        <span className="text-[8px] px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold shrink-0 flex items-center gap-0.5">
+                          <span className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse"></span>
+                          Testing
+                        </span>
+                      ) : !ret.active || ret.status === 'soon' ? (
                         <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
                           Soon
                         </span>
@@ -380,11 +419,11 @@ export default function HomePage() {
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-gray-400">
                 <span>Active Retailer: <strong className="text-white">{selectedRetailer}</strong></span>
                 <Link
-                  href="/dashboard"
+                  href={`/dashboard?search=${encodeURIComponent(featuredComparison.name)}`}
                   className="btn-glow px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"
                 >
                   <Search className="w-3.5 h-3.5" />
-                  <span>Search Any Hardware in Dashboard</span>
+                  <span>Search in Dashboard</span>
                 </Link>
               </div>
             </div>
@@ -426,16 +465,14 @@ export default function HomePage() {
                     <span className="text-[10px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300">BOT</span>
                   </div>
                   <p className="text-gray-300 text-xs">
-                    **Today's Summary:** 2 of your tracked components dropped in price. Total savings opportunity: **$149.00**.
+                    **Today&apos;s Summary:** Active price drops scouted across tracked inventory. Total savings opportunity: **${Math.max(45, Math.round(((topDeals[0]?.msrp || 0) - (topDeals[0]?.price || 0)) + ((topDeals[1]?.msrp || 0) - (topDeals[1]?.price || 0))))}.00**.
                   </p>
-                  <div className="bg-[#2b2d31] p-2.5 rounded-lg border border-gray-800 space-y-1">
-                    <div className="text-emerald-400 font-bold text-xs">🟢 RTX 4070 Super 12GB: $549.99 (Save $50)</div>
-                    <div className="text-gray-400 text-[11px]">• 24h Delta: -8.3% • All-Time Low: $549.99 • Micro Center</div>
-                  </div>
-                  <div className="bg-[#2b2d31] p-2.5 rounded-lg border border-gray-800 space-y-1">
-                    <div className="text-emerald-400 font-bold text-xs">🟢 Ryzen 7 7800X3D: $349.99 (Save $99)</div>
-                    <div className="text-gray-400 text-[11px]">• 24h Delta: -5.4% • 30d Delta: -12.5% • Amazon</div>
-                  </div>
+                  {topDeals.slice(0, 2).map((deal, i) => (
+                    <div key={i} className="bg-[#2b2d31] p-2.5 rounded-lg border border-gray-800 space-y-1">
+                      <div className="text-emerald-400 font-bold text-xs">🟢 {deal.name}: ${Number(deal.price).toFixed(2)} {deal.cut !== '-' ? `(Save ${deal.cut})` : ''}</div>
+                      <div className="text-gray-400 text-[11px]">• Retailer: {deal.retailer} • Deal Score: {deal.score}/100 • Category: {deal.category}</div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="bg-gray-900 p-5 rounded-xl border border-gray-800 space-y-3 text-xs">
@@ -444,16 +481,18 @@ export default function HomePage() {
                     <span className="text-cyan-400">Sent via Email</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="p-3 rounded-lg bg-gray-950 border border-gray-800">
-                      <div className="text-gray-400 text-[11px]">Top Daily Drop</div>
-                      <div className="text-white font-bold">AMD Ryzen 7 7800X3D</div>
-                      <div className="text-emerald-400 font-bold text-sm">$349.99 <span className="text-xs line-through text-gray-500">$449.00</span></div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-gray-950 border border-gray-800">
-                      <div className="text-gray-400 text-[11px]">All-Time Low Record</div>
-                      <div className="text-white font-bold">Samsung 990 Pro 2TB</div>
-                      <div className="text-purple-400 font-bold text-sm">$149.99 (Historical Best)</div>
-                    </div>
+                    {topDeals.slice(0, 2).map((deal, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-gray-950 border border-gray-800">
+                        <div className="text-gray-400 text-[11px]">{i === 0 ? 'Top Daily Deal' : 'High Value Pick'}</div>
+                        <div className="text-white font-bold truncate">{deal.name}</div>
+                        <div className="text-emerald-400 font-bold text-sm">
+                          ${Number(deal.price).toFixed(2)}{' '}
+                          {deal.msrp > deal.price && (
+                            <span className="text-xs line-through text-gray-500">${Number(deal.msrp).toFixed(2)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -553,8 +592,8 @@ export default function HomePage() {
               <tbody className="divide-y divide-gray-800/50 font-medium">
                 {topDeals.map((item, idx) => (
                   <tr key={idx} className="hover:bg-gray-800/20 transition-colors">
-                    <td className="py-3 px-5 font-bold text-white">
-                      {item.name}
+                    <td className="py-3 px-5 font-bold text-white max-w-[260px] sm:max-w-xs">
+                      <div className="truncate" title={item.name}>{item.name}</div>
                     </td>
                     <td className="py-3 px-3">
                       <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono text-[10px]">
@@ -562,7 +601,10 @@ export default function HomePage() {
                       </span>
                     </td>
                     <td className="py-3 px-3 font-bold text-cyan-400 font-mono">
-                      ${item.price.toFixed(2)}
+                      ${Number(item.price).toFixed(2)}
+                      {item.cut && item.cut !== '-' && (
+                        <span className="ml-1.5 text-[10px] text-emerald-400 font-semibold">{item.cut}</span>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-gray-300">
                       {item.retailer}
@@ -574,8 +616,8 @@ export default function HomePage() {
                     </td>
                     <td className="py-3 px-5 text-right">
                       <Link
-                        href="/dashboard"
-                        className="px-2.5 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-[11px] transition-all"
+                        href={`/dashboard?search=${encodeURIComponent(item.name)}`}
+                        className="px-2.5 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-[11px] transition-all inline-block"
                       >
                         Track
                       </Link>
@@ -604,7 +646,7 @@ export default function HomePage() {
           {[
             { name: 'Amazon', active: true },
             { name: 'eBay', active: true },
-            { name: 'Best Buy', active: false },
+            { name: 'Best Buy', status: 'testing' },
             { name: 'Micro Center', active: false },
             { name: 'Newegg', active: false },
             { name: 'B&H Photo', active: false },
@@ -614,6 +656,8 @@ export default function HomePage() {
               className={`glass-card p-4 rounded-xl border text-center space-y-2 transition-all ${
                 ret.active
                   ? 'border-cyan-500/30 bg-cyan-950/20 shadow-sm shadow-cyan-500/10'
+                  : ret.status === 'testing'
+                  ? 'border-cyan-500/40 bg-cyan-950/30 shadow-sm shadow-cyan-500/15'
                   : 'border-gray-800/80 bg-gray-950/40 opacity-75'
               }`}
             >
@@ -622,6 +666,11 @@ export default function HomePage() {
                 <div className="text-[10px] text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span>Live</span>
+                </div>
+              ) : ret.status === 'testing' ? (
+                <div className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <span>Testing</span>
                 </div>
               ) : (
                 <div className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">

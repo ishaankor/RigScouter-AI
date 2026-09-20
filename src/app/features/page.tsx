@@ -126,7 +126,7 @@ export default function FeaturesPage() {
             Autonomous Multi-Retailer Web Scraper
           </h2>
           <p className="text-sm text-gray-300 leading-relaxed">
-            RigScouter-AI connects directly to live pricing across Amazon and eBay, with automated scraper pipelines for Best Buy, Micro Center, Newegg, and B&H Photo rolling out soon.
+            RigScouter-AI connects directly to live pricing across Amazon and eBay, with Best Buy now in testing and automated scraper pipelines for Micro Center, Newegg, and B&H Photo rolling out soon.
           </p>
           <ul className="space-y-2 text-xs text-gray-300 pt-2">
             <li className="flex items-center gap-2">

@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'RigScouter-AI | Autonomous PC Hardware Deal Intelligence & Price Tracker',
-  description: 'Autonomous PC hardware deal scouting platform featuring multi-retailer scraping across Amazon and eBay (with Micro Center, Newegg, Best Buy, and B&H Photo coming soon), AI deal scoring, and automated daily price digests.',
+  description: 'Autonomous PC hardware deal scouting platform featuring multi-retailer scraping across Amazon and eBay (with Best Buy in testing; Micro Center, Newegg, and B&H Photo coming soon), AI deal scoring, and automated daily price digests.',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

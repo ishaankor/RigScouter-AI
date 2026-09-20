@@ -1036,7 +1036,7 @@ export function WatchlistManager({
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-1 font-medium">
-            Multi-retailer price engine tracking Amazon and eBay in real-time (Micro Center, Newegg, Best Buy coming soon).
+            Multi-retailer price engine tracking Amazon and eBay in real-time (Best Buy in testing; Micro Center and Newegg coming soon).
           </p>
         </div>
 
