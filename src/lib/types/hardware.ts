@@ -19,6 +19,9 @@ export interface HardwareComponent {
   rating: number;
   dealScore: number; // 0 to 100
   benchmarkScore?: number; // e.g. 1440p gaming score or Cinebench points
+  previousPrice24h?: number;
+  previousPrice7d?: number;
+  previousPrice30d?: number;
 }
 
 export type DigestFrequency = 'daily' | 'every_3_days' | 'weekly' | 'flash_only';

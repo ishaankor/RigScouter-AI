@@ -140,7 +140,20 @@ export function WatchlistManager({
     const baseOffers = Array.isArray(specs.RetailerOffers) ? specs.RetailerOffers : [];
     
     // Always clone to avoid mutating state object in memory
-    const combinedOffers: Array<{ id?: string; retailer: string; price: number; originalPrice?: number; title?: string; url: string; imageUrl?: string; inStock: boolean }> = [...baseOffers];
+    const combinedOffers: Array<{
+      id?: string;
+      retailer: string;
+      price: number;
+      originalPrice?: number;
+      previousPrice?: number;
+      previousPrice24h?: number;
+      previousPrice7d?: number;
+      previousPrice30d?: number;
+      title?: string;
+      url: string;
+      imageUrl?: string;
+      inStock: boolean;
+    }> = [...baseOffers];
 
     const itemKey = getNormalizedKey(item);
     if (trendingItems.length > 0) {
@@ -159,10 +172,16 @@ export function WatchlistManager({
       });
       for (const sib of siblings) {
         if (sib.retailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase())) {
+          const sibPrice = Number(sib.currentPrice || 0);
+          const sibMsrp = Number(sib.msrp || sibPrice);
           combinedOffers.push({
             retailer: sib.retailer,
-            price: Number(sib.currentPrice || 0),
-            originalPrice: Number(sib.msrp || sib.currentPrice || 0),
+            price: sibPrice,
+            originalPrice: sibMsrp,
+            previousPrice: Number(sib.previousPrice24h || sibPrice),
+            previousPrice24h: Number(sib.previousPrice24h || sibPrice),
+            previousPrice7d: Number(sib.previousPrice7d || (sibMsrp > sibPrice ? sibMsrp : sibPrice)),
+            previousPrice30d: Number(sib.previousPrice30d || (sibMsrp > sibPrice ? sibMsrp : sibPrice)),
             title: sib.name,
             url: sib.productUrl || '#',
             imageUrl: sib.imageUrl,
@@ -176,10 +195,15 @@ export function WatchlistManager({
     if (itemRetailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === itemRetailer.toLowerCase())) {
       const explicitPrice = Number(item.currentPrice || item.current_price || item.allTimeLow || item.all_time_low || item.previousPrice24h || item.targetPrice || item.target_price || 0);
       if (explicitPrice > 0) {
+        const explicitMsrp = Number(item.msrp || explicitPrice);
         combinedOffers.push({
           retailer: itemRetailer,
           price: explicitPrice,
-          originalPrice: Number(item.msrp || explicitPrice),
+          originalPrice: explicitMsrp,
+          previousPrice: Number(item.previousPrice24h || explicitPrice),
+          previousPrice24h: Number(item.previousPrice24h || explicitPrice),
+          previousPrice7d: Number(item.previousPrice7d || (explicitMsrp > explicitPrice ? explicitMsrp : explicitPrice)),
+          previousPrice30d: Number(item.previousPrice30d || (explicitMsrp > explicitPrice ? explicitMsrp : explicitPrice)),
           title: item.componentName || item.name || 'Component',
           url: item.productUrl || item.product_url || '#',
           imageUrl: item.imageUrl || item.image_url,
@@ -233,7 +257,13 @@ export function WatchlistManager({
       retailer: retailer || 'Amazon',
       inStock,
       availableRetailers: availableRetailers.length > 0 ? availableRetailers : [retailer || 'Amazon'],
-      offers: combinedOffers
+      offers: combinedOffers,
+      matchedOffer,
+      previousPrice: matchedOffer?.previousPrice,
+      previousPrice24h: matchedOffer?.previousPrice24h,
+      previousPrice7d: matchedOffer?.previousPrice7d,
+      previousPrice30d: matchedOffer?.previousPrice30d,
+      originalPrice: matchedOffer?.originalPrice
     };
   };
 
@@ -284,12 +314,30 @@ export function WatchlistManager({
                 const key = getNormalizedKey(item);
                 if (!key) return;
                 
+                const itemOffer = {
+                  id: item.id,
+                  retailer: item.retailer || 'Online Retailer',
+                  price: Number(item.current_price || 0),
+                  originalPrice: Number(item.msrp || item.current_price || 0),
+                  previousPrice: Number(item.previous_price_24h || item.current_price || 0),
+                  previousPrice24h: Number(item.previous_price_24h || item.current_price || 0),
+                  previousPrice7d: Number(item.previous_price_7d || item.msrp || item.current_price || 0),
+                  previousPrice30d: Number(item.previous_price_30d || item.msrp || item.current_price || 0),
+                  title: item.component_name,
+                  url: item.product_url || '#',
+                  imageUrl: item.image_url,
+                  inStock: item.in_stock ?? true
+                };
+
                 if (!groupedMap.has(key)) {
-                  groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [] });
+                  groupedMap.set(key, { ...item, dbRowIds: [item.id], RetailerOffers: [itemOffer] });
                 } else {
                   const existing = groupedMap.get(key);
                   if (item.id && !existing.dbRowIds.includes(item.id)) {
                     existing.dbRowIds.push(item.id);
+                  }
+                  if (item.retailer && !existing.RetailerOffers.some((o: any) => (o.retailer || '').toLowerCase() === item.retailer.toLowerCase())) {
+                    existing.RetailerOffers.push(itemOffer);
                   }
                   // Preserve valid target_price
                   if ((!existing.target_price || Number(existing.target_price) <= 0) && item.target_price && Number(item.target_price) > 0) {
@@ -319,7 +367,21 @@ export function WatchlistManager({
                 if (matchingHw?.specs) {
                   try {
                     const s = typeof matchingHw.specs === 'string' ? JSON.parse(matchingHw.specs) : matchingHw.specs;
-                    if (Array.isArray(s.RetailerOffers)) parsedOffers = s.RetailerOffers;
+                    if (Array.isArray(s.RetailerOffers)) {
+                      parsedOffers = s.RetailerOffers.map((ro: any) => {
+                        const roPrice = Number(ro.price || 0);
+                        const roMsrp = Number(ro.originalPrice || roPrice);
+                        return {
+                          ...ro,
+                          price: roPrice,
+                          originalPrice: roMsrp,
+                          previousPrice: Number(ro.previousPrice || ro.previousPrice24h || roPrice),
+                          previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
+                          previousPrice7d: Number(ro.previousPrice7d || (roMsrp > roPrice ? roMsrp : roPrice)),
+                          previousPrice30d: Number(ro.previousPrice30d || (roMsrp > roPrice ? roMsrp : roPrice)),
+                        };
+                      });
+                    }
                   } catch (e) {}
                 }
 
@@ -516,10 +578,16 @@ export function WatchlistManager({
                       
       if (isMatch) {
         const offerImage = payload.imageUrl || (payload.offer && (payload.offer.imageUrl || payload.offer.image_url));
+        const offerPrice = Number(payload.price || 0);
+        const offerMsrp = Number(payload.originalPrice || offerPrice);
         const newOffer = {
           retailer: payload.retailer,
-          price: payload.price,
+          price: offerPrice,
           originalPrice: payload.originalPrice || null as number | null,
+          previousPrice: Number(payload.previousPrice || payload.previousPrice24h || offerPrice),
+          previousPrice24h: Number(payload.previousPrice24h || payload.previousPrice || offerPrice),
+          previousPrice7d: Number(payload.previousPrice7d || (offerMsrp > offerPrice ? offerMsrp : offerPrice)),
+          previousPrice30d: Number(payload.previousPrice30d || (offerMsrp > offerPrice ? offerMsrp : offerPrice)),
           title: payload.title,
           url: payload.url,
           imageUrl: offerImage,
@@ -609,7 +677,29 @@ export function WatchlistManager({
           } else {
             // Update the pending item with bestOffer details (especially critical for direct URL scrapes!)
             const bo = payload.bestOffer;
+            const boPrice = Number(bo.price || 0);
+            const boMsrp = Number(bo.originalPrice || boPrice);
             const boImage = bo.imageUrl || bo.image_url || (payload.allOffers && (payload.allOffers[0]?.imageUrl || payload.allOffers[0]?.image_url));
+
+            const rawOffers = payload.allOffers && payload.allOffers.length > 0 ? payload.allOffers : [bo];
+            const normalizedAllOffers = rawOffers.map((o: any) => {
+              const oPrice = Number(o.price || 0);
+              const oMsrp = Number(o.originalPrice || oPrice);
+              return {
+                retailer: o.retailer,
+                price: oPrice,
+                originalPrice: o.originalPrice || null,
+                previousPrice: Number(o.previousPrice || o.previousPrice24h || oPrice),
+                previousPrice24h: Number(o.previousPrice24h || o.previousPrice || oPrice),
+                previousPrice7d: Number(o.previousPrice7d || (oMsrp > oPrice ? oMsrp : oPrice)),
+                previousPrice30d: Number(o.previousPrice30d || (oMsrp > oPrice ? oMsrp : oPrice)),
+                title: o.title || bo.title,
+                url: o.url || '#',
+                imageUrl: o.imageUrl || o.image_url || boImage,
+                inStock: o.inStock ?? true
+              };
+            });
+
             setWatchlist(prev => prev.map(item => {
               if (item.id !== pendingId) return item;
               const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
@@ -617,25 +707,18 @@ export function WatchlistManager({
                 ...item,
                 componentName: bo.title || payload.query || item.componentName,
                 category: payload.category || item.category,
-                currentPrice: bo.price,
-                targetPrice: Math.round(bo.price * 0.9 * 100) / 100,
-                previousPrice24h: bo.price,
-                previousPrice7d: Math.round(bo.price * 1.03 * 100) / 100,
-                previousPrice30d: Math.round((bo.originalPrice || bo.price * 1.06) * 100) / 100,
+                currentPrice: boPrice,
+                targetPrice: Math.round(boPrice * 0.9 * 100) / 100,
+                previousPrice24h: boPrice,
+                previousPrice7d: boMsrp > boPrice ? boMsrp : boPrice,
+                previousPrice30d: boMsrp > boPrice ? boMsrp : boPrice,
                 retailer: bo.retailer,
                 productUrl: bo.url,
                 imageUrl: boImage || item.imageUrl,
                 inStock: bo.inStock,
                 specs: {
                   ...currentSpecs,
-                  RetailerOffers: payload.allOffers && payload.allOffers.length > 0 ? payload.allOffers : [{
-                    retailer: bo.retailer,
-                    price: bo.price,
-                    title: bo.title,
-                    url: bo.url,
-                    imageUrl: boImage || item.imageUrl,
-                    inStock: bo.inStock
-                  }]
+                  RetailerOffers: normalizedAllOffers
                 }
               };
             }));
@@ -970,46 +1053,113 @@ export function WatchlistManager({
   };
 
   const getPreviousPrice = (item: WatchlistItem, effectiveOffer?: any) => {
-    // 1. If the active retailer offer has its own tracked previous price, use that
-    if (effectiveOffer && typeof effectiveOffer.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
-      return effectiveOffer.previousPrice;
+    const isBaseRetailer = !effectiveOffer?.retailer || !item.retailer || 
+      effectiveOffer.retailer.toLowerCase() === item.retailer.toLowerCase();
+
+    // 1. ALTERNATIVE RETAILER (e.g. user selected Amazon or Best Buy on an eBay-led item)
+    // NEVER fall back to item.previousPrice24h/7d/30d because that belongs to the base retailer!
+    if (!isBaseRetailer) {
+      const activeCurrent = typeof effectiveOffer?.currentPrice === 'number' && effectiveOffer.currentPrice > 0
+        ? effectiveOffer.currentPrice
+        : 0;
+
+      switch (selectedInterval) {
+        case '24h': {
+          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
+            return effectiveOffer.previousPrice24h;
+          }
+          if (typeof effectiveOffer?.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
+            return effectiveOffer.previousPrice;
+          }
+          // Newly queried item on Day 0: Price held stable at current price ($0.00 / 0.0%)
+          return activeCurrent > 0 ? activeCurrent : undefined;
+        }
+        case '7d': {
+          if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
+            return effectiveOffer.previousPrice7d;
+          }
+          // Compare against this retailer's own original MSRP / Was Price if it exists
+          if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > activeCurrent) {
+            return effectiveOffer.originalPrice;
+          }
+          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
+            return effectiveOffer.previousPrice24h;
+          }
+          return activeCurrent > 0 ? activeCurrent : undefined;
+        }
+        case '30d': {
+          if (typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0) {
+            return effectiveOffer.previousPrice30d;
+          }
+          // Compare against this retailer's own original MSRP / Was Price if it exists
+          if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > activeCurrent) {
+            return effectiveOffer.originalPrice;
+          }
+          if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
+            return effectiveOffer.previousPrice7d;
+          }
+          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
+            return effectiveOffer.previousPrice24h;
+          }
+          return activeCurrent > 0 ? activeCurrent : undefined;
+        }
+      }
     }
-    // 2. If the active retailer offer has an original price (MSRP/Was price) and we're looking at 7d/30d
-    if (effectiveOffer && typeof effectiveOffer.originalPrice === 'number' && effectiveOffer.originalPrice > 0 && selectedInterval !== '24h') {
-      return effectiveOffer.originalPrice;
-    }
-    // 3. Interval-specific tracked prices from the item
-    let basePrice: number | undefined;
+
+    // 2. BASE RETAILER: Check offer fields first, then base item row fields
+    const baseCurrent = typeof effectiveOffer?.currentPrice === 'number' && effectiveOffer.currentPrice > 0
+      ? effectiveOffer.currentPrice
+      : (typeof item.currentPrice === 'number' && item.currentPrice > 0 ? item.currentPrice : 0);
+
     switch (selectedInterval) {
-      case '24h':
-        basePrice = typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined;
-        break;
-      case '7d':
-        basePrice = typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined);
-        break;
-      case '30d':
-        basePrice = typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined));
-        break;
+      case '24h': {
+        if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
+          return effectiveOffer.previousPrice24h;
+        }
+        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
+          return item.previousPrice24h;
+        }
+        if (typeof effectiveOffer?.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
+          return effectiveOffer.previousPrice;
+        }
+        return baseCurrent > 0 ? baseCurrent : undefined;
+      }
+      case '7d': {
+        if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
+          return effectiveOffer.previousPrice7d;
+        }
+        if (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0) {
+          return item.previousPrice7d;
+        }
+        if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > baseCurrent) {
+          return effectiveOffer.originalPrice;
+        }
+        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
+          return item.previousPrice24h;
+        }
+        return baseCurrent > 0 ? baseCurrent : undefined;
+      }
+      case '30d': {
+        if (typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0) {
+          return effectiveOffer.previousPrice30d;
+        }
+        if (typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0) {
+          return item.previousPrice30d;
+        }
+        if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > baseCurrent) {
+          return effectiveOffer.originalPrice;
+        }
+        if (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0) {
+          return item.previousPrice7d;
+        }
+        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
+          return item.previousPrice24h;
+        }
+        return baseCurrent > 0 ? baseCurrent : undefined;
+      }
     }
 
-    if (typeof basePrice === 'number' && basePrice > 0) {
-      return basePrice;
-    }
-
-    // 4. If offer has original price higher than current, use that
-    if (effectiveOffer && typeof effectiveOffer.originalPrice === 'number' && effectiveOffer.originalPrice > 0) {
-      return effectiveOffer.originalPrice;
-    }
-
-    // 5. Fallback: if item has a valid current price, return current price (meaning price held stable over interval)
-    if (effectiveOffer?.currentPrice && effectiveOffer.currentPrice > 0) {
-      return effectiveOffer.currentPrice;
-    }
-    if (item.currentPrice && item.currentPrice > 0) {
-      return item.currentPrice;
-    }
-
-    return undefined;
+    return baseCurrent > 0 ? baseCurrent : undefined;
   };
 
   const calculateDrop = (current: number, previous?: number) => {

@@ -157,12 +157,17 @@ export async function GET(req: NextRequest) {
         if (m && m.retailer && Number(m.current_price) > 0) {
           const rKey = m.retailer.toLowerCase();
           if (!retailerOffersMap.has(rKey)) {
+            const mPrice = Number(m.current_price || 0);
+            const mMsrp = Number(m.msrp || mPrice);
             retailerOffersMap.set(rKey, {
               id: m.id,
               retailer: m.retailer,
-              price: Number(m.current_price || 0),
-              originalPrice: Number(m.msrp || m.current_price || 0),
-              previousPrice: Number(m.previous_price_24h || m.msrp || m.current_price || 0),
+              price: mPrice,
+              originalPrice: mMsrp,
+              previousPrice: Number(m.previous_price_24h || mPrice),
+              previousPrice24h: Number(m.previous_price_24h || mPrice),
+              previousPrice7d: Number(m.previous_price_7d || mMsrp || mPrice),
+              previousPrice30d: Number(m.previous_price_30d || mMsrp || mPrice),
               title: m.name,
               url: m.product_url || '#',
               imageUrl: m.image_url,
@@ -178,12 +183,17 @@ export async function GET(req: NextRequest) {
               if (ro && ro.retailer && Number(ro.price) > 0) {
                 const roKey = ro.retailer.toLowerCase();
                 if (!retailerOffersMap.has(roKey)) {
+                  const roPrice = Number(ro.price || 0);
+                  const roMsrp = Number(ro.originalPrice || roPrice);
                   retailerOffersMap.set(roKey, {
                     id: ro.id || `${m.id}-${roKey}`,
                     retailer: ro.retailer,
-                    price: Number(ro.price || 0),
-                    originalPrice: Number(ro.originalPrice || ro.price || 0),
-                    previousPrice: Number(ro.previousPrice || ro.originalPrice || ro.price || 0),
+                    price: roPrice,
+                    originalPrice: roMsrp,
+                    previousPrice: Number(ro.previousPrice || roPrice),
+                    previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
+                    previousPrice7d: Number(ro.previousPrice7d || roMsrp || roPrice),
+                    previousPrice30d: Number(ro.previousPrice30d || roMsrp || roPrice),
                     title: ro.title || m.name,
                     url: ro.url || '#',
                     imageUrl: ro.imageUrl || ro.image_url || m.image_url,
