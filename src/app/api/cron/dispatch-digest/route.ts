@@ -43,6 +43,110 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
   return { bg: '#1f2937', color: '#9ca3af', border: '#374151' };
 }
 
+function isHardwareOfferMatch(item: any, h: any): boolean {
+  if (!h || !h.current_price || Number(h.current_price) <= 0) return false;
+
+  // 0. Category match
+  const normalizeCat = (c: string) => {
+    const s = (c || '').toLowerCase().trim();
+    if (s.includes('cpu') || s.includes('processor')) return 'cpu';
+    if (s.includes('gpu') || s.includes('graphics') || s.includes('video card')) return 'gpu';
+    if (s.includes('motherboard') || s.includes('mobo')) return 'motherboard';
+    if (s.includes('ram') || s.includes('memory')) return 'ram';
+    if (s.includes('ssd') || s.includes('storage') || s.includes('drive')) return 'storage';
+    if (s.includes('psu') || s.includes('power supply')) return 'psu';
+    if (s.includes('case') || s.includes('chassis')) return 'case';
+    if (s.includes('cooler') || s.includes('cooling')) return 'cooler';
+    return s;
+  };
+
+  const itemCat = normalizeCat(item.category || '');
+  const hCat = normalizeCat(h.category || '');
+  if (itemCat && hCat && itemCat !== hCat && itemCat !== 'hardware' && hCat !== 'hardware') {
+    return false;
+  }
+
+  const itemCompId = (item.component_id || item.id || '').toLowerCase().trim();
+  const hId = (h.id || '').toLowerCase().trim();
+
+  const stripRetailerSuffix = (id: string) =>
+    id.replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+
+  const baseItemCompId = stripRetailerSuffix(itemCompId);
+  const baseHId = stripRetailerSuffix(hId);
+
+  const itemName = (item.component_name || item.name || '').toLowerCase().trim();
+  const hName = (h.name || '').toLowerCase().trim();
+  const hModel = (h.model || '').toLowerCase().trim();
+
+  // 1. CPU Tier Conflict Check (Ryzen 3/5/7/9 vs Core i3/i5/i7/i9 vs Ultra 5/7/9)
+  const extractCpuTier = (str: string): string | null => {
+    const rMatch = str.match(/\b(ryzen\s*[3579]|r[3579])\b/i);
+    if (rMatch) return rMatch[0].replace(/\s+/g, '').toLowerCase().replace('r', 'ryzen');
+    const iMatch = str.match(/\b(core\s*i[3579]|i[3579]-?\d{4,5})\b/i);
+    if (iMatch) return iMatch[1].replace(/[- ]/g, '').toLowerCase();
+    const uMatch = str.match(/\bultra\s*[579]\b/i);
+    if (uMatch) return uMatch[0].replace(/\s+/g, '').toLowerCase();
+    return null;
+  };
+
+  const itemCpuTier = extractCpuTier(itemName) || extractCpuTier(itemCompId);
+  const hCpuTier = extractCpuTier(hName) || extractCpuTier(hModel) || extractCpuTier(hId);
+  if (itemCpuTier && hCpuTier && itemCpuTier !== hCpuTier) {
+    return false; // Mismatched CPU tier: e.g. Ryzen 7 vs Ryzen 5
+  }
+
+  // 2. Specific CPU / GPU Model Token Match (e.g., 9800x3d, 7800x3d, 7500f, 4080, 4070, 14900k)
+  const extractModelNumber = (str: string): string | null => {
+    const cpuModel = str.match(/\b(\d{4,5}[a-z0-9]*(?:x3d)?)\b/i);
+    if (cpuModel) return cpuModel[1].toLowerCase();
+    const gpuModel = str.match(/\b(rtx|gtx|rx|arc)?\s*(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b/i);
+    if (gpuModel) {
+      const num = gpuModel[2];
+      const mod = gpuModel[3] ? '-' + gpuModel[3].toLowerCase() : '';
+      return `${num}${mod}`;
+    }
+    return null;
+  };
+
+  const itemModelNum = extractModelNumber(itemName) || extractModelNumber(itemCompId);
+  const hModelNum = extractModelNumber(hName) || extractModelNumber(hModel) || extractModelNumber(hId);
+
+  // If item has a specific model number, candidate MUST have the exact same model number
+  if (itemModelNum && hModelNum && itemModelNum !== hModelNum) {
+    return false;
+  }
+
+  // 3. GPU Sub-tier modifier check (prevents 4080 matching 4080 Super or 4070 matching 4070 Ti)
+  const isSuper = (s: string) => /\bsuper\b/i.test(s);
+  const isTi = (s: string) => /\bti\b/i.test(s);
+  const isXtx = (s: string) => /\bxtx\b/i.test(s);
+  const hasGpuIndicator = (s: string) => s.includes('40') || s.includes('50') || s.includes('rtx') || s.includes('7900') || s.includes('rx');
+  if (hasGpuIndicator(itemName) || hasGpuIndicator(hName)) {
+    if (isSuper(itemName) !== isSuper(hName)) return false;
+    if (isTi(itemName) !== isTi(hName)) return false;
+    if (isXtx(itemName) !== isXtx(hName)) return false;
+  }
+
+  // 4. ID-based matching (exact or base ID match)
+  if (baseItemCompId && baseHId && baseItemCompId === baseHId) {
+    return true;
+  }
+  if (itemCompId && (hId === itemCompId || hId.startsWith(itemCompId + '-'))) {
+    return true;
+  }
+
+  // 5. Name / Model match (requires high confidence)
+  if (itemName && hName) {
+    if (hName === itemName) return true;
+    if (itemModelNum && hModelNum && itemModelNum === hModelNum) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function buildDigestEmailHtml(report: any, dateStr: string): string {
   const freq = report.frequency || 'daily';
   const isWeekly = freq === 'weekly';
@@ -439,21 +543,8 @@ export async function GET(req: NextRequest) {
         let formattedWatchlist: any[] = [];
         if (watchlistItems && watchlistItems.length > 0) {
           formattedWatchlist = watchlistItems.map((item: any) => {
-            // Find all candidate offers from retailers for this component
-            const candidates = (allHwComponents || []).filter((h: any) => {
-              if (!h || !h.current_price) return false;
-              if (item.component_id && h.id) {
-                const compId = item.component_id.toLowerCase();
-                const hId = h.id.toLowerCase();
-                if (hId === compId || hId.startsWith(compId) || compId.startsWith(hId)) return true;
-              }
-              if (item.component_name && h.name) {
-                const iName = item.component_name.toLowerCase().trim();
-                const hName = h.name.toLowerCase().trim();
-                if (hName === iName || hName.includes(iName.slice(0, 25)) || iName.includes(hName.slice(0, 25))) return true;
-              }
-              return false;
-            });
+            // Find all candidate offers from retailers for this component using strict hardware matching
+            const candidates = (allHwComponents || []).filter((h: any) => isHardwareOfferMatch(item, h));
 
             // Automatically pick the best / lowest price available across all stores
             const matchedHw = candidates.length > 0 

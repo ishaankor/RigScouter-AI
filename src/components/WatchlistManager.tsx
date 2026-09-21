@@ -355,9 +355,12 @@ export function WatchlistManager({
                 const gCompId = (group.component_id || group.id || '').toLowerCase();
                 const matchingHw = (hwCatalog || []).find((h: any) => {
                   const hId = (h.id || '').toLowerCase();
-                  if (hId && gCompId && (hId === gCompId || hId.startsWith(gCompId) || gCompId.startsWith(hId))) return true;
+                  const stripSuffix = (id: string) => id.replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+                  const baseGCompId = stripSuffix(gCompId);
+                  const baseHId = stripSuffix(hId);
+                  if (hId && gCompId && (baseHId === baseGCompId || hId === gCompId || hId.startsWith(gCompId + '-'))) return true;
                   const hKey = getNormalizedKey(h);
-                  return Boolean(gKey && hKey && (gKey === hKey || (gKey.length > 5 && hKey.includes(gKey))));
+                  return Boolean(gKey && hKey && gKey === hKey);
                 });
 
                 const catalogImage = matchingHw?.image_url;
