@@ -33,6 +33,49 @@ function cleanDisplayTitle(name: string): string {
   return firstPart;
 }
 
+function getDomainRetailer(url: string): string | null {
+  const u = (url || '').toLowerCase();
+  if (u.includes('amazon.com')) return 'Amazon';
+  if (u.includes('ebay.com')) return 'eBay';
+  if (u.includes('bestbuy.com')) return 'Best Buy';
+  if (u.includes('microcenter.com')) return 'Micro Center';
+  if (u.includes('newegg.com')) return 'Newegg';
+  if (u.includes('bhphotovideo.com')) return 'B&H';
+  return null;
+}
+
+function resolveRetailerUrl(retailer: string, productUrl: string, specs: any, componentName: string): string {
+  const normRetailer = (retailer || 'Amazon').trim();
+  const domainRet = getDomainRetailer(productUrl);
+
+  // 1. If productUrl already matches retailer domain, use it directly
+  if (domainRet && domainRet.toLowerCase() === normRetailer.toLowerCase() && productUrl.startsWith('http')) {
+    return productUrl;
+  }
+
+  // 2. Try finding the matching retailer offer in specs.RetailerOffers
+  try {
+    const s = typeof specs === 'string' ? JSON.parse(specs || '{}') : (specs || {});
+    const offers = Array.isArray(s.RetailerOffers) ? s.RetailerOffers : [];
+    const matchingOffer = offers.find((o: any) => (o.retailer || '').toLowerCase() === normRetailer.toLowerCase());
+    if (matchingOffer?.url && matchingOffer.url.startsWith('http') && getDomainRetailer(matchingOffer.url)?.toLowerCase() === normRetailer.toLowerCase()) {
+      return matchingOffer.url;
+    }
+  } catch {}
+
+  // 3. Fallback: Generate accurate store search URL directly for that retailer
+  const cleanQ = encodeURIComponent(cleanDisplayTitle(componentName));
+  const rLower = normRetailer.toLowerCase();
+  if (rLower.includes('amazon')) return `https://www.amazon.com/s?k=${cleanQ}`;
+  if (rLower.includes('ebay')) return `https://www.ebay.com/sch/i.html?_nkw=${cleanQ}`;
+  if (rLower.includes('best')) return `https://www.bestbuy.com/site/searchpage.jsp?st=${cleanQ}`;
+  if (rLower.includes('micro')) return `https://www.microcenter.com/search/search_results.aspx?Ntt=${cleanQ}`;
+  if (rLower.includes('newegg')) return `https://www.newegg.com/p/pl?d=${cleanQ}`;
+  if (rLower.includes('b&h') || rLower.includes('bh')) return `https://www.bhphotovideo.com/c/search?Ntt=${cleanQ}`;
+
+  return productUrl && productUrl.startsWith('http') ? productUrl : `https://www.google.com/search?q=${cleanQ}+${encodeURIComponent(normRetailer)}`;
+}
+
 function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; border: string } {
   const r = (retailer || '').toLowerCase();
   if (r.includes('amazon')) return { bg: '#232f3e', color: '#ff9900', border: '#ff990055' };
@@ -40,6 +83,7 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
   if (r.includes('micro')) return { bg: '#311019', color: '#fb7185', border: '#fb718555' };
   if (r.includes('b&h') || r.includes('bh')) return { bg: '#082f49', color: '#38bdf8', border: '#38bdf855' };
   if (r.includes('ebay')) return { bg: '#064e3b', color: '#34d399', border: '#34d39955' };
+  if (r.includes('best')) return { bg: '#0a192f', color: '#ffe000', border: '#ffe00055' };
   return { bg: '#1f2937', color: '#9ca3af', border: '#374151' };
 }
 
@@ -78,6 +122,15 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
   const itemName = (item.component_name || item.name || '').toLowerCase().trim();
   const hName = (h.name || '').toLowerCase().trim();
   const hModel = (h.model || '').toLowerCase().trim();
+
+  // 0a. Replica / Toy / Scale Model / Accessory Conflict Check
+  const isReplicaOrAccessory = (s: string) =>
+    /\b(replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|box only|display only|prop|diecast|die-cast)\b/i.test(s);
+  const itemIsReplica = isReplicaOrAccessory(itemName) || isReplicaOrAccessory(itemCompId);
+  const hIsReplica = isReplicaOrAccessory(hName) || isReplicaOrAccessory(hModel) || isReplicaOrAccessory(hId);
+  if (itemIsReplica !== hIsReplica) {
+    return false; // Prevent display replicas/accessories ($29) from matching $2000 real hardware
+  }
 
   // 1. CPU Tier Conflict Check (Ryzen 3/5/7/9 vs Core i3/i5/i7/i9 vs Ultra 5/7/9)
   const extractCpuTier = (str: string): string | null => {
@@ -181,9 +234,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
     const rBadge = getRetailerBadgeStyle(item.retailer);
 
     // Direct product link with fallback
-    const directUrl = item.productUrl && item.productUrl.startsWith('http')
-      ? item.productUrl
-      : `https://www.google.com/search?q=${encodeURIComponent(cleanTitle + ' ' + (item.retailer || ''))}`;
+    const directUrl = resolveRetailerUrl(item.retailer, item.productUrl, item.specs, cleanTitle);
 
     // Price trajectory timeline calculation
     const p30 = Number(item.previousPrice30d || 0);
@@ -206,8 +257,12 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
               </span>` : ''}
             </td>
             <td style="text-align: right; vertical-align: middle;">
+              ${item.retailerOffers && item.retailerOffers.length > 1 ? `
+              <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: #0c4a6e66; border: 1px solid #0284c744; padding: 4px 8px; border-radius: 6px; margin-right: 6px;">
+                ${item.retailerOffers.length} Stores Compared
+              </span>` : ''}
               <span style="font-size: 12px; font-weight: 700; color: ${rBadge.color}; background: ${rBadge.bg}; border: 1px solid ${rBadge.border}; padding: 4px 10px; border-radius: 6px;">
-                ${item.retailer || 'Retailer'}
+                ${item.retailerOffers && item.retailerOffers.length > 1 ? `Best at ${item.retailer}` : (item.retailer || 'Retailer')}
               </span>
             </td>
           </tr>
@@ -222,7 +277,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
         <div style="background-color: #020617; border: 1px solid #1e293b; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
-              <td style="color: #94a3b8; font-size: 13px; font-weight: 600;">Current Live Price:</td>
+              <td style="color: #94a3b8; font-size: 13px; font-weight: 600;">Best Live Price:</td>
               <td style="text-align: right; font-weight: 900; font-size: 20px; color: ${isDrop ? '#34d399' : '#f8fafc'};">
                 $${currentPrice}
               </td>
@@ -256,12 +311,61 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
           </div>` : ''}
         </div>
 
+        ${item.retailerOffers && item.retailerOffers.length > 1 ? `
+        <!-- Multi-Store Live Comparison Matrix -->
+        <div style="background-color: #020617; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px;">
+            <tr>
+              <td style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">
+                Live Store Pricing (${item.retailerOffers.length} Stores)
+              </td>
+              ${item.maxSavings && item.maxSavings > 0 ? `
+              <td style="text-align: right; font-size: 11px; font-weight: 800; color: #34d399;">
+                💰 Save up to $${Number(item.maxSavings).toFixed(2)}
+              </td>` : ''}
+            </tr>
+          </table>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            ${item.retailerOffers.map((off: any) => {
+              const rStyle = getRetailerBadgeStyle(off.retailer);
+              const isBest = off.isLowest;
+              return `
+                <tr style="border-top: 1px solid #1e293b66;">
+                  <td style="padding: 7px 4px; vertical-align: middle;">
+                    <span style="font-size: 11px; font-weight: 700; color: ${rStyle.color}; background: ${rStyle.bg}; border: 1px solid ${rStyle.border}; padding: 3px 8px; border-radius: 5px;">
+                      ${off.retailer}
+                    </span>
+                  </td>
+                  <td style="padding: 7px 4px; vertical-align: middle; text-align: right; font-weight: 800; font-size: 13px; color: ${isBest ? '#34d399' : '#f1f5f9'};">
+                    $${Number(off.price).toFixed(2)}
+                  </td>
+                  <td style="padding: 7px 4px; vertical-align: middle; text-align: center; width: 85px;">
+                    ${isBest ? `
+                      <span style="font-size: 10px; font-weight: 800; color: #34d399; background: #064e3b55; border: 1px solid #05966955; padding: 2px 6px; border-radius: 4px;">
+                        LOWEST
+                      </span>` : (off.diffVsLowest > 0 ? `
+                      <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">
+                        +$${Number(off.diffVsLowest).toFixed(2)}
+                      </span>` : '')}
+                  </td>
+                  <td style="padding: 7px 4px; vertical-align: middle; text-align: right; width: 90px;">
+                    <a href="${off.url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 11px; font-weight: 700; color: ${isBest ? '#38bdf8' : '#cbd5e1'}; background: ${isBest ? '#0c4a6e66' : '#1e293b'}; border: 1px solid ${isBest ? '#0284c788' : '#334155'}; padding: 4px 10px; border-radius: 6px; text-decoration: none;">
+                      View Deal &rarr;
+                    </a>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </table>
+        </div>` : ''}
+
         <!-- Call to Action Button -->
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
             <td style="text-align: right;">
               <a href="${directUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);">
-                View Deal on ${item.retailer || 'Store'} &rarr;
+                ${item.retailerOffers && item.retailerOffers.length > 1 ? `View Lowest Deal on ${item.retailer} ($${currentPrice}) &rarr;` : `View Deal on ${item.retailer || 'Store'} &rarr;`}
               </a>
             </td>
           </tr>
@@ -330,8 +434,13 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
             <h1 style="margin: 16px 0 6px 0; font-size: 24px; font-weight: 900; color: #ffffff; line-height: 1.3; letter-spacing: -0.3px;">
               ${report.headline}
             </h1>
-            <div style="font-size: 12px; color: #64748b; font-weight: 600;">
+            <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 12px;">
               ${dateStr} &bull; Autonomous Scraper & Market Engine
+            </div>
+
+            <!-- Monitored Retailers Banner -->
+            <div style="display: inline-block; background-color: #0b1329; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 12px; font-size: 11px; color: #94a3b8;">
+              <strong style="color: #38bdf8;">Multi-Store Coverage:</strong> Amazon &bull; eBay &bull; Best Buy &bull; Newegg &bull; Micro Center &bull; B&amp;H
             </div>
           </div>
 
@@ -543,36 +652,113 @@ export async function GET(req: NextRequest) {
         let formattedWatchlist: any[] = [];
         if (watchlistItems && watchlistItems.length > 0) {
           formattedWatchlist = watchlistItems.map((item: any) => {
-            // Find all candidate offers from retailers for this component using strict hardware matching
+            // 1. Find all candidate offers from retailers for this component using strict hardware matching
             const candidates = (allHwComponents || []).filter((h: any) => isHardwareOfferMatch(item, h));
 
-            // Automatically pick the best / lowest price available across all stores
+            // 2. Build multi-retailer offers map across candidate rows and specs.RetailerOffers
+            const offersMap = new Map<string, { retailer: string; price: number; url: string; originalPrice?: number }>();
+
+            candidates.forEach((c: any) => {
+              const r = c.retailer || 'Amazon';
+              const p = Number(c.current_price || 0);
+              const u = resolveRetailerUrl(r, c.product_url, c.specs, item.component_name);
+              if (p > 0) {
+                const key = r.toLowerCase();
+                if (!offersMap.has(key) || (offersMap.get(key)!.price > p)) {
+                  offersMap.set(key, { retailer: r, price: p, url: u });
+                }
+              }
+
+              // Also check candidate specs.RetailerOffers
+              try {
+                const s = typeof c.specs === 'string' ? JSON.parse(c.specs || '{}') : (c.specs || {});
+                (s.RetailerOffers || []).forEach((ro: any) => {
+                  const roR = ro.retailer || 'Store';
+                  const roP = Number(ro.price || 0);
+                  if (roP > 0) {
+                    const roKey = roR.toLowerCase();
+                    const roUrl = resolveRetailerUrl(roR, ro.url, s, item.component_name);
+                    if (!offersMap.has(roKey) || (offersMap.get(roKey)!.price > roP)) {
+                      offersMap.set(roKey, { retailer: roR, price: roP, url: roUrl, originalPrice: Number(ro.originalPrice || roP) });
+                    }
+                  }
+                });
+              } catch {}
+            });
+
+            // If offersMap is empty, fallback to item data
+            if (offersMap.size === 0) {
+              const fallbackRetailer = item.retailer || 'Amazon';
+              const fallbackPrice = Number(item.current_price || item.all_time_low || item.target_price || 100);
+              const fallbackUrl = resolveRetailerUrl(fallbackRetailer, item.product_url || '#', item.specs, item.component_name);
+              offersMap.set(fallbackRetailer.toLowerCase(), {
+                retailer: fallbackRetailer,
+                price: fallbackPrice,
+                url: fallbackUrl
+              });
+            }
+
+            const sortedOffers = Array.from(offersMap.values()).sort((a, b) => a.price - b.price);
+            const bestOffer = sortedOffers[0];
+            const maxSavings = sortedOffers.length > 1
+              ? Number((sortedOffers[sortedOffers.length - 1].price - bestOffer.price).toFixed(2))
+              : 0;
+
+            const offersList = sortedOffers.map((off, idx) => ({
+              retailer: off.retailer,
+              price: off.price,
+              url: off.url,
+              isLowest: idx === 0,
+              diffVsLowest: Number((off.price - bestOffer.price).toFixed(2))
+            }));
+
             const matchedHw = candidates.length > 0 
               ? candidates.sort((a, b) => Number(a.current_price || 0) - Number(b.current_price || 0))[0]
               : null;
 
-            const currentPrice = Number(
-              matchedHw?.current_price ||
-              item.current_price ||
-              item.all_time_low ||
-              item.target_price ||
-              100
-            );
-
-            const retailer = matchedHw?.retailer || item.retailer || 'Amazon';
-            const productUrl = matchedHw?.product_url || item.product_url || '#';
+            const currentPrice = bestOffer.price;
+            const retailer = bestOffer.retailer;
+            const productUrl = bestOffer.url;
+            const specs = matchedHw?.specs || item.specs;
             const imageUrl = matchedHw?.image_url || item.image_url;
             const allTimeLow = Number(item.all_time_low || matchedHw?.lowest_price_90d || currentPrice);
             const previousPrice24h = Number(item.previous_price_24h || currentPrice);
             const previousPrice7d = Number(item.previous_price_7d || currentPrice);
             const previousPrice30d = Number(item.previous_price_30d || currentPrice);
 
+            let matchedHwSpecs: any = {};
+            try {
+              matchedHwSpecs = typeof specs === 'string' ? JSON.parse(specs || '{}') : (specs || {});
+            } catch {}
+
+            const userPrefTargets = (deliveryChannels as any)?.retailer_targets || {};
+            const compKey = (item.component_name || item.component_id || item.id || '').toLowerCase().trim();
+            const retKey = retailer.toLowerCase();
+
+            let matchedUserTarget: number | undefined = undefined;
+            Object.entries(userPrefTargets).forEach(([k, targets]) => {
+              if (matchedUserTarget !== undefined || !targets || typeof targets !== 'object') return;
+              const lk = k.toLowerCase().trim();
+              if (lk === compKey || (lk.length >= 4 && (compKey.includes(lk) || lk.includes(compKey)))) {
+                const tObj = targets as Record<string, number>;
+                if (tObj[retKey] !== undefined) matchedUserTarget = Number(tObj[retKey]);
+                else if (tObj[retailer] !== undefined) matchedUserTarget = Number(tObj[retailer]);
+              }
+            });
+
+            const retailerTargetPrice = 
+              matchedUserTarget !== undefined ? matchedUserTarget : (
+                matchedHwSpecs?.retailer_targets?.[retKey] || 
+                matchedHwSpecs?.retailer_targets?.[retailer] ||
+                Number(item.target_price || Math.round(currentPrice * 0.9))
+              );
+
             return {
               id: item.id,
               userId: item.user_id,
               componentName: item.component_name,
               category: item.category || matchedHw?.category || 'Hardware',
-              targetPrice: Number(item.target_price || Math.round(currentPrice * 0.9)),
+              targetPrice: retailerTargetPrice,
               currentPrice,
               previousPrice24h,
               previousPrice7d,
@@ -584,7 +770,9 @@ export async function GET(req: NextRequest) {
               inStock: item.in_stock ?? true,
               notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
               addedAt: item.added_at,
-              specs: item.specs
+              specs,
+              retailerOffers: offersList,
+              maxSavings
             };
           });
         }

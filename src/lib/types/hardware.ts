@@ -28,6 +28,18 @@ export type DigestFrequency = 'daily' | 'every_3_days' | 'weekly' | 'flash_only'
 
 export type ComparisonInterval = '24h' | '7d' | '30d' | 'ATL'; // ATL = All Time Low
 
+export interface RetailerOffer {
+  id?: string;
+  retailer: RetailerName | string;
+  price: number;
+  originalPrice?: number;
+  url: string;
+  imageUrl?: string;
+  inStock?: boolean;
+  isLowest?: boolean;
+  diffVsLowest?: number;
+}
+
 export interface WatchlistItem {
   id: string;
   userId: string;
@@ -47,6 +59,9 @@ export interface WatchlistItem {
   addedAt: string;
   specs?: Record<string, any>;
   dbRowIds?: string[];
+  retailerTargets?: Record<string, number>;
+  retailerOffers?: RetailerOffer[];
+  maxSavings?: number;
 }
 
 export interface PriceSnapshot {

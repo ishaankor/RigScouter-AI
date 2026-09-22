@@ -292,6 +292,19 @@ export function WatchlistManager({
               const apiData = await apiRes.json();
               if (apiData.items && Array.isArray(apiData.items) && apiData.items.length > 0) {
                 formatted = apiData.items;
+                // Hydrate retailerTargets from API data into local state
+                setRetailerTargets(prev => {
+                  const updated = { ...prev };
+                  apiData.items.forEach((it: any) => {
+                    if (it.retailerTargets && typeof it.retailerTargets === 'object') {
+                      const compKey = getNormalizedKey(it) || (it.componentName || '').toLowerCase().trim();
+                      updated[it.id] = { ...(updated[it.id] || {}), ...it.retailerTargets };
+                      updated[compKey] = { ...(updated[compKey] || {}), ...it.retailerTargets };
+                    }
+                  });
+                  try { localStorage.setItem('rigscouter_retailer_targets', JSON.stringify(updated)); } catch {}
+                  return updated;
+                });
               }
             }
           } catch (apiErr) {
@@ -406,7 +419,8 @@ export function WatchlistManager({
                   inStock: true,
                   notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
                   addedAt: group.added_at,
-                  specs: { RetailerOffers: parsedOffers.length > 0 ? parsedOffers : (group.RetailerOffers || []) }
+                  specs: { RetailerOffers: parsedOffers.length > 0 ? parsedOffers : (group.RetailerOffers || []) },
+                  retailerTargets: group.retailerTargets || group.retailer_targets || matchingHw?.specs?.retailer_targets || {}
                 };
               });
             }
@@ -442,7 +456,8 @@ export function WatchlistManager({
                     inStock: true,
                     notifyOnFlashDrop: true,
                     addedAt: item.updated_at,
-                    specs: { RetailerOffers: [] }
+                    specs: { RetailerOffers: [] },
+                    retailerTargets: specs.retailer_targets || {}
                   });
                 }
               }
@@ -835,29 +850,129 @@ export function WatchlistManager({
     }
   };
 
-  // Target Alert Editing State
+  // Target Alert Editing State (per retailer)
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [editingTargetRetailer, setEditingTargetRetailer] = useState<string | null>(null);
   const [tempTargetPrice, setTempTargetPrice] = useState<string>('');
+  const [retailerTargets, setRetailerTargets] = useState<Record<string, Record<string, number>>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rigscouter_retailer_targets');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return {};
+  });
 
-  const startEditingTarget = (item: WatchlistItem, currentEffectivePrice: number) => {
+  const getRetailerTarget = (item: any, retailerName: string, currentEffectivePrice?: number): number => {
+    if (!item) return 0;
+    const retKey = (retailerName || 'Amazon').toLowerCase().trim();
+    const itemId = item.id;
+    const compKey = getNormalizedKey(item) || (item.componentName || '').toLowerCase().trim();
+
+    // 1. Check local state retailerTargets
+    if (retailerTargets[itemId]?.[retKey] && retailerTargets[itemId][retKey] > 0) {
+      return Number(retailerTargets[itemId][retKey]);
+    }
+    if (retailerTargets[itemId]?.[retailerName] && retailerTargets[itemId][retailerName] > 0) {
+      return Number(retailerTargets[itemId][retailerName]);
+    }
+    if (retailerTargets[compKey]?.[retKey] && retailerTargets[compKey][retKey] > 0) {
+      return Number(retailerTargets[compKey][retKey]);
+    }
+    if (retailerTargets[compKey]?.[retailerName] && retailerTargets[compKey][retailerName] > 0) {
+      return Number(retailerTargets[compKey][retailerName]);
+    }
+
+    // 2. Check item.retailerTargets from API/DB
+    if (item.retailerTargets?.[retKey] && item.retailerTargets[retKey] > 0) {
+      return Number(item.retailerTargets[retKey]);
+    }
+    if (item.retailerTargets?.[retailerName] && item.retailerTargets[retailerName] > 0) {
+      return Number(item.retailerTargets[retailerName]);
+    }
+
+    // 3. Check specs.retailer_targets
+    try {
+      const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+      if (specs?.retailer_targets?.[retKey] && specs.retailer_targets[retKey] > 0) {
+        return Number(specs.retailer_targets[retKey]);
+      }
+      if (specs?.retailer_targets?.[retailerName] && specs.retailer_targets[retailerName] > 0) {
+        return Number(specs.retailer_targets[retailerName]);
+      }
+    } catch {}
+
+    // 4. Fallback: if item has a base targetPrice, use it
+    if (item.targetPrice && Number(item.targetPrice) > 0) {
+      return Number(item.targetPrice);
+    }
+    if (item.target_price && Number(item.target_price) > 0) {
+      return Number(item.target_price);
+    }
+
+    // 5. Default to 90% of effective price
+    if (currentEffectivePrice && currentEffectivePrice > 0) {
+      return Math.round(currentEffectivePrice * 0.9 * 100) / 100;
+    }
+
+    return 0;
+  };
+
+  const startEditingTarget = (item: WatchlistItem, retailerName: string, currentEffectivePrice: number) => {
     setEditingTargetId(item.id);
-    const initialVal = item.targetPrice && item.targetPrice > 0 
-      ? item.targetPrice 
-      : (currentEffectivePrice > 0 ? Math.round(currentEffectivePrice * 0.9 * 100) / 100 : 0);
+    setEditingTargetRetailer(retailerName || 'Amazon');
+    const initialVal = getRetailerTarget(item, retailerName, currentEffectivePrice);
     setTempTargetPrice(initialVal > 0 ? String(initialVal) : '');
   };
 
-  const saveTargetPrice = async (itemId: string) => {
+  const saveTargetPrice = async (itemId: string, retailerName: string) => {
     const newPrice = parseFloat(tempTargetPrice);
     if (isNaN(newPrice) || newPrice <= 0) {
       setEditingTargetId(null);
+      setEditingTargetRetailer(null);
       return;
     }
 
+    const retName = retailerName || 'Amazon';
+    const retKey = retName.toLowerCase().trim();
     const targetItem = watchlist.find(i => i.id === itemId);
-    setWatchlist(prev => prev.map(i => i.id === itemId ? { ...i, targetPrice: newPrice } : i));
-    setEditingTargetId(null);
+    const compKey = targetItem ? (getNormalizedKey(targetItem) || (targetItem.componentName || '').toLowerCase().trim()) : itemId;
 
+    // 1. Update retailerTargets state and localStorage immediately
+    setRetailerTargets(prev => {
+      const updated = {
+        ...prev,
+        [itemId]: { ...(prev[itemId] || {}), [retKey]: newPrice, [retName]: newPrice },
+        [compKey]: { ...(prev[compKey] || {}), [retKey]: newPrice, [retName]: newPrice }
+      };
+      try {
+        localStorage.setItem('rigscouter_retailer_targets', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Update watchlist items in state
+    setWatchlist(prev => prev.map(i => {
+      if (i.id === itemId) {
+        const updatedTargets = {
+          ...(i.retailerTargets || {}),
+          [retKey]: newPrice,
+          [retName]: newPrice
+        };
+        return {
+          ...i,
+          targetPrice: newPrice,
+          retailerTargets: updatedTargets
+        };
+      }
+      return i;
+    }));
+
+    setEditingTargetId(null);
+    setEditingTargetRetailer(null);
+
+    // 3. Persist to DB via Supabase and API
     if (targetItem && user?.id) {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const rawIds = [targetItem.id, ...(targetItem.dbRowIds || [])];
@@ -871,7 +986,7 @@ export function WatchlistManager({
         }
       });
 
-      // 1. Direct Supabase client update
+      // Direct Supabase client update
       try {
         if (validUuids.length > 0) {
           await supabase
@@ -891,7 +1006,7 @@ export function WatchlistManager({
         console.warn('Direct Supabase update notice:', e?.message || e);
       }
 
-      // 2. Server API PATCH fallback (uses supabaseAdmin to guarantee persistence)
+      // Server API PATCH (persists per-retailer target to user_preferences and hardware specs)
       try {
         await fetch('/api/watchlist', {
           method: 'PATCH',
@@ -901,6 +1016,7 @@ export function WatchlistManager({
             ids: targetItem.dbRowIds || [],
             userId: user.id,
             componentName: targetItem.componentName,
+            retailer: retName,
             targetPrice: newPrice
           })
         });
@@ -908,7 +1024,7 @@ export function WatchlistManager({
         console.warn('PATCH /api/watchlist notice:', patchErr);
       }
 
-      // 3. Backend Proxy PATCH (guarantees DB persistence across environments)
+      // Backend Proxy PATCH
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
       try {
         fetch(`${BACKEND_URL}/api/watchlist`, {
@@ -919,12 +1035,13 @@ export function WatchlistManager({
             ids: targetItem.dbRowIds || [],
             userId: user.id,
             componentName: targetItem.componentName,
+            retailer: retName,
             targetPrice: newPrice
           })
         }).catch(() => {});
       } catch (e) {}
 
-      // 4. If target price is met and alerts are enabled, send immediate alert email!
+      // Immediate target met notification if met for this retailer
       const effectiveOffer = getEffectiveOffer(targetItem);
       const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
       if (currentPrice > 0 && newPrice >= currentPrice && targetItem.notifyOnFlashDrop) {
@@ -939,7 +1056,7 @@ export function WatchlistManager({
               category: targetItem.category,
               targetPrice: newPrice,
               currentPrice: currentPrice,
-              retailer: effectiveOffer.retailer || targetItem.retailer || 'Amazon',
+              retailer: retName,
               productUrl: effectiveOffer.productUrl || targetItem.productUrl || '#',
               imageUrl: targetItem.imageUrl
             })
@@ -1029,7 +1146,7 @@ export function WatchlistManager({
       if (newStatus) {
         const effectiveOffer = getEffectiveOffer(targetItem);
         const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
-        const targetP = targetItem.targetPrice || 0;
+        const targetP = getRetailerTarget(targetItem, effectiveOffer.retailer, currentPrice);
         if (currentPrice > 0 && targetP > 0 && currentPrice <= targetP) {
           try {
             fetch('/api/notifications/target-met', {
@@ -1361,7 +1478,8 @@ export function WatchlistManager({
                     const effective = getEffectiveOffer(item);
                     const prevPrice = getPreviousPrice(item, effective);
                     const { diff, percent, isDrop, isIncrease, isStable, hasHistory } = calculateDrop(effective.currentPrice, prevPrice);
-                    const isTargetHit = effective.currentPrice > 0 && item.targetPrice > 0 && effective.currentPrice <= item.targetPrice;
+                    const targetForRetailer = getRetailerTarget(item, effective.retailer, effective.currentPrice);
+                    const isTargetHit = effective.currentPrice > 0 && targetForRetailer > 0 && effective.currentPrice <= targetForRetailer;
 
                     const rawATL = Number(item.allTimeLow || 0);
                     const currentP = Number(effective.currentPrice || 0);
@@ -1421,9 +1539,9 @@ export function WatchlistManager({
                           )}
                         </td>
 
-                        {/* 1. Interactive Inline Target Alert Editor */}
+                        {/* 1. Interactive Inline Target Alert Editor (Per Retailer) */}
                         <td className="p-4">
-                          {editingTargetId === item.id ? (
+                          {editingTargetId === item.id && (!editingTargetRetailer || editingTargetRetailer.toLowerCase() === effective.retailer.toLowerCase()) ? (
                             <div className="flex flex-col gap-1.5 min-w-[140px]">
                               <div className="flex items-center gap-1">
                                 <span className="text-gray-400 font-bold text-xs">$</span>
@@ -1434,20 +1552,26 @@ export function WatchlistManager({
                                   value={tempTargetPrice}
                                   onChange={(e) => setTempTargetPrice(e.target.value)}
                                   onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveTargetPrice(item.id);
-                                    if (e.key === 'Escape') setEditingTargetId(null);
+                                    if (e.key === 'Enter') saveTargetPrice(item.id, effective.retailer);
+                                    if (e.key === 'Escape') {
+                                      setEditingTargetId(null);
+                                      setEditingTargetRetailer(null);
+                                    }
                                   }}
                                   className="w-20 bg-black/90 border border-cyan-500/70 text-white font-mono text-xs px-2 py-1 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-400"
                                 />
                                 <button
-                                  onClick={() => saveTargetPrice(item.id)}
+                                  onClick={() => saveTargetPrice(item.id, effective.retailer)}
                                   className="p-1 bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 rounded-md border border-cyan-500/50 transition-colors cursor-pointer"
-                                  title="Save Target Alert"
+                                  title={`Save ${effective.retailer} Target Alert`}
                                 >
                                   <Check className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => setEditingTargetId(null)}
+                                  onClick={() => {
+                                    setEditingTargetId(null);
+                                    setEditingTargetRetailer(null);
+                                  }}
                                   className="p-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-md border border-gray-700 transition-colors cursor-pointer"
                                   title="Cancel"
                                 >
@@ -1472,17 +1596,23 @@ export function WatchlistManager({
                                   })}
                                 </div>
                               )}
+                              <span className="text-[10px] text-cyan-400/80 font-medium">for {effective.retailer}</span>
                             </div>
                           ) : (
                             <div
-                              onClick={() => startEditingTarget(item, effective.currentPrice)}
-                              className="group inline-flex items-center gap-1.5 cursor-pointer py-1 px-1.5 rounded-lg hover:bg-gray-800/60 border border-transparent hover:border-gray-700 transition-all"
-                              title="Click to set custom target price alert"
+                              onClick={() => startEditingTarget(item, effective.retailer, effective.currentPrice)}
+                              className="group inline-flex flex-col cursor-pointer py-1 px-1.5 rounded-lg hover:bg-gray-800/60 border border-transparent hover:border-gray-700 transition-all"
+                              title={`Click to set custom target price alert for ${effective.retailer}`}
                             >
-                              <span className="font-mono font-bold text-gray-200 group-hover:text-cyan-300 transition-colors">
-                                ${Number(item.targetPrice || 0).toFixed(2)}
+                              <div className="inline-flex items-center gap-1.5">
+                                <span className="font-mono font-bold text-gray-200 group-hover:text-cyan-300 transition-colors">
+                                  ${targetForRetailer.toFixed(2)}
+                                </span>
+                                <Edit3 className="w-3 h-3 text-gray-500 group-hover:text-cyan-400 opacity-40 group-hover:opacity-100 transition-all" />
+                              </div>
+                              <span className="text-[10px] text-gray-400 group-hover:text-cyan-400/70 font-medium transition-colors">
+                                on {effective.retailer}
                               </span>
-                              <Edit3 className="w-3 h-3 text-gray-500 group-hover:text-cyan-400 opacity-40 group-hover:opacity-100 transition-all" />
                             </div>
                           )}
                         </td>

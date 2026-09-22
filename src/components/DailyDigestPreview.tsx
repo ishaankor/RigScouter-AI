@@ -26,9 +26,54 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   const fetchUserWatchlist = async (): Promise<WatchlistItem[]> => {
     if (!user?.id) return [];
 
+    // 1. Fetch from /api/watchlist (uses supabaseAdmin service role with full hardware catalog matching)
+    try {
+      const res = await fetch(`/api/watchlist?userId=${encodeURIComponent(user.id)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.items) && json.items.length > 0) {
+          return json.items.map((item: any) => {
+            const rawOffers: any[] = Array.isArray(item.specs?.RetailerOffers) ? item.specs.RetailerOffers : [];
+            const validOffers = rawOffers
+              .filter((o: any) => o && o.retailer && Number(o.price || 0) > 0)
+              .sort((a: any, b: any) => Number(a.price) - Number(b.price));
+
+            const bestOffer = validOffers[0];
+            const maxSavings = validOffers.length > 1
+              ? Number((Number(validOffers[validOffers.length - 1].price) - Number(bestOffer.price)).toFixed(2))
+              : 0;
+
+            const offersList = validOffers.map((o: any) => ({
+              retailer: o.retailer,
+              price: Number(o.price),
+              url: o.url || item.productUrl || '#',
+              isLowest: bestOffer ? o.retailer.toLowerCase() === bestOffer.retailer.toLowerCase() : true,
+              diffVsLowest: bestOffer ? Number((Number(o.price) - Number(bestOffer.price)).toFixed(2)) : 0
+            }));
+
+            return {
+              ...item,
+              retailer: bestOffer?.retailer || item.retailer || 'Amazon',
+              currentPrice: bestOffer ? Number(bestOffer.price) : Number(item.currentPrice || 0),
+              productUrl: bestOffer?.url || item.productUrl,
+              retailerOffers: offersList.length > 0 ? offersList : [{
+                retailer: item.retailer || 'Amazon',
+                price: Number(item.currentPrice || 0),
+                url: item.productUrl || '#',
+                isLowest: true
+              }],
+              maxSavings
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('DailyDigestPreview /api/watchlist fetch notice:', err);
+    }
+
     let formatted: WatchlistItem[] = [];
 
-    // 1. Direct Supabase DB Table Query for user watchlist items
+    // 2. Direct Supabase DB Table Query fallback
     const { data: dbItems, error } = await supabase
       .from('watchlist_items')
       .select('*')
@@ -58,43 +103,6 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           specs: item.specs
         };
       });
-    }
-
-    // 2. Also check hardware_components for items user added (specs.user_watchlist === user.id)
-    const { data: hwData } = await supabase.from('hardware_components').select('*');
-    if (hwData && hwData.length > 0) {
-      const userHw = hwData.filter(item => {
-        try {
-          const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
-          return specs.user_watchlist === user.id;
-        } catch {
-          return false;
-        }
-      });
-      for (const item of userHw) {
-        const price = Number(item.current_price || 100);
-        if (!formatted.some(f => (f.componentName || '').toLowerCase() === (item.name || '').toLowerCase())) {
-          formatted.push({
-            id: `hw-${item.id}`,
-            userId: user.id,
-            componentName: item.name,
-            category: item.category || 'GPU',
-            targetPrice: Number(item.msrp ? item.msrp * 0.9 : price * 0.9),
-            currentPrice: price,
-            previousPrice24h: price,
-            previousPrice7d: price,
-            previousPrice30d: price,
-            allTimeLow: Number(item.lowest_price_90d || price),
-            retailer: item.retailer || 'Amazon',
-            productUrl: item.product_url || '#',
-            imageUrl: item.image_url,
-            inStock: true,
-            notifyOnFlashDrop: true,
-            addedAt: item.updated_at,
-            specs: item.specs
-          });
-        }
-      }
     }
 
     return formatted;
@@ -481,7 +489,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                       </div>
                       <div className="grid grid-cols-3 gap-3 p-3 bg-black/50 rounded-xl border border-white/5">
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">New Price</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">Best Price</span>
                           <span className="text-emerald-400 font-black text-base">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col">
@@ -493,10 +501,35 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                           </span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">Retailer</span>
+                          <span className="text-gray-500 text-[10px] font-bold uppercase">Best Retailer</span>
                           <span className="text-cyan-400 font-bold text-base truncate">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
                         </div>
                       </div>
+                      {report?.biggestDrop?.item?.retailerOffers && report.biggestDrop.item.retailerOffers.length > 1 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-white/10 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mr-1">Store Prices:</span>
+                          {report.biggestDrop.item.retailerOffers.map((off: any) => (
+                            <a
+                              key={off.retailer}
+                              href={off.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all ${
+                                off.isLowest
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-700/60 shadow-sm'
+                                  : 'bg-gray-900 text-gray-400 border-gray-800 hover:border-gray-700 hover:text-gray-200'
+                              }`}
+                            >
+                              {off.retailer}: ${Number(off.price).toFixed(2)} {off.isLowest ? '✓ Best' : ''}
+                            </a>
+                          ))}
+                          {report.biggestDrop.item.maxSavings && report.biggestDrop.item.maxSavings > 0 ? (
+                            <span className="text-[10px] text-emerald-400 font-bold ml-auto">
+                              Save ${report.biggestDrop.item.maxSavings.toFixed(2)} vs highest
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -524,7 +557,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                                 </span>
                                 <span className="font-bold text-white text-xs">{cleanName}</span>
                               </div>
-                              <div className="flex items-center gap-3 shrink-0">
+                              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                                 <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
                                 {isDrop ? (
                                   <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
@@ -533,9 +566,36 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                                 ) : (
                                   <span className="text-gray-500 font-medium text-xs">Stable</span>
                                 )}
-                                <span className="text-gray-400 text-xs px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
-                                  {itemSummary?.item?.retailer || 'Store'}
-                                </span>
+                                {itemSummary?.item?.retailerOffers && itemSummary.item.retailerOffers.length > 1 ? (
+                                  <div className="flex items-center gap-1">
+                                    {itemSummary.item.retailerOffers.map((off: any) => (
+                                      <a
+                                        key={off.retailer}
+                                        href={off.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-all ${
+                                          off.isLowest
+                                            ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60 shadow-sm'
+                                            : 'bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200'
+                                        }`}
+                                        title={`${off.retailer}: $${Number(off.price).toFixed(2)}${off.isLowest ? ' (Lowest Price)' : ''}`}
+                                      >
+                                        {off.retailer}: ${Number(off.price).toFixed(0)}
+                                      </a>
+                                    ))}
+                                    {itemSummary.item.maxSavings && itemSummary.item.maxSavings > 0 ? (
+                                      <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/40 px-1 py-0.5 rounded border border-emerald-900/40" title={`Save $${itemSummary.item.maxSavings.toFixed(2)}`}>
+                                        -${itemSummary.item.maxSavings.toFixed(0)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-xs px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
+                                    {itemSummary?.item?.retailer || 'Store'}
+                                  </span>
+                                )}
                               </div>
                             </div>
 

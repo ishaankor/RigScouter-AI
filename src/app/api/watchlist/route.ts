@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Fetch User Watchlist Items ONLY if a valid userId is provided
     let rawWatchlist: any[] = [];
+    let userPrefTargets: Record<string, Record<string, number>> = {};
     if (userId && userId !== 'guest') {
       const { data: userWatchlist } = await supabaseAdmin
         .from('watchlist_items')
@@ -23,6 +24,22 @@ export async function GET(req: NextRequest) {
         .order('id', { ascending: false });
 
       rawWatchlist = userWatchlist || [];
+
+      // Fetch user preferences for per-retailer target alerts
+      const { data: userPref } = await supabaseAdmin
+        .from('user_preferences')
+        .select('delivery_channels')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (userPref?.delivery_channels) {
+        try {
+          const channels = typeof userPref.delivery_channels === 'string'
+            ? JSON.parse(userPref.delivery_channels)
+            : userPref.delivery_channels;
+          userPrefTargets = channels.retailer_targets || {};
+        } catch {}
+      }
     }
 
     // 2. Fetch catalog items for trending hardware
@@ -221,6 +238,44 @@ export async function GET(req: NextRequest) {
         ? item.product_url
         : (bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#'));
 
+      // Extract any saved retailer targets from hardware specs and user preferences
+      let hwTargets: Record<string, number> = {};
+      try {
+        const mSpecs = typeof bestMatch?.specs === 'string' ? JSON.parse(bestMatch.specs || '{}') : (bestMatch?.specs || {});
+        if (mSpecs.retailer_targets && typeof mSpecs.retailer_targets === 'object') {
+          hwTargets = mSpecs.retailer_targets;
+        }
+      } catch {}
+
+      const cleanCNameKey = (item.component_name || item.name || '').toLowerCase().trim();
+      const cleanCIdKey = cId;
+      
+      // Merge all matching user preference targets across exact key, ID, and partial substring matches
+      let matchedPrefTargets: Record<string, number> = {};
+      Object.entries(userPrefTargets).forEach(([k, targets]) => {
+        if (!targets || typeof targets !== 'object') return;
+        const lk = k.toLowerCase().trim();
+        const matchesName = lk === cleanCNameKey || (lk.length >= 4 && (cleanCNameKey.includes(lk) || lk.includes(cleanCNameKey)));
+        const matchesId = lk === cleanCIdKey || (item.id && lk === String(item.id).toLowerCase().trim());
+        if (matchesName || matchesId) {
+          matchedPrefTargets = { ...matchedPrefTargets, ...(targets as Record<string, number>) };
+        }
+      });
+
+      const combinedRetailerTargets: Record<string, number> = {
+        ...hwTargets,
+        ...matchedPrefTargets
+      };
+
+      // Ensure finalProductUrl matches finalRetailer domain
+      let validatedProductUrl = finalProductUrl;
+      const matchingRetailerOffer = retailerOffers.find(
+        (ro: any) => (ro.retailer || '').toLowerCase() === finalRetailer.toLowerCase()
+      );
+      if (matchingRetailerOffer?.url && matchingRetailerOffer.url.startsWith('http')) {
+        validatedProductUrl = matchingRetailerOffer.url;
+      }
+
       const finalImageUrl = item.image_url || bestMatch?.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
 
       return {
@@ -235,11 +290,12 @@ export async function GET(req: NextRequest) {
         previousPrice30d: item.previous_price_30d != null ? Number(item.previous_price_30d) : (bestMatch?.msrp ? Number(bestMatch.msrp) : finalPrice),
         allTimeLow: Number(item.all_time_low || bestMatch?.lowest_price_90d || finalPrice),
         retailer: finalRetailer,
-        productUrl: finalProductUrl,
+        productUrl: validatedProductUrl,
         imageUrl: finalImageUrl,
         inStock: item.in_stock ?? true,
         notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
         addedAt: item.added_at,
+        retailerTargets: combinedRetailerTargets,
         specs: {
           RetailerOffers: retailerOffers
         }
@@ -407,7 +463,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, ids, userId, componentName, targetPrice, notifyOnFlashDrop } = body;
+    const { id, ids, userId, componentName, targetPrice, retailer, notifyOnFlashDrop } = body;
 
     const updates: any = {};
     if (typeof targetPrice === 'number' && targetPrice > 0) {
@@ -417,7 +473,7 @@ export async function PATCH(req: NextRequest) {
       updates.notify_on_flash_drop = notifyOnFlashDrop;
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && !retailer) {
       return NextResponse.json({ error: 'No valid updates provided' }, { status: 400 });
     }
 
@@ -451,7 +507,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // 2. Perform atomic replace (delete + insert) to bypass PostgreSQL RLS update restrictions
+    // 2. Update matching rows in watchlist_items
     for (const row of matchedRows) {
       await supabaseAdmin.from('watchlist_items').delete().eq('id', row.id);
       const updatedRow = {
@@ -470,8 +526,46 @@ export async function PATCH(req: NextRequest) {
       await supabaseAdmin.from('watchlist_items').insert(updatedRow);
     }
 
-    // 3. Also update hardware_components if user-tagged
-    if (userId && componentName && typeof targetPrice === 'number') {
+    // 3. Persist per-retailer target alert to user_preferences
+    if (userId && typeof targetPrice === 'number' && targetPrice > 0 && retailer) {
+      try {
+        const { data: prefRow } = await supabaseAdmin
+          .from('user_preferences')
+          .select('delivery_channels')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        let channels: any = { email: true, emailAddress: '' };
+        if (prefRow?.delivery_channels) {
+          channels = typeof prefRow.delivery_channels === 'string'
+            ? JSON.parse(prefRow.delivery_channels)
+            : prefRow.delivery_channels;
+        }
+        channels.retailer_targets = channels.retailer_targets || {};
+        const keysToUpdate = new Set<string>();
+        if (componentName) keysToUpdate.add(componentName.toLowerCase().trim());
+        if (id) keysToUpdate.add(String(id).toLowerCase().trim());
+        matchedRows.forEach(r => {
+          if (r.component_name) keysToUpdate.add(r.component_name.toLowerCase().trim());
+          if (r.id) keysToUpdate.add(String(r.id).toLowerCase().trim());
+        });
+        keysToUpdate.forEach(k => {
+          channels.retailer_targets[k] = channels.retailer_targets[k] || {};
+          channels.retailer_targets[k][retailer.toLowerCase()] = targetPrice;
+          channels.retailer_targets[k][retailer] = targetPrice;
+        });
+
+        await supabaseAdmin
+          .from('user_preferences')
+          .update({ delivery_channels: JSON.stringify(channels), updated_at: new Date().toISOString() })
+          .eq('user_id', userId);
+      } catch (prefErr) {
+        console.warn('user_preferences retailer target update notice:', prefErr);
+      }
+    }
+
+    // 4. Also update hardware_components specs.retailer_targets
+    if (componentName && typeof targetPrice === 'number' && retailer) {
       try {
         const cleanName = String(componentName).replace(/[^a-zA-Z0-9\s]/g, ' ').trim().slice(0, 30);
         const { data: hwItems } = await supabaseAdmin
@@ -482,13 +576,16 @@ export async function PATCH(req: NextRequest) {
         if (hwItems && hwItems.length > 0) {
           for (const h of hwItems) {
             const specs = typeof h.specs === 'string' ? JSON.parse(h.specs || '{}') : (h.specs || {});
-            if (specs.user_watchlist === userId) {
+            specs.retailer_targets = specs.retailer_targets || {};
+            specs.retailer_targets[retailer.toLowerCase()] = targetPrice;
+            specs.retailer_targets[retailer] = targetPrice;
+            if (specs.user_watchlist === userId || !specs.user_watchlist) {
               specs.target_price = targetPrice;
-              await supabaseAdmin
-                .from('hardware_components')
-                .update({ specs: JSON.stringify(specs) })
-                .eq('id', h.id);
             }
+            await supabaseAdmin
+              .from('hardware_components')
+              .update({ specs: JSON.stringify(specs) })
+              .eq('id', h.id);
           }
         }
       } catch (hwErr) {
@@ -496,7 +593,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, updates, updatedCount: matchedRows.length });
+    return NextResponse.json({ success: true, updates, retailer, updatedCount: matchedRows.length });
   } catch (e: any) {
     console.error('[/api/watchlist PATCH Error]:', e?.message || e);
     return NextResponse.json({ error: e?.message || 'Watchlist update failed' }, { status: 500 });
