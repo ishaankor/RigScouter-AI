@@ -486,7 +486,18 @@ export function WatchlistManager({
         setWatchlist(dedupedList);
 
         if (hwCatalog && hwCatalog.length > 0) {
-          const formattedTrending = hwCatalog.map((item: any) => {
+          const trendingMap = new Map<string, any>();
+
+          hwCatalog.forEach((item: any) => {
+            // Deduplicate by clean URL or retailer + normalized product key
+            const cleanUrl = (item.product_url || '').split('?')[0].trim().toLowerCase();
+            const normKey = getNormalizedKey(item) || (item.name || '').toLowerCase().trim();
+            const retKey = (item.retailer || '').toLowerCase().trim();
+
+            const dedupKey = cleanUrl && cleanUrl !== '#' && !cleanUrl.includes('example.com')
+              ? `${retKey}:${cleanUrl}`
+              : `${retKey}:${normKey}`;
+
             const current = item.current_price || 0;
             const msrp = item.msrp || current;
             const lowest = item.lowest_price_90d || current;
@@ -503,7 +514,7 @@ export function WatchlistManager({
               }
             }
 
-            return {
+            const formattedItem = {
               id: item.id,
               dbRowIds: [item.id],
               name: item.name,
@@ -520,8 +531,22 @@ export function WatchlistManager({
               rating: item.rating ?? undefined,
               dealScore: computedDealScore
             };
+
+            if (!trendingMap.has(dedupKey)) {
+              trendingMap.set(dedupKey, formattedItem);
+            } else {
+              const existing = trendingMap.get(dedupKey);
+              if (item.id && !existing.dbRowIds.includes(item.id)) {
+                existing.dbRowIds.push(item.id);
+              }
+              // If current item has a specific retailer slug in its ID (e.g. rtx-5060-ebay vs rtx-5060), prefer the specific ID
+              if (!existing.id.includes('-') || (item.id.includes(retKey) && !existing.id.includes(retKey))) {
+                existing.id = item.id;
+              }
+            }
           });
-          setTrendingItems(formattedTrending);
+
+          setTrendingItems(Array.from(trendingMap.values()));
         }
       } catch (e) {
         console.warn('Database fetch warning:', e);
