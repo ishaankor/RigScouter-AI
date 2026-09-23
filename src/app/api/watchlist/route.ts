@@ -267,6 +267,15 @@ export async function GET(req: NextRequest) {
         ...matchedPrefTargets
       };
 
+      // Populate default -5% target alert for retailers without an explicit custom target
+      retailerOffers.forEach((ro: any) => {
+        const rKey = (ro.retailer || '').toLowerCase().trim();
+        const rPrice = Number(ro.price || 0);
+        if (rKey && rPrice > 0 && combinedRetailerTargets[rKey] === undefined) {
+          combinedRetailerTargets[rKey] = Math.round(rPrice * 0.95 * 100) / 100;
+        }
+      });
+
       // Ensure finalProductUrl matches finalRetailer domain
       let validatedProductUrl = finalProductUrl;
       const matchingRetailerOffer = retailerOffers.find(
@@ -283,7 +292,7 @@ export async function GET(req: NextRequest) {
         userId: item.user_id || userId,
         componentName: item.component_name || item.name,
         category: item.category || bestMatch?.category || 'GPU',
-        targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.9 * 100) / 100 : 0)),
+        targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.95 * 100) / 100 : 0)),
         currentPrice: finalPrice,
         previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : (bestMatch?.current_price ? Number(bestMatch.current_price) : finalPrice),
         previousPrice7d: item.previous_price_7d != null ? Number(item.previous_price_7d) : (bestMatch?.msrp ? Number(bestMatch.msrp) : finalPrice),

@@ -444,7 +444,7 @@ export function WatchlistManager({
                     userId: userId,
                     componentName: item.name,
                     category: item.category || 'GPU',
-                    targetPrice: savedTarget > 0 ? savedTarget : (item.msrp ? Math.round(item.msrp * 0.9 * 100) / 100 : item.current_price || 0),
+                    targetPrice: savedTarget > 0 ? savedTarget : (item.msrp ? Math.round(item.msrp * 0.95 * 100) / 100 : Math.round((item.current_price || 0) * 0.95 * 100) / 100),
                     currentPrice: item.current_price || 0,
                     previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : Number(item.current_price || 0),
                     previousPrice7d: item.previous_price_7d != null ? Number(item.previous_price_7d) : Number(item.msrp || item.current_price || 0),
@@ -660,7 +660,7 @@ export function WatchlistManager({
             ...(isBest ? {
               componentName: payload.title,
               currentPrice: payload.price,
-              targetPrice: Math.round(payload.price * 0.9 * 100) / 100,
+              targetPrice: Math.round(payload.price * 0.95 * 100) / 100,
               retailer: payload.retailer,
               productUrl: payload.url,
               imageUrl: offerImage || item.imageUrl,
@@ -751,7 +751,7 @@ export function WatchlistManager({
                 componentName: bo.title || payload.query || item.componentName,
                 category: payload.category || item.category,
                 currentPrice: boPrice,
-                targetPrice: Math.round(boPrice * 0.9 * 100) / 100,
+                targetPrice: Math.round(boPrice * 0.95 * 100) / 100,
                 previousPrice24h: boPrice,
                 previousPrice7d: boMsrp > boPrice ? boMsrp : boPrice,
                 previousPrice30d: boMsrp > boPrice ? boMsrp : boPrice,
@@ -928,17 +928,33 @@ export function WatchlistManager({
       }
     } catch {}
 
-    // 4. Fallback: if item has a base targetPrice, use it
+    // 4. Default target alert: NOT a constant value per retailer, but -5% of that specific retailer price
+    let retPrice = currentEffectivePrice && currentEffectivePrice > 0 ? currentEffectivePrice : 0;
+    if (retPrice <= 0) {
+      try {
+        const offers = item.specs?.RetailerOffers || item.RetailerOffers || [];
+        const match = (Array.isArray(offers) ? offers : []).find(
+          (o: any) => (o?.retailer || '').toLowerCase().trim() === retKey
+        );
+        if (match && Number(match.price) > 0) {
+          retPrice = Number(match.price);
+        }
+      } catch {}
+    }
+    if (retPrice <= 0) {
+      retPrice = Number(item.currentPrice || item.current_price || 0);
+    }
+
+    if (retPrice > 0) {
+      return Math.round(retPrice * 0.95 * 100) / 100;
+    }
+
+    // Absolute fallback if price is completely unknown
     if (item.targetPrice && Number(item.targetPrice) > 0) {
       return Number(item.targetPrice);
     }
     if (item.target_price && Number(item.target_price) > 0) {
       return Number(item.target_price);
-    }
-
-    // 5. Default to 90% of effective price
-    if (currentEffectivePrice && currentEffectivePrice > 0) {
-      return Math.round(currentEffectivePrice * 0.9 * 100) / 100;
     }
 
     return 0;

@@ -750,7 +750,7 @@ export async function GET(req: NextRequest) {
               matchedUserTarget !== undefined ? matchedUserTarget : (
                 matchedHwSpecs?.retailer_targets?.[retKey] || 
                 matchedHwSpecs?.retailer_targets?.[retailer] ||
-                Number(item.target_price || Math.round(currentPrice * 0.9))
+                (currentPrice > 0 ? Math.round(currentPrice * 0.95 * 100) / 100 : Number(item.target_price || 0))
               );
 
             return {

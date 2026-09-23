@@ -88,7 +88,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           userId: item.user_id,
           componentName: item.component_name || 'Hardware Component',
           category: item.category || 'GPU',
-          targetPrice: Number(item.target_price || (price * 0.9)),
+          targetPrice: Number(item.target_price || (price * 0.95)),
           currentPrice: price,
           previousPrice24h: Number(item.previous_price_24h || price),
           previousPrice7d: Number(item.previous_price_7d || price),
