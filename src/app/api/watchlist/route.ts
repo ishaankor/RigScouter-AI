@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { calculateMultiRetailerDealScore } from '@/lib/scrapers/price-scraper';
 
 export const runtime = 'edge';
 
@@ -311,20 +312,34 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // Aggregate sibling offers per model/name across hardware_components
+    const catalogGroupMap = new Map<string, { offers: { retailer: string; price: number }[]; maxPrice: number; msrp: number }>();
+    (hwCatalog || []).forEach((h: any) => {
+      const key = (h.model || h.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const price = Number(h.current_price || 0);
+      const msrp = Number(h.msrp || 0);
+      if (!catalogGroupMap.has(key)) {
+        catalogGroupMap.set(key, { offers: [], maxPrice: price, msrp });
+      }
+      const grp = catalogGroupMap.get(key)!;
+      if (price > 0) {
+        grp.offers.push({ retailer: h.retailer || 'Store', price });
+        if (price > grp.maxPrice) grp.maxPrice = price;
+      }
+      if (msrp > grp.msrp) grp.msrp = msrp;
+    });
+
     const formattedTrending = (hwCatalog || []).map(item => {
-      const current = item.current_price || 0;
-      const msrp = item.msrp || current;
-      const lowest = item.lowest_price_90d || current;
+      const current = Number(item.current_price || 0);
+      const lowest = Number(item.lowest_price_90d || current);
+      const key = (item.model || item.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const grp = catalogGroupMap.get(key);
+      const siblingOffers = grp?.offers || [{ price: current, retailer: item.retailer }];
+      const effectiveMsrp = Math.max(Number(item.msrp || 0), grp?.msrp || 0, grp?.maxPrice || 0);
 
       let computedDealScore = item.deal_score;
-      if (typeof computedDealScore !== 'number' || computedDealScore <= 0) {
-        if (msrp > current && msrp > 0) {
-          computedDealScore = Math.round(Math.min(99, Math.max(50, ((msrp - current) / msrp) * 100 + 70)));
-        } else if (lowest > 0) {
-          computedDealScore = Math.round(Math.min(99, Math.max(50, (lowest / Math.max(1, current)) * 80)));
-        } else {
-          computedDealScore = 70;
-        }
+      if (typeof computedDealScore !== 'number' || computedDealScore <= 50) {
+        computedDealScore = calculateMultiRetailerDealScore(current, siblingOffers, effectiveMsrp, lowest);
       }
 
       return {
@@ -334,7 +349,7 @@ export async function GET(req: NextRequest) {
         brand: item.brand,
         model: item.model,
         specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
-        msrp: item.msrp,
+        msrp: effectiveMsrp > 0 ? effectiveMsrp : item.msrp,
         currentPrice: item.current_price,
         lowestPrice90d: item.lowest_price_90d,
         retailer: item.retailer,

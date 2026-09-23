@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Bell,
   Trash2,
@@ -23,10 +23,45 @@ import {
   X,
   Edit3,
   Check,
-  Minus
+  Minus,
+  SlidersHorizontal,
+  Layers,
+  Tag,
+  Zap,
+  ShoppingBag
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
+import { calculateMultiRetailerDealScore, getDealScoreTier } from '@/lib/scrapers/price-scraper';
+
+export interface TrendingRetailerOffer {
+  id: string;
+  retailer: string;
+  price: number;
+  originalPrice: number;
+  productUrl: string;
+  imageUrl?: string;
+  dealScore: number;
+}
+
+export interface ConsolidatedTrendingDeal {
+  id: string;
+  canonicalKey: string;
+  name: string;
+  category: string;
+  brand: string;
+  model: string;
+  imageUrl: string;
+  dbRowIds: string[];
+  offers: TrendingRetailerOffer[];
+  bestOffer: TrendingRetailerOffer;
+  highestPrice: number;
+  lowestPrice: number;
+  marketMsrp: number;
+  savingsVsCompetitor: number;
+  savingsPctVsCompetitor: number;
+  dealScore: number;
+}
 
 interface WatchlistManagerProps {
   initialWatchlist?: WatchlistItem[];
@@ -47,6 +82,13 @@ export function WatchlistManager({
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedInterval, setSelectedInterval] = useState<'24h' | '7d' | '30d'>('24h');
   const [activeTab, setActiveTab] = useState<'watchlist' | 'trending'>('watchlist');
+
+  // Trending Deals Filters, Sorting & Selection State
+  const [trendingCategory, setTrendingCategory] = useState<string>('ALL');
+  const [trendingQuality, setTrendingQuality] = useState<'all' | 'hot'>('all');
+  const [trendingSort, setTrendingSort] = useState<'score' | 'savings' | 'price-asc' | 'price-desc'>('score');
+  const [selectedTrendingRetailers, setSelectedTrendingRetailers] = useState<Record<string, string>>({});
+  const [quickAddingKey, setQuickAddingKey] = useState<string | null>(null);
 
   // Autonomous bot input state
   const [liveQuery, setLiveQuery] = useState('');
@@ -486,67 +528,24 @@ export function WatchlistManager({
         setWatchlist(dedupedList);
 
         if (hwCatalog && hwCatalog.length > 0) {
-          const trendingMap = new Map<string, any>();
-
-          hwCatalog.forEach((item: any) => {
-            // Deduplicate by clean URL or retailer + normalized product key
-            const cleanUrl = (item.product_url || '').split('?')[0].trim().toLowerCase();
-            const normKey = getNormalizedKey(item) || (item.name || '').toLowerCase().trim();
-            const retKey = (item.retailer || '').toLowerCase().trim();
-
-            const dedupKey = cleanUrl && cleanUrl !== '#' && !cleanUrl.includes('example.com')
-              ? `${retKey}:${cleanUrl}`
-              : `${retKey}:${normKey}`;
-
-            const current = item.current_price || 0;
-            const msrp = item.msrp || current;
-            const lowest = item.lowest_price_90d || current;
-
-            // 100% Dynamic deal score computed from real price ratios
-            let computedDealScore = item.deal_score;
-            if (typeof computedDealScore !== 'number' || computedDealScore <= 0) {
-              if (msrp > current && msrp > 0) {
-                computedDealScore = Math.round(Math.min(99, Math.max(50, ((msrp - current) / msrp) * 100 + 70)));
-              } else if (lowest > 0) {
-                computedDealScore = Math.round(Math.min(99, Math.max(50, (lowest / Math.max(1, current)) * 80)));
-              } else {
-                computedDealScore = 70;
-              }
-            }
-
-            const formattedItem = {
-              id: item.id,
-              dbRowIds: [item.id],
-              name: item.name,
-              category: item.category,
-              brand: item.brand,
-              model: item.model,
-              specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
-              msrp: item.msrp,
-              currentPrice: item.current_price,
-              lowestPrice90d: item.lowest_price_90d,
-              retailer: item.retailer,
-              productUrl: item.product_url,
-              imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-              rating: item.rating ?? undefined,
-              dealScore: computedDealScore
-            };
-
-            if (!trendingMap.has(dedupKey)) {
-              trendingMap.set(dedupKey, formattedItem);
-            } else {
-              const existing = trendingMap.get(dedupKey);
-              if (item.id && !existing.dbRowIds.includes(item.id)) {
-                existing.dbRowIds.push(item.id);
-              }
-              // If current item has a specific retailer slug in its ID (e.g. rtx-5060-ebay vs rtx-5060), prefer the specific ID
-              if (!existing.id.includes('-') || (item.id.includes(retKey) && !existing.id.includes(retKey))) {
-                existing.id = item.id;
-              }
-            }
-          });
-
-          setTrendingItems(Array.from(trendingMap.values()));
+          const formattedTrending = hwCatalog.map((item: any) => ({
+            id: item.id,
+            dbRowIds: [item.id],
+            name: item.name,
+            category: item.category,
+            brand: item.brand,
+            model: item.model,
+            specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
+            msrp: item.msrp,
+            currentPrice: item.current_price,
+            lowestPrice90d: item.lowest_price_90d,
+            retailer: item.retailer,
+            productUrl: item.product_url,
+            imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+            rating: item.rating ?? undefined,
+            dealScore: item.deal_score
+          }));
+          setTrendingItems(formattedTrending);
         }
       } catch (e) {
         console.warn('Database fetch warning:', e);
@@ -556,6 +555,288 @@ export function WatchlistManager({
     }
     loadDatabaseWatchlist();
   }, [user?.id]);
+
+  // 1. Group raw trendingItems into canonical component deals with all retailer offers
+  const consolidatedTrendingDeals = useMemo<ConsolidatedTrendingDeal[]>(() => {
+    if (!trendingItems || trendingItems.length === 0) return [];
+
+    const groupMap = new Map<string, {
+      canonicalKey: string;
+      name: string;
+      category: string;
+      brand: string;
+      model: string;
+      imageUrl: string;
+      dbRowIds: Set<string>;
+      offersMap: Map<string, TrendingRetailerOffer>;
+    }>();
+
+    trendingItems.forEach(item => {
+      const rawKey = getNormalizedKey(item) || (item.name || '').toLowerCase().trim();
+      const canonicalKey = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!canonicalKey) return;
+
+      if (!groupMap.has(canonicalKey)) {
+        groupMap.set(canonicalKey, {
+          canonicalKey,
+          name: item.name,
+          category: item.category || 'Hardware',
+          brand: item.brand || '',
+          model: item.model || '',
+          imageUrl: item.imageUrl || '',
+          dbRowIds: new Set<string>(),
+          offersMap: new Map<string, TrendingRetailerOffer>()
+        });
+      }
+
+      const grp = groupMap.get(canonicalKey)!;
+      if (item.id) grp.dbRowIds.add(item.id);
+      if (Array.isArray((item as any).dbRowIds)) {
+        (item as any).dbRowIds.forEach((id: string) => grp.dbRowIds.add(id));
+      }
+
+      const retailerName = item.retailer || 'Online Store';
+      const retKey = retailerName.toLowerCase().trim();
+      const price = Number(item.currentPrice || 0);
+      const msrp = Number(item.msrp || price);
+      const dealScore = Number(item.dealScore || 50);
+
+      // Check specs.RetailerOffers if present
+      const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+      const specsOffers = Array.isArray(specs?.RetailerOffers) ? specs.RetailerOffers : [];
+      specsOffers.forEach((so: any) => {
+        if (so && so.retailer && Number(so.price) > 0) {
+          const soKey = so.retailer.toLowerCase().trim();
+          if (!grp.offersMap.has(soKey)) {
+            grp.offersMap.set(soKey, {
+              id: so.id || `${item.id}-${soKey}`,
+              retailer: so.retailer,
+              price: Number(so.price),
+              originalPrice: Number(so.originalPrice || so.price),
+              productUrl: so.url || '#',
+              imageUrl: so.imageUrl || item.imageUrl,
+              dealScore: 50
+            });
+          }
+        }
+      });
+
+      if (price > 0) {
+        const existing = grp.offersMap.get(retKey);
+        if (!existing || price < existing.price) {
+          grp.offersMap.set(retKey, {
+            id: item.id,
+            retailer: retailerName,
+            price,
+            originalPrice: msrp > price ? msrp : (existing?.originalPrice || price),
+            productUrl: item.productUrl || '#',
+            imageUrl: item.imageUrl,
+            dealScore
+          });
+        }
+      }
+
+      if (!grp.imageUrl && item.imageUrl) {
+        grp.imageUrl = item.imageUrl;
+      }
+    });
+
+    const results: ConsolidatedTrendingDeal[] = [];
+
+    groupMap.forEach(grp => {
+      const rawOffers = Array.from(grp.offersMap.values());
+      if (rawOffers.length === 0) return;
+
+      // Sort offers: lowest price first
+      rawOffers.sort((a, b) => a.price - b.price);
+
+      const lowestPrice = rawOffers[0].price;
+      const highestPrice = Math.max(...rawOffers.map(o => o.price));
+      const marketMsrp = Math.max(...rawOffers.map(o => o.originalPrice || 0), highestPrice);
+
+      // Recalculate dynamic deal scores for each offer factoring market spread & ATL
+      const offersWithScores: TrendingRetailerOffer[] = rawOffers.map(offer => {
+        const score = calculateMultiRetailerDealScore(
+          offer.price,
+          rawOffers.map(o => ({ price: o.price, retailer: o.retailer })),
+          marketMsrp
+        );
+        return {
+          ...offer,
+          dealScore: Math.max(offer.dealScore || 50, score)
+        };
+      });
+
+      // Best offer is the lowest price / highest deal score
+      const bestOffer = offersWithScores[0];
+      const topScore = bestOffer.dealScore;
+
+      const competitorRefPrice = highestPrice > lowestPrice ? highestPrice : marketMsrp;
+      const savingsVsCompetitor = Math.max(0, competitorRefPrice - lowestPrice);
+      const savingsPctVsCompetitor = competitorRefPrice > 0 ? Math.round((savingsVsCompetitor / competitorRefPrice) * 100) : 0;
+
+      results.push({
+        id: bestOffer.id,
+        canonicalKey: grp.canonicalKey,
+        name: grp.name,
+        category: grp.category,
+        brand: grp.brand,
+        model: grp.model,
+        imageUrl: grp.imageUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+        dbRowIds: Array.from(grp.dbRowIds),
+        offers: offersWithScores,
+        bestOffer,
+        highestPrice,
+        lowestPrice,
+        marketMsrp,
+        savingsVsCompetitor,
+        savingsPctVsCompetitor,
+        dealScore: topScore
+      });
+    });
+
+    return results;
+  }, [trendingItems]);
+
+  // 2. Filter & Sort the consolidated trending deals
+  const filteredTrendingDeals = useMemo(() => {
+    let list = [...consolidatedTrendingDeals];
+
+    // Category filter
+    if (trendingCategory !== 'ALL') {
+      const catLower = trendingCategory.toLowerCase();
+      list = list.filter(item => {
+        const itemCat = (item.category || '').toLowerCase();
+        if (catLower === 'other') {
+          return !['gpu', 'cpu', 'ram', 'motherboard', 'storage'].includes(itemCat);
+        }
+        return itemCat.includes(catLower) || catLower.includes(itemCat);
+      });
+    }
+
+    // Quality / Hot deals filter (Deal score >= 75)
+    if (trendingQuality === 'hot') {
+      list = list.filter(item => item.dealScore >= 75);
+    }
+
+    // Sorting
+    list.sort((a, b) => {
+      if (trendingSort === 'score') {
+        return b.dealScore - a.dealScore;
+      }
+      if (trendingSort === 'savings') {
+        return b.savingsVsCompetitor - a.savingsVsCompetitor;
+      }
+      if (trendingSort === 'price-asc') {
+        return a.lowestPrice - b.lowestPrice;
+      }
+      if (trendingSort === 'price-desc') {
+        return b.lowestPrice - a.lowestPrice;
+      }
+      return 0;
+    });
+
+    return list;
+  }, [consolidatedTrendingDeals, trendingCategory, trendingQuality, trendingSort]);
+
+  const totalTrendingCount = consolidatedTrendingDeals.length;
+  const hotDealsCount = useMemo(() => {
+    return consolidatedTrendingDeals.filter(d => d.dealScore >= 75).length;
+  }, [consolidatedTrendingDeals]);
+
+  // 1-Click Quick Add to User Watchlist (Sets -5% default target per retailer)
+  const handleQuickAddToWatchlist = async (deal: ConsolidatedTrendingDeal, activeOffer: TrendingRetailerOffer) => {
+    if (!user) {
+      onOpenAuth?.();
+      return;
+    }
+
+    setQuickAddingKey(deal.canonicalKey);
+
+    const price = activeOffer.price;
+    // Default alert target: -5% per user preference
+    const defaultTargetPrice = Math.round(price * 0.95 * 100) / 100;
+
+    // Build retailer targets for all sibling offers
+    const retailerTargets: Record<string, number> = {};
+    deal.offers.forEach(o => {
+      const rKey = (o.retailer || '').toLowerCase().trim();
+      if (rKey) {
+        retailerTargets[rKey] = Math.round(o.price * 0.95 * 100) / 100;
+      }
+    });
+
+    const newId = `watch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const optimisticItem: WatchlistItem = {
+      id: newId,
+      userId: user.id,
+      componentName: deal.name,
+      category: deal.category as any,
+      targetPrice: defaultTargetPrice,
+      currentPrice: price,
+      notifyOnFlashDrop: true,
+      previousPrice24h: price,
+      previousPrice7d: deal.marketMsrp > price ? deal.marketMsrp : price,
+      previousPrice30d: deal.marketMsrp > price ? deal.marketMsrp : price,
+      allTimeLow: deal.lowestPrice,
+      retailer: activeOffer.retailer as any,
+      productUrl: activeOffer.productUrl,
+      imageUrl: deal.imageUrl,
+      inStock: true,
+      addedAt: new Date().toISOString(),
+      retailerTargets,
+      specs: {
+        RetailerOffers: deal.offers.map(o => ({
+          id: o.id,
+          retailer: o.retailer,
+          price: o.price,
+          originalPrice: o.originalPrice,
+          previousPrice: o.price,
+          previousPrice24h: o.price,
+          previousPrice7d: o.originalPrice || o.price,
+          previousPrice30d: o.originalPrice || o.price,
+          title: deal.name,
+          url: o.productUrl,
+          imageUrl: deal.imageUrl,
+          inStock: true
+        }))
+      }
+    };
+
+    setWatchlist(prev => {
+      const exists = prev.some(p => {
+        const pKey = getNormalizedKey(p)?.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return pKey === deal.canonicalKey;
+      });
+      if (exists) return prev;
+      return [optimisticItem, ...prev];
+    });
+
+    try {
+      await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          componentName: deal.name,
+          category: deal.category,
+          targetPrice: defaultTargetPrice,
+          currentPrice: price,
+          retailer: activeOffer.retailer,
+          productUrl: activeOffer.productUrl,
+          imageUrl: deal.imageUrl,
+          brand: deal.brand,
+          model: deal.model
+        })
+      });
+    } catch (e) {
+      console.warn('Quick add to watchlist error:', e);
+    } finally {
+      setTimeout(() => {
+        setQuickAddingKey(null);
+      }, 1200);
+    }
+  };
 
   // 100% Autonomous Bot Add-to-Watchlist Handler (NO manual form filling)
   const handleAutonomousAdd = async (e: React.FormEvent) => {
@@ -1434,7 +1715,7 @@ export function WatchlistManager({
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          <Sparkles className="w-4 h-4 text-amber-400" /> Trending Deals in Database ({trendingItems.length})
+          <Sparkles className="w-4 h-4 text-amber-400" /> Trending Deals in Database ({consolidatedTrendingDeals.length})
         </button>
       </div>
 
@@ -1743,60 +2024,296 @@ export function WatchlistManager({
           </div>
         )
       ) : (
-        /* Trending Items Grid (Individual Retailer Deals) */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {trendingItems.map((item, idx) => {
-            const price = Number(item.currentPrice || 0);
-            const msrp = Number(item.msrp || price);
+        /* Consolidated Trending Deals Feed */
+        <div className="space-y-6">
+          {/* Header Controls: Categories, Quality Filter, Sort */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-800/80">
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+              {['ALL', 'GPU', 'CPU', 'RAM', 'Motherboard', 'Storage'].map(cat => {
+                const isSelected = trendingCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setTrendingCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                      isSelected
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-950/40'
+                        : 'bg-gray-900/80 text-gray-400 border border-gray-800 hover:text-gray-200 hover:border-gray-700'
+                    }`}
+                  >
+                    {cat === 'ALL' ? 'All Hardware' : cat}
+                  </button>
+                );
+              })}
+            </div>
 
-            return (
-              <div key={`${item.id || 'trending'}-${idx}`} className="glass-card p-5 rounded-2xl border border-gray-800 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/40">
-                      {item.category}
-                    </span>
-                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" /> Deal Score: {item.dealScore}/100
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-white text-sm line-clamp-2 mb-2">{item.name}</h3>
+            {/* Quality Filter & Sort Dropdown */}
+            <div className="flex items-center gap-3 self-end md:self-auto">
+              {/* Deal Quality Toggle */}
+              <div className="flex items-center gap-1 p-1 bg-gray-950/80 rounded-xl border border-gray-800 text-xs font-semibold">
+                <button
+                  onClick={() => setTrendingQuality('all')}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    trendingQuality === 'all'
+                      ? 'bg-gray-800 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  All ({totalTrendingCount})
+                </button>
+                <button
+                  onClick={() => setTrendingQuality('hot')}
+                  className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all ${
+                    trendingQuality === 'hot'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                      : 'text-gray-400 hover:text-emerald-400'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+                  <span>Hot Deals</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-900/60 text-[10px] text-emerald-300 font-bold">
+                    {hotDealsCount}
+                  </span>
+                </button>
+              </div>
 
-                  <div className="flex items-center justify-between gap-2 mb-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xl font-black text-emerald-400">${price.toFixed(2)}</span>
-                      {msrp > price && (
-                        <span className="text-xs text-gray-500 line-through">${msrp.toFixed(2)}</span>
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-1.5 text-xs">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-gray-500 hidden sm:block" />
+                <select
+                  value={trendingSort}
+                  onChange={(e) => setTrendingSort(e.target.value as any)}
+                  className="bg-gray-950/90 border border-gray-800 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer"
+                >
+                  <option value="score">Highest Deal Score</option>
+                  <option value="savings">Biggest Savings ($)</option>
+                  <option value="price-asc">Price: Low to High</option>
+                  <option value="price-desc">Price: High to Low</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Empty Filter State */}
+          {filteredTrendingDeals.length === 0 ? (
+            <div className="glass-card p-12 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-cyan-950/40 border border-cyan-800/40 flex items-center justify-center text-cyan-400">
+                <Sparkles className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white mb-1">No deals match your filter</h3>
+                <p className="text-xs text-gray-400 max-w-sm">
+                  {trendingQuality === 'hot'
+                    ? 'No deals currently meet the "Hot Deals" threshold (score ≥ 75) in this category.'
+                    : `No catalog components found for category "${trendingCategory}".`}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setTrendingCategory('ALL');
+                  setTrendingQuality('all');
+                }}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold rounded-xl border border-gray-800 transition-colors"
+              >
+                Reset All Filters
+              </button>
+            </div>
+          ) : (
+            /* Consolidated Component Deal Cards Grid */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredTrendingDeals.map((deal) => {
+                const selectedRetailer = selectedTrendingRetailers[deal.canonicalKey];
+                const activeOffer = selectedRetailer
+                  ? (deal.offers.find(o => o.retailer.toLowerCase() === selectedRetailer.toLowerCase()) || deal.bestOffer)
+                  : deal.bestOffer;
+
+                const activePrice = activeOffer.price;
+                const tier = getDealScoreTier(activeOffer.dealScore);
+                const isBestPrice = activePrice <= deal.lowestPrice + 0.01;
+
+                const refPrice = deal.highestPrice > activePrice
+                  ? deal.highestPrice
+                  : (deal.marketMsrp > activePrice ? deal.marketMsrp : activePrice);
+                const hasSavings = refPrice > activePrice;
+                const savingsAmt = hasSavings ? refPrice - activePrice : 0;
+                const savingsPct = hasSavings && refPrice > 0 ? Math.round((savingsAmt / refPrice) * 100) : 0;
+
+                // Check if this component is already tracked in the user's watchlist
+                const existingWatchlistItem = watchlist.find(item => {
+                  const itemKey = getNormalizedKey(item)?.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  return itemKey && itemKey === deal.canonicalKey;
+                });
+                const isAlreadyTracked = Boolean(existingWatchlistItem);
+                const trackedTargetPrice = existingWatchlistItem?.targetPrice;
+                const isTrackingLoading = quickAddingKey === deal.canonicalKey;
+
+                return (
+                  <div
+                    key={deal.canonicalKey}
+                    className="glass-card p-5 rounded-2xl border border-gray-800/80 bg-gray-950/70 hover:border-gray-700/80 transition-all flex flex-col justify-between group shadow-lg hover:shadow-cyan-950/20"
+                  >
+                    <div>
+                      {/* Card Top: Category & Deal Tier */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-cyan-950/80 text-cyan-400 border border-cyan-800/50 uppercase tracking-wider">
+                            {deal.category}
+                          </span>
+                          {deal.offers.length > 1 && (
+                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-gray-900 text-gray-400 border border-gray-800">
+                              {deal.offers.length} Stores
+                            </span>
+                          )}
+                        </div>
+
+                        <div className={`px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs font-bold ${tier.badgeBg} ${tier.textColor}`}>
+                          {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current animate-pulse" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>{tier.label}: {activeOffer.dealScore}/100</span>
+                        </div>
+                      </div>
+
+                      {/* Component Title */}
+                      <h3 className="font-bold text-white text-base leading-snug line-clamp-2 mb-3 group-hover:text-cyan-200 transition-colors">
+                        {deal.name}
+                      </h3>
+
+                      {/* Price & Savings Display */}
+                      <div className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800/70 mb-4">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-emerald-400 tracking-tight">
+                              ${activePrice.toFixed(2)}
+                            </span>
+                            {hasSavings && (
+                              <span className="text-xs text-gray-500 line-through">
+                                ${refPrice.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          {hasSavings && (
+                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
+                              <TrendingDown className="w-3.5 h-3.5" />
+                              <span>Save ${savingsAmt.toFixed(2)} ({savingsPct}%)</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {deal.offers.length > 1 && (
+                          <div className="mt-2.5 pt-2 border-t border-gray-800/50 text-[11px] text-gray-400 flex items-center justify-between">
+                            <span>Active store: <strong className="text-gray-200">{activeOffer.retailer}</strong></span>
+                            {isBestPrice ? (
+                              <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                                ✓ Lowest in Market
+                              </span>
+                            ) : (
+                              <span className="text-amber-400/90 font-medium">
+                                +${(activePrice - deal.lowestPrice).toFixed(2)} vs lowest
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Live Store Comparison Pills */}
+                      {deal.offers.length > 1 && (
+                        <div className="mb-4">
+                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                            <span>Compare Live Stores</span>
+                            <span className="text-gray-500 font-normal">Click to switch</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {deal.offers.map((offer) => {
+                              const isSelected = offer.retailer.toLowerCase() === activeOffer.retailer.toLowerCase();
+                              const isLowest = offer.price <= deal.lowestPrice + 0.01;
+                              return (
+                                <button
+                                  key={offer.id || offer.retailer}
+                                  onClick={() => setSelectedTrendingRetailers(prev => ({ ...prev, [deal.canonicalKey]: offer.retailer }))}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                                    isSelected
+                                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                                      : 'bg-gray-900/90 text-gray-300 border border-gray-800 hover:border-gray-700 hover:text-white'
+                                  }`}
+                                >
+                                  <span>{offer.retailer}:</span>
+                                  <span className={isLowest ? 'text-emerald-400 font-bold' : 'text-gray-300'}>
+                                    ${offer.price.toFixed(2)}
+                                  </span>
+                                  {isLowest && (
+                                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
+                                      Best
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-gray-300 px-2.5 py-1 bg-gray-900 rounded-lg border border-gray-800 inline-block text-xs">
-                        {item.retailer}
-                      </span>
+                    {/* Card Bottom: Direct Link, Quick Add to Watchlist & Remove */}
+                    <div className="pt-3 border-t border-gray-800/80 flex flex-col gap-2 mt-auto">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={activeOffer.productUrl || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 py-2.5 px-3 bg-gray-900 hover:bg-cyan-950/70 text-gray-200 hover:text-cyan-300 font-semibold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-1.5 transition-all text-center"
+                        >
+                          <span>View on {activeOffer.retailer}</span>
+                          <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                        </a>
+                        <button
+                          onClick={() => removeTrendingItem(deal.id, deal.name, deal.dbRowIds)}
+                          className="p-2.5 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
+                          title="Remove Component from Database"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* 1-Click Track Alert in Watchlist Button */}
+                      <button
+                        onClick={() => {
+                          if (isAlreadyTracked) {
+                            setActiveTab('watchlist');
+                          } else {
+                            handleQuickAddToWatchlist(deal, activeOffer);
+                          }
+                        }}
+                        disabled={isTrackingLoading}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                          isAlreadyTracked
+                            ? 'bg-emerald-950/40 hover:bg-emerald-950/70 text-emerald-400 border border-emerald-800/40'
+                            : 'bg-gradient-to-r from-cyan-600/90 to-blue-600/90 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md shadow-cyan-950/50 hover:shadow-cyan-900/60 border border-cyan-400/30'
+                        }`}
+                      >
+                        {isTrackingLoading ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Setting Alert...</span>
+                          </>
+                        ) : isAlreadyTracked ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Tracked in Watchlist (Alert: ${trackedTargetPrice ? trackedTargetPrice.toFixed(2) : (activePrice * 0.95).toFixed(2)})</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bell className="w-3.5 h-3.5" />
+                            <span>+ Track Alert in Watchlist (Alert: -5% @ ${(activePrice * 0.95).toFixed(2)})</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={item.productUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 py-2.5 bg-gray-900 hover:bg-cyan-950/80 text-white hover:text-cyan-300 font-bold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-2 transition-all"
-                  >
-                    View Direct Listing at {item.retailer} <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                  <button
-                    onClick={() => removeTrendingItem(item.id, item.name, item.dbRowIds || [item.id])}
-                    className="p-2.5 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
-                    title="Remove Component from Database"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
