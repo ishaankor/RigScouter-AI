@@ -13,8 +13,10 @@ interface DailyDigestPreviewProps {
 
 export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps) {
   const [frequency, setFrequency] = useState<DigestFrequency>('daily');
-  const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'discord' | 'telegram'>('email');
+  const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'discord'>('email');
   const [customEmail, setCustomEmail] = useState('');
+  const [discordWebhook, setDiscordWebhook] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedIntervals, setSelectedIntervals] = useState<ComparisonInterval[]>(['24h', '7d', '30d', 'ATL']);
   const [isSubscribed, setIsSubscribed] = useState(!!user);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -116,6 +118,34 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
       return;
     }
 
+    // Load saved user preferences
+    supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data: pref }) => {
+        if (!isMounted || !pref) return;
+        if (pref.summary_frequency) setFrequency(pref.summary_frequency as DigestFrequency);
+        if (pref.comparison_intervals) {
+          try {
+            const ints = typeof pref.comparison_intervals === 'string' ? JSON.parse(pref.comparison_intervals) : pref.comparison_intervals;
+            if (Array.isArray(ints)) setSelectedIntervals(ints);
+          } catch {}
+        }
+        if (pref.delivery_channels) {
+          try {
+            const dc = typeof pref.delivery_channels === 'string' ? JSON.parse(pref.delivery_channels) : pref.delivery_channels;
+            if (dc.emailAddress) setCustomEmail(dc.emailAddress);
+            const savedWebhook = dc.discord_webhook || dc.discordWebhook;
+            if (savedWebhook) setDiscordWebhook(savedWebhook);
+            if (dc.discord === true && !dc.email) {
+              setDeliveryChannel('discord');
+            }
+          } catch {}
+        }
+      });
+
     setIsGenerating(true);
     fetchUserWatchlist().then(async items => {
       if (isMounted) {
@@ -153,25 +183,75 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
       return;
     }
     
+    if (deliveryChannel === 'discord' && !discordWebhook.trim()) {
+      setSaveNotice('⚠️ Please enter a Discord Webhook URL to receive Discord alerts.');
+      setTimeout(() => setSaveNotice(null), 5000);
+      return;
+    }
+
     setIsSubscribed(true);
+    setIsSaving(true);
+    setSaveNotice(null);
     
     try {
       const routingEmail = customEmail.trim() || user?.email;
+      const channels = {
+        email: deliveryChannel === 'email',
+        emailAddress: routingEmail,
+        discord: deliveryChannel === 'discord',
+        discord_webhook: discordWebhook.trim()
+      };
+
+      // 1. Save user preferences to DB
       const { error } = await supabase.from('user_preferences').upsert({
         user_id: user.id,
         summary_frequency: frequency,
-        delivery_channels: JSON.stringify({ email: deliveryChannel === 'email', emailAddress: routingEmail }),
+        delivery_channels: JSON.stringify(channels),
         comparison_intervals: JSON.stringify(selectedIntervals),
         auto_recommend_alternatives: true
       });
       if (error) throw error;
-      setSaveNotice(`✅ Preferences saved! Digest routes to ${routingEmail} via ${deliveryChannel.toUpperCase()} at 08:00 AM UTC.`);
+
+      // 2. If Discord channel selected, automatically send a confirmation ping to the webhook
+      let pingSuccess = false;
+      let pingError = '';
+      if (deliveryChannel === 'discord' && discordWebhook.trim()) {
+        try {
+          const pingRes = await fetch('/api/notifications/test-discord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ webhookUrl: discordWebhook.trim() })
+          });
+          const pingData = await pingRes.json();
+          if (pingRes.ok && pingData.success) {
+            pingSuccess = true;
+          } else {
+            pingError = pingData.error || 'Failed to ping channel';
+          }
+        } catch (pingErr: any) {
+          pingError = pingErr.message || 'Network error reaching webhook';
+        }
+      }
+
+      if (deliveryChannel === 'discord') {
+        if (pingSuccess) {
+          setSaveNotice('✅ Preferences saved! A confirmation ping was dispatched to your Discord channel.');
+        } else if (pingError) {
+          setSaveNotice(`✅ Preferences saved, but Discord ping failed: ${pingError}. Please verify the webhook URL.`);
+        } else {
+          setSaveNotice('✅ Preferences saved! Briefs and alerts will route to your Discord Webhook.');
+        }
+      } else {
+        setSaveNotice(`✅ Preferences saved! Digest routes to ${routingEmail} via Email at 08:00 AM UTC.`);
+      }
     } catch (e: any) {
       console.error('Error saving preferences', e);
       setSaveNotice(`⚠️ Failed to save preferences to DB: ${e.message || JSON.stringify(e)}`);
+    } finally {
+      setIsSaving(false);
     }
 
-    setTimeout(() => setSaveNotice(null), 4000);
+    setTimeout(() => setSaveNotice(null), 6000);
   };
 
   const toggleInterval = (int: ComparisonInterval) => {
@@ -278,18 +358,17 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
             <label className="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
               <Send className="w-4 h-4 text-purple-400" /> Delivery Destination
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'email', label: 'Email', icon: Mail },
-                { id: 'discord', label: 'Discord', icon: MessageSquare },
-                { id: 'telegram', label: 'Telegram', icon: Send },
+                { id: 'discord', label: 'Discord Webhook', icon: MessageSquare },
               ].map((ch) => {
                 const Icon = ch.icon;
                 return (
                   <button
                     key={ch.id}
                     onClick={() => setDeliveryChannel(ch.id as any)}
-                    className={`p-3 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
+                    className={`p-3 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm cursor-pointer ${
                       deliveryChannel === ch.id
                         ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
                         : 'bg-black/20 text-gray-400 border-white/5 hover:text-white hover:border-white/10 hover:bg-white/5'
@@ -311,6 +390,21 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                   onChange={(e) => setCustomEmail(e.target.value)}
                   className="w-full bg-black/40 border border-purple-500/30 text-xs text-white px-4 py-3 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 placeholder:text-gray-500 transition-all shadow-inner"
                 />
+              </div>
+            )}
+
+            {deliveryChannel === 'discord' && (
+              <div className="mt-3 animate-fade-in space-y-2">
+                <input
+                  type="url"
+                  placeholder="https://discord.com/api/webhooks/..."
+                  value={discordWebhook}
+                  onChange={(e) => setDiscordWebhook(e.target.value)}
+                  className="w-full bg-black/40 border border-indigo-500/40 text-xs text-white px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 placeholder:text-gray-500 transition-all shadow-inner font-mono"
+                />
+                <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 p-2.5 rounded-lg border border-white/5">
+                  💡 <strong className="text-gray-200">How to get a Webhook URL:</strong> In Discord, open <span className="text-indigo-300 font-semibold">Channel Settings ➔ Integrations ➔ Webhooks ➔ New Webhook</span>, then click <span className="text-indigo-300 font-semibold">Copy Webhook URL</span>. When you save, a confirmation ping will automatically be dispatched to the channel.
+                </p>
               </div>
             )}
           </div>
@@ -344,9 +438,15 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           {/* Save Subscription Preferences Button */}
           <button
             onClick={handleSaveSubscription}
-            className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.6)] transition-all duration-300 hover:-translate-y-0.5 cursor-pointer uppercase tracking-wider"
+            disabled={isSaving}
+            className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.6)] transition-all duration-300 hover:-translate-y-0.5 cursor-pointer uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {user ? 'Save Subscription Preferences' : 'Sign In to Subscribe'}
+            {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            <span>
+              {isSaving
+                ? (deliveryChannel === 'discord' ? 'Saving & Pinging Channel...' : 'Saving Preferences...')
+                : user ? 'Save Subscription Preferences' : 'Sign In to Subscribe'}
+            </span>
           </button>
 
           {saveNotice && (
@@ -635,14 +735,29 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                 </div>
               </div>
             ) : (
-              // ================= DISCORD / TELEGRAM MOCKUP =================
-              <div className="bg-[#36393f] mx-auto rounded-lg flex overflow-hidden shadow-2xl border border-[#202225] font-sans">
-                {/* Embed Left Pillar */}
-                <div className="w-1.5 bg-[#5865F2] shrink-0"></div>
+              // ================= DISCORD WEBHOOK EMBED PREVIEW =================
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                    <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Discord Webhook Embed Preview</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400">Live channel appearance</span>
+                </div>
+                <div className="bg-[#36393f] mx-auto rounded-lg flex overflow-hidden shadow-2xl border border-[#202225] font-sans">
+                  {/* Embed Left Pillar */}
+                  <div className="w-1.5 bg-[#5865F2] shrink-0"></div>
                 
                 <div className="p-4 w-full text-gray-200">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-lg">RS</div>
+                    <img
+                      src="/icon.png"
+                      alt="RigScouter Bot"
+                      className="w-7 h-7 rounded-full object-cover shadow-lg border border-cyan-500/30 bg-[#2f3136]"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/favicon.png';
+                      }}
+                    />
                     <span className="font-bold text-white text-sm">RigScouter Bot</span>
                     <span className="bg-[#5865F2] text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
                       <Check className="w-3 h-3" /> Bot
@@ -692,10 +807,24 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                         ))}
                       </div>
                     )}
+
+                    {/* Embed Footer */}
+                    <div className="flex items-center gap-1.5 mt-3 pt-2 text-[10px] text-[#72767d] border-t border-[#202225]/60">
+                      <img
+                        src="/icon.png"
+                        alt="RigScouter"
+                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/favicon.png';
+                        }}
+                      />
+                      <span>RigScouter AI • {frequency === 'weekly' ? 'Weekly Digest' : frequency === 'every_3_days' ? '3-Day Digest' : frequency === 'flash_only' ? 'Flash Alert' : 'Daily Digest'} • Next automated run at 08:00 UTC</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
           </div>
         </div>
       </div>

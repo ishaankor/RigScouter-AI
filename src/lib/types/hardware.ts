@@ -47,9 +47,9 @@ export interface WatchlistItem {
   category: ComponentCategory;
   targetPrice: number;
   currentPrice: number;
-  previousPrice24h: number;
-  previousPrice7d: number;
-  previousPrice30d: number;
+  previousPrice24h?: number;
+  previousPrice7d?: number;
+  previousPrice30d?: number;
   allTimeLow: number;
   retailer: RetailerName;
   productUrl: string;
@@ -78,8 +78,9 @@ export interface UserPreferences {
   deliveryChannels: {
     email: boolean;
     emailAddress?: string;
+    discord?: boolean;
     discordWebhook?: string;
-    telegramChatId?: string;
+    discord_webhook?: string;
   };
   comparisonIntervals: ComparisonInterval[];
   autoRecommendAlternatives: boolean;

@@ -261,7 +261,7 @@ export default function FeaturesPage() {
           </div>
           <div className="space-y-2 text-gray-300 text-[11px]">
             <div className="flex justify-between"><span>Schedule:</span><span className="text-white font-mono font-bold">Daily @ 08:00 AM UTC</span></div>
-            <div className="flex justify-between"><span>Channels:</span><span className="text-cyan-400 font-bold">Email & Discord</span></div>
+            <div className="flex justify-between"><span>Channels:</span><span className="text-cyan-400 font-bold">Email & Discord Webhook</span></div>
             <div className="flex justify-between"><span>Trend Interval:</span><span className="text-purple-400 font-bold">24h / 7d / 30d / ATL</span></div>
             <div className="flex justify-between"><span>Automator Status:</span><span className="text-emerald-400 font-bold">Active</span></div>
           </div>
@@ -275,7 +275,7 @@ export default function FeaturesPage() {
             Automated Daily Price Digest & Cron Job
           </h2>
           <p className="text-sm text-gray-300 leading-relaxed">
-            Subscribed users receive automated daily digests delivered straight to their Email inbox or Discord channel. Includes executive price drop summaries, historical trend deltas, and AI deal scores.
+            Subscribed users receive automated daily digests delivered straight to their Email inbox or Discord channel via webhook. Includes executive price drop summaries, historical trend deltas, and AI deal scores.
           </p>
         </div>
       </section>

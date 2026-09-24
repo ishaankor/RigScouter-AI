@@ -243,7 +243,7 @@ export default function HomePage() {
 
         {/* Subheadline */}
         <p className="relative z-10 text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
-          RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in testing and Micro Center, Newegg, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord.
+          RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in testing and Micro Center, Newegg, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord webhook.
         </p>
 
         {/* CTAs */}
@@ -445,7 +445,7 @@ export default function HomePage() {
                       digestChannel === 'discord' ? 'bg-indigo-600 text-white' : 'bg-gray-900 text-gray-400'
                     }`}
                   >
-                    Discord
+                    Discord Webhook
                   </button>
                   <button
                     onClick={() => setDigestChannel('email')}
@@ -551,7 +551,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-base font-bold text-white">Automated Daily Digest</h3>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Automated cron dispatches morning price drop reports directly to your Email and Discord channel at 08:00 AM UTC.
+              Automated cron dispatches morning price drop reports directly to your Email and Discord webhook at 08:00 AM UTC.
             </p>
           </div>
 

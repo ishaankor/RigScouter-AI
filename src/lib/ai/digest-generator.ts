@@ -19,19 +19,23 @@ export async function generateDailyDigestReport(
   let totalSavedOpportunity = 0;
 
   const itemSummaries: DigestItemSummary[] = watchlist.map(item => {
-    const change24hAmount = item.currentPrice - item.previousPrice24h;
-    const change24hPercent = item.previousPrice24h > 0 
-      ? (change24hAmount / item.previousPrice24h) * 100 
+    const p24 = typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : item.currentPrice;
+    const p7 = typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : item.currentPrice;
+    const p30 = typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : item.currentPrice;
+
+    const change24hAmount = item.currentPrice - p24;
+    const change24hPercent = p24 > 0 
+      ? (change24hAmount / p24) * 100 
       : 0;
 
-    const change7dAmount = item.currentPrice - item.previousPrice7d;
-    const change7dPercent = item.previousPrice7d > 0 
-      ? (change7dAmount / item.previousPrice7d) * 100 
+    const change7dAmount = item.currentPrice - p7;
+    const change7dPercent = p7 > 0 
+      ? (change7dAmount / p7) * 100 
       : 0;
 
-    const change30dAmount = item.currentPrice - item.previousPrice30d;
-    const change30dPercent = item.previousPrice30d > 0 
-      ? (change30dAmount / item.previousPrice30d) * 100 
+    const change30dAmount = item.currentPrice - p30;
+    const change30dPercent = p30 > 0 
+      ? (change30dAmount / p30) * 100 
       : 0;
 
     const isATL = item.currentPrice <= item.allTimeLow;

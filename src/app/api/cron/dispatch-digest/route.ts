@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
 import { generateDailyDigestReport } from '@/lib/ai/digest-generator';
+import { sendDiscordDigestWebhook, isValidDiscordWebhookUrl } from '@/lib/notifications/discord';
 
 export const runtime = 'edge';
 
@@ -593,11 +594,11 @@ export async function GET(req: NextRequest) {
     // 2. For each user, evaluate frequency eligibility, watchlist, and send digest
     for (const pref of preferences) {
       try {
-        let deliveryChannels = { email: true, emailAddress: '' };
+        let deliveryChannels: Record<string, any> = { email: true, emailAddress: '' };
         try {
           if (typeof pref.delivery_channels === 'string') {
             deliveryChannels = JSON.parse(pref.delivery_channels);
-          } else {
+          } else if (pref.delivery_channels) {
             deliveryChannels = pref.delivery_channels;
           }
         } catch (e) {
@@ -605,7 +606,11 @@ export async function GET(req: NextRequest) {
         }
 
         const targetEmail = deliveryChannels.emailAddress;
-        if (!targetEmail || !deliveryChannels.email) {
+        const discordWebhookUrl = deliveryChannels.discord_webhook || deliveryChannels.discordWebhook;
+        const hasEmail = Boolean(targetEmail && deliveryChannels.email !== false);
+        const hasDiscord = Boolean(discordWebhookUrl && (deliveryChannels.discord === true || deliveryChannels.email === false || !targetEmail) && isValidDiscordWebhookUrl(discordWebhookUrl));
+
+        if (!hasEmail && !hasDiscord) {
           continue;
         }
 
@@ -811,13 +816,41 @@ export async function GET(req: NextRequest) {
         const report = await generateDailyDigestReport(formattedWatchlist as any, frequency as any, comparisonIntervals);
         const htmlContent = buildDigestEmailHtml(report, todayStr);
 
+        const shouldSendEmail = Boolean(hasEmail && targetEmail);
+        const shouldSendDiscord = Boolean(hasDiscord && discordWebhookUrl);
+
+        let resendId: string | undefined;
+        let discordStatus: string | undefined;
+
         const customDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
-        const sendRes = await sendResendEmail({
-          from: `"RigScouter AI" <${customDomain}>`,
-          to: targetEmail,
-          subject: report.headline,
-          html: htmlContent,
-        });
+
+        if (shouldSendEmail && targetEmail) {
+          try {
+            const sendRes = await sendResendEmail({
+              from: `"RigScouter AI" <${customDomain}>`,
+              to: targetEmail,
+              subject: report.headline,
+              html: htmlContent,
+            });
+            resendId = sendRes?.id;
+          } catch (emailErr: any) {
+            console.error(`[Digest Email Error] User ${pref.user_id}:`, emailErr.message);
+          }
+        }
+
+        if (shouldSendDiscord && discordWebhookUrl) {
+          try {
+            const discRes = await sendDiscordDigestWebhook({
+              webhookUrl: discordWebhookUrl,
+              report,
+              frequency: frequency as any
+            });
+            discordStatus = discRes.success ? 'delivered' : `failed: ${discRes.error}`;
+          } catch (discErr: any) {
+            console.error(`[Digest Discord Error] User ${pref.user_id}:`, discErr.message);
+            discordStatus = `error: ${discErr.message}`;
+          }
+        }
 
         // 4. Log sent digest into daily_digests table for interval tracking and history
         try {
@@ -846,7 +879,13 @@ export async function GET(req: NextRequest) {
           console.warn(`Could not update last_sent_at in user_preferences for user ${pref.user_id}:`, prefUpdateErr.message);
         }
 
-        deliveries.push({ to: targetEmail, frequency, resendId: sendRes?.id, headline: report.headline });
+        deliveries.push({ 
+          to: targetEmail, 
+          discordStatus,
+          frequency, 
+          resendId, 
+          headline: report.headline 
+        });
         dispatchedCount++;
 
       } catch (userErr: any) {

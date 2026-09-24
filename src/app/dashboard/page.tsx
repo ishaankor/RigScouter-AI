@@ -161,7 +161,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3">
           <Sparkles className="w-5 h-5 text-cyan-400 shrink-0" />
           <span>
-            <strong className="text-white">Daily Automater Status:</strong> Active. Configured price digests are dispatched via Email & Discord at 08:00 AM UTC.
+            <strong className="text-white">Daily Automater Status:</strong> Active. Configured price digests are dispatched via Email & Discord Webhook at 08:00 AM UTC.
           </span>
         </div>
         <div className="text-gray-500 font-mono">

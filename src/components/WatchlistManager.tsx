@@ -222,8 +222,8 @@ export function WatchlistManager({
             originalPrice: sibMsrp,
             previousPrice: Number(sib.previousPrice24h || sibPrice),
             previousPrice24h: Number(sib.previousPrice24h || sibPrice),
-            previousPrice7d: Number(sib.previousPrice7d || (sibMsrp > sibPrice ? sibMsrp : sibPrice)),
-            previousPrice30d: Number(sib.previousPrice30d || (sibMsrp > sibPrice ? sibMsrp : sibPrice)),
+            previousPrice7d: sib.previousPrice7d != null && Number(sib.previousPrice7d) > 0 ? Number(sib.previousPrice7d) : undefined,
+            previousPrice30d: sib.previousPrice30d != null && Number(sib.previousPrice30d) > 0 ? Number(sib.previousPrice30d) : undefined,
             title: sib.name,
             url: sib.productUrl || '#',
             imageUrl: sib.imageUrl,
@@ -244,8 +244,8 @@ export function WatchlistManager({
           originalPrice: explicitMsrp,
           previousPrice: Number(item.previousPrice24h || explicitPrice),
           previousPrice24h: Number(item.previousPrice24h || explicitPrice),
-          previousPrice7d: Number(item.previousPrice7d || (explicitMsrp > explicitPrice ? explicitMsrp : explicitPrice)),
-          previousPrice30d: Number(item.previousPrice30d || (explicitMsrp > explicitPrice ? explicitMsrp : explicitPrice)),
+          previousPrice7d: item.previousPrice7d != null && Number(item.previousPrice7d) > 0 ? Number(item.previousPrice7d) : undefined,
+          previousPrice30d: item.previousPrice30d != null && Number(item.previousPrice30d) > 0 ? Number(item.previousPrice30d) : undefined,
           title: item.componentName || item.name || 'Component',
           url: item.productUrl || item.product_url || '#',
           imageUrl: item.imageUrl || item.image_url,
@@ -376,8 +376,8 @@ export function WatchlistManager({
                   originalPrice: Number(item.msrp || item.current_price || 0),
                   previousPrice: Number(item.previous_price_24h || item.current_price || 0),
                   previousPrice24h: Number(item.previous_price_24h || item.current_price || 0),
-                  previousPrice7d: Number(item.previous_price_7d || item.msrp || item.current_price || 0),
-                  previousPrice30d: Number(item.previous_price_30d || item.msrp || item.current_price || 0),
+                  previousPrice7d: item.previous_price_7d != null && Number(item.previous_price_7d) > 0 ? Number(item.previous_price_7d) : undefined,
+                  previousPrice30d: item.previous_price_30d != null && Number(item.previous_price_30d) > 0 ? Number(item.previous_price_30d) : undefined,
                   title: item.component_name,
                   url: item.product_url || '#',
                   imageUrl: item.image_url,
@@ -435,8 +435,8 @@ export function WatchlistManager({
                           originalPrice: roMsrp,
                           previousPrice: Number(ro.previousPrice || ro.previousPrice24h || roPrice),
                           previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
-                          previousPrice7d: Number(ro.previousPrice7d || (roMsrp > roPrice ? roMsrp : roPrice)),
-                          previousPrice30d: Number(ro.previousPrice30d || (roMsrp > roPrice ? roMsrp : roPrice)),
+                          previousPrice7d: ro.previousPrice7d != null && Number(ro.previousPrice7d) > 0 ? Number(ro.previousPrice7d) : undefined,
+                          previousPrice30d: ro.previousPrice30d != null && Number(ro.previousPrice30d) > 0 ? Number(ro.previousPrice30d) : undefined,
                         };
                       });
                     }
@@ -452,8 +452,8 @@ export function WatchlistManager({
                   targetPrice: Number(group.target_price || 0),
                   currentPrice: activePrice,
                   previousPrice24h: group.previous_price_24h != null ? Number(group.previous_price_24h) : activePrice,
-                  previousPrice7d: group.previous_price_7d != null ? Number(group.previous_price_7d) : (matchingHw?.msrp ? Number(matchingHw.msrp) : activePrice),
-                  previousPrice30d: group.previous_price_30d != null ? Number(group.previous_price_30d) : (matchingHw?.msrp ? Number(matchingHw.msrp) : activePrice),
+                  previousPrice7d: group.previous_price_7d != null && Number(group.previous_price_7d) > 0 ? Number(group.previous_price_7d) : undefined,
+                  previousPrice30d: group.previous_price_30d != null && Number(group.previous_price_30d) > 0 ? Number(group.previous_price_30d) : undefined,
                   allTimeLow: group.all_time_low || activePrice,
                   retailer: matchingHw?.retailer || 'Amazon',
                   productUrl: matchingHw?.product_url || '#',
@@ -489,8 +489,8 @@ export function WatchlistManager({
                     targetPrice: savedTarget > 0 ? savedTarget : (item.msrp ? Math.round(item.msrp * 0.95 * 100) / 100 : Math.round((item.current_price || 0) * 0.95 * 100) / 100),
                     currentPrice: item.current_price || 0,
                     previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : Number(item.current_price || 0),
-                    previousPrice7d: item.previous_price_7d != null ? Number(item.previous_price_7d) : Number(item.msrp || item.current_price || 0),
-                    previousPrice30d: item.previous_price_30d != null ? Number(item.previous_price_30d) : Number(item.msrp || item.current_price || 0),
+                    previousPrice7d: item.previous_price_7d != null && Number(item.previous_price_7d) > 0 ? Number(item.previous_price_7d) : undefined,
+                    previousPrice30d: item.previous_price_30d != null && Number(item.previous_price_30d) > 0 ? Number(item.previous_price_30d) : undefined,
                     allTimeLow: item.lowest_price_90d || item.current_price || 0,
                     retailer: item.retailer || 'Amazon',
                     productUrl: item.product_url || '#',
@@ -776,8 +776,8 @@ export function WatchlistManager({
       currentPrice: price,
       notifyOnFlashDrop: true,
       previousPrice24h: price,
-      previousPrice7d: deal.marketMsrp > price ? deal.marketMsrp : price,
-      previousPrice30d: deal.marketMsrp > price ? deal.marketMsrp : price,
+      previousPrice7d: undefined,
+      previousPrice30d: undefined,
       allTimeLow: deal.lowestPrice,
       retailer: activeOffer.retailer as any,
       productUrl: activeOffer.productUrl,
@@ -793,8 +793,8 @@ export function WatchlistManager({
           originalPrice: o.originalPrice,
           previousPrice: o.price,
           previousPrice24h: o.price,
-          previousPrice7d: o.originalPrice || o.price,
-          previousPrice30d: o.originalPrice || o.price,
+          previousPrice7d: undefined,
+          previousPrice30d: undefined,
           title: deal.name,
           url: o.productUrl,
           imageUrl: deal.imageUrl,
@@ -910,8 +910,8 @@ export function WatchlistManager({
           originalPrice: payload.originalPrice || null as number | null,
           previousPrice: Number(payload.previousPrice || payload.previousPrice24h || offerPrice),
           previousPrice24h: Number(payload.previousPrice24h || payload.previousPrice || offerPrice),
-          previousPrice7d: Number(payload.previousPrice7d || (offerMsrp > offerPrice ? offerMsrp : offerPrice)),
-          previousPrice30d: Number(payload.previousPrice30d || (offerMsrp > offerPrice ? offerMsrp : offerPrice)),
+          previousPrice7d: payload.previousPrice7d != null && Number(payload.previousPrice7d) > 0 ? Number(payload.previousPrice7d) : undefined,
+          previousPrice30d: payload.previousPrice30d != null && Number(payload.previousPrice30d) > 0 ? Number(payload.previousPrice30d) : undefined,
           title: payload.title,
           url: payload.url,
           imageUrl: offerImage,
@@ -1015,8 +1015,8 @@ export function WatchlistManager({
                 originalPrice: o.originalPrice || null,
                 previousPrice: Number(o.previousPrice || o.previousPrice24h || oPrice),
                 previousPrice24h: Number(o.previousPrice24h || o.previousPrice || oPrice),
-                previousPrice7d: Number(o.previousPrice7d || (oMsrp > oPrice ? oMsrp : oPrice)),
-                previousPrice30d: Number(o.previousPrice30d || (oMsrp > oPrice ? oMsrp : oPrice)),
+                previousPrice7d: o.previousPrice7d != null && Number(o.previousPrice7d) > 0 ? Number(o.previousPrice7d) : undefined,
+                previousPrice30d: o.previousPrice30d != null && Number(o.previousPrice30d) > 0 ? Number(o.previousPrice30d) : undefined,
                 title: o.title || bo.title,
                 url: o.url || '#',
                 imageUrl: o.imageUrl || o.image_url || boImage,
@@ -1034,8 +1034,8 @@ export function WatchlistManager({
                 currentPrice: boPrice,
                 targetPrice: Math.round(boPrice * 0.95 * 100) / 100,
                 previousPrice24h: boPrice,
-                previousPrice7d: boMsrp > boPrice ? boMsrp : boPrice,
-                previousPrice30d: boMsrp > boPrice ? boMsrp : boPrice,
+                previousPrice7d: undefined,
+                previousPrice30d: undefined,
                 retailer: bo.retailer,
                 productUrl: bo.url,
                 imageUrl: boImage || item.imageUrl,
@@ -1494,114 +1494,110 @@ export function WatchlistManager({
     }
   };
 
+  // Helper to determine the duration (in days) that this item / offer has been tracked
+  const getHistoryDurationDays = (item: WatchlistItem, effectiveOffer?: any): number => {
+    let maxDays = 0;
+    const addedTimestamp = item.addedAt || (item as any).added_at || (item as any).created_at;
+    if (addedTimestamp) {
+      const addedMs = new Date(addedTimestamp).getTime();
+      if (!isNaN(addedMs)) {
+        maxDays = Math.max(maxDays, (Date.now() - addedMs) / (1000 * 60 * 60 * 24));
+      }
+    }
+
+    const rawSpecs = item.specs || (effectiveOffer as any)?.specs;
+    let historyList: any[] = [];
+    if (typeof rawSpecs === 'string') {
+      try {
+        const parsed = JSON.parse(rawSpecs);
+        if (Array.isArray(parsed?.price_history)) historyList = parsed.price_history;
+      } catch {}
+    } else if (rawSpecs && Array.isArray(rawSpecs.price_history)) {
+      historyList = rawSpecs.price_history;
+    }
+
+    if (historyList.length > 0) {
+      historyList.forEach((h: any) => {
+        const ts = h?.timestamp || h?.date;
+        if (ts) {
+          const snapMs = new Date(ts).getTime();
+          if (!isNaN(snapMs)) {
+            const snapDays = (Date.now() - snapMs) / (1000 * 60 * 60 * 24);
+            if (snapDays > maxDays) maxDays = snapDays;
+          }
+        }
+      });
+    }
+
+    return maxDays;
+  };
+
   const getPreviousPrice = (item: WatchlistItem, effectiveOffer?: any) => {
     const isBaseRetailer = !effectiveOffer?.retailer || !item.retailer || 
       effectiveOffer.retailer.toLowerCase() === item.retailer.toLowerCase();
 
-    // 1. ALTERNATIVE RETAILER (e.g. user selected Amazon or Best Buy on an eBay-led item)
-    // NEVER fall back to item.previousPrice24h/7d/30d because that belongs to the base retailer!
-    if (!isBaseRetailer) {
-      const activeCurrent = typeof effectiveOffer?.currentPrice === 'number' && effectiveOffer.currentPrice > 0
-        ? effectiveOffer.currentPrice
-        : 0;
-
-      switch (selectedInterval) {
-        case '24h': {
-          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
-            return effectiveOffer.previousPrice24h;
-          }
-          if (typeof effectiveOffer?.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
-            return effectiveOffer.previousPrice;
-          }
-          // Newly queried item on Day 0: Price held stable at current price ($0.00 / 0.0%)
-          return activeCurrent > 0 ? activeCurrent : undefined;
-        }
-        case '7d': {
-          if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
-            return effectiveOffer.previousPrice7d;
-          }
-          // Compare against this retailer's own original MSRP / Was Price if it exists
-          if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > activeCurrent) {
-            return effectiveOffer.originalPrice;
-          }
-          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
-            return effectiveOffer.previousPrice24h;
-          }
-          return activeCurrent > 0 ? activeCurrent : undefined;
-        }
-        case '30d': {
-          if (typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0) {
-            return effectiveOffer.previousPrice30d;
-          }
-          // Compare against this retailer's own original MSRP / Was Price if it exists
-          if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > activeCurrent) {
-            return effectiveOffer.originalPrice;
-          }
-          if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
-            return effectiveOffer.previousPrice7d;
-          }
-          if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
-            return effectiveOffer.previousPrice24h;
-          }
-          return activeCurrent > 0 ? activeCurrent : undefined;
-        }
-      }
-    }
-
-    // 2. BASE RETAILER: Check offer fields first, then base item row fields
-    const baseCurrent = typeof effectiveOffer?.currentPrice === 'number' && effectiveOffer.currentPrice > 0
+    const activeCurrent = typeof effectiveOffer?.currentPrice === 'number' && effectiveOffer.currentPrice > 0
       ? effectiveOffer.currentPrice
       : (typeof item.currentPrice === 'number' && item.currentPrice > 0 ? item.currentPrice : 0);
 
+    const historyDays = getHistoryDurationDays(item, effectiveOffer);
+
     switch (selectedInterval) {
       case '24h': {
-        if (typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0) {
-          return effectiveOffer.previousPrice24h;
+        const p24 = typeof effectiveOffer?.previousPrice24h === 'number' && effectiveOffer.previousPrice24h > 0
+          ? effectiveOffer.previousPrice24h
+          : (isBaseRetailer && typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0 ? item.previousPrice24h : undefined);
+
+        // If an explicit price drop/increase was recorded
+        if (p24 && Math.abs(p24 - activeCurrent) >= 0.01) {
+          return p24;
         }
-        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
-          return item.previousPrice24h;
+
+        // If tracked for at least ~20 hours, report stable baseline held at current price
+        if (historyDays >= 0.8) {
+          return activeCurrent > 0 ? activeCurrent : undefined;
         }
-        if (typeof effectiveOffer?.previousPrice === 'number' && effectiveOffer.previousPrice > 0) {
-          return effectiveOffer.previousPrice;
-        }
-        return baseCurrent > 0 ? baseCurrent : undefined;
+
+        // Newly added / queried today: No prior snapshot yet, show Baseline Set
+        return undefined;
       }
       case '7d': {
-        if (typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0) {
-          return effectiveOffer.previousPrice7d;
+        // Enforce that at least 7 days (~6.5 days) of historical price snapshots exist
+        if (historyDays < 6.5) {
+          return undefined; // Renders "Baseline Set ($<price>)"
         }
-        if (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0) {
-          return item.previousPrice7d;
+
+        const p7 = typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0
+          ? effectiveOffer.previousPrice7d
+          : (isBaseRetailer && typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : undefined);
+
+        if (p7 && p7 > 0) {
+          return p7;
         }
-        if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > baseCurrent) {
-          return effectiveOffer.originalPrice;
-        }
-        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
-          return item.previousPrice24h;
-        }
-        return baseCurrent > 0 ? baseCurrent : undefined;
+
+        // If tracked for 7+ days and held stable, report current price (shows $0.00 / Held at)
+        return activeCurrent > 0 ? activeCurrent : undefined;
       }
       case '30d': {
-        if (typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0) {
-          return effectiveOffer.previousPrice30d;
+        // Enforce that at least 30 days (~28 days) of historical price snapshots exist
+        if (historyDays < 28.0) {
+          return undefined; // Renders "Baseline Set ($<price>)"
         }
-        if (typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0) {
-          return item.previousPrice30d;
+
+        const p30 = typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0
+          ? effectiveOffer.previousPrice30d
+          : (isBaseRetailer && typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : undefined);
+
+        if (p30 && p30 > 0) {
+          return p30;
         }
-        if (typeof effectiveOffer?.originalPrice === 'number' && effectiveOffer.originalPrice > baseCurrent) {
-          return effectiveOffer.originalPrice;
-        }
-        if (typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0) {
-          return item.previousPrice7d;
-        }
-        if (typeof item.previousPrice24h === 'number' && item.previousPrice24h > 0) {
-          return item.previousPrice24h;
-        }
-        return baseCurrent > 0 ? baseCurrent : undefined;
+
+        // If tracked for 30+ days and held stable
+        return activeCurrent > 0 ? activeCurrent : undefined;
       }
     }
 
-    return baseCurrent > 0 ? baseCurrent : undefined;
+    return undefined;
   };
 
   const calculateDrop = (current: number, previous?: number) => {

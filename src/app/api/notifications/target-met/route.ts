@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { sendDiscordTargetAlertWebhook, isValidDiscordWebhookUrl } from '@/lib/notifications/discord';
 
 export const runtime = 'edge';
 
@@ -179,63 +180,143 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'componentName, targetPrice, and currentPrice are required' }, { status: 400 });
     }
 
-    // Resolve target email address
+    // Resolve user delivery channel preferences and destinations
+    let deliveryChannels: any = null;
+    let targetWebhookUrl: string | null = null;
     let recipientEmail = userEmail;
-    if (!recipientEmail && userId) {
+
+    if (body.webhookUrl && isValidDiscordWebhookUrl(body.webhookUrl)) {
+      targetWebhookUrl = body.webhookUrl.trim();
+    }
+
+    if (userId) {
       try {
-        const { data: pref } = await supabaseAdmin
+        const { data: userPref, error: prefErr } = await supabaseAdmin
           .from('user_preferences')
-          .select('email')
+          .select('delivery_channels')
           .eq('user_id', userId)
-          .single();
-        if (pref?.email) recipientEmail = pref.email;
-      } catch (e) {}
+          .maybeSingle();
+
+        if (prefErr) {
+          console.warn('user_preferences lookup notice:', prefErr.message);
+        }
+
+        if (userPref?.delivery_channels) {
+          deliveryChannels = typeof userPref.delivery_channels === 'string'
+            ? JSON.parse(userPref.delivery_channels)
+            : userPref.delivery_channels;
+
+          if (!recipientEmail && deliveryChannels?.emailAddress) {
+            recipientEmail = deliveryChannels.emailAddress;
+          }
+
+          const wh = deliveryChannels?.discord_webhook || deliveryChannels?.discordWebhook;
+          if (!targetWebhookUrl && isValidDiscordWebhookUrl(wh)) {
+            targetWebhookUrl = wh;
+          }
+        }
+      } catch (err) {
+        console.warn('Target-met user preference lookup error:', err);
+      }
     }
 
-    if (!recipientEmail) {
-      recipientEmail = process.env.ADMIN_ALERT_EMAIL || 'ishaankor@gmail.com';
-    }
+    const shouldSendDiscord = Boolean(targetWebhookUrl && (deliveryChannels ? deliveryChannels.discord !== false : true));
+    const shouldSendEmail = Boolean(deliveryChannels ? deliveryChannels.email === true : true);
 
-    // Cooldown check (5-min throttle per email + componentName to prevent multi-click email bursts)
-    const cooldownKey = `${recipientEmail}:${componentName.toLowerCase().slice(0, 20)}`;
+    // Cooldown check (1-min throttle per user/destination + component + targetPrice to allow rapid testing)
+    const cooldownId = userId || recipientEmail || targetWebhookUrl || 'anonymous';
+    const cooldownKey = `${cooldownId}:${componentName.toLowerCase().slice(0, 20)}:${targetPrice}`;
     const now = Date.now();
     const lastSent = sentAlertsCooldown.get(cooldownKey) || 0;
-    if (!force && now - lastSent < 5 * 60 * 1000) {
+    if (!force && now - lastSent < 60 * 1000) {
       return NextResponse.json({
         success: true,
-        message: 'Notification skipped due to 5-minute alert cooldown for this component.',
+        message: 'Notification skipped due to 1-minute alert cooldown for this component & target price.',
         throttled: true
       });
     }
 
-    const html = buildTargetMetEmailHtml({
-      componentName,
-      category,
-      targetPrice,
-      currentPrice,
-      retailer,
-      productUrl,
-      imageUrl
-    });
+    let discordSuccess = false;
+    let discordError: string | undefined;
 
-    const senderDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
-    const fromAddress = process.env.RESEND_FROM_EMAIL || `RigScouter Alerts <${senderDomain}>`;
-    const subject = `🎯 Target Price Met! ${componentName} is $${currentPrice.toFixed(2)} at ${retailer}`;
+    // 1. Dispatch to Discord Webhook
+    if (shouldSendDiscord && targetWebhookUrl) {
+      try {
+        const discRes = await sendDiscordTargetAlertWebhook({
+          webhookUrl: targetWebhookUrl,
+          componentName,
+          currentPrice,
+          targetPrice,
+          retailer,
+          productUrl,
+          imageUrl
+        });
+        discordSuccess = discRes.success;
+        if (!discRes.success) discordError = discRes.error;
+      } catch (discErr: any) {
+        console.warn('Target-met Discord webhook error:', discErr);
+        discordError = discErr.message;
+      }
+    }
 
-    const resendResult = await sendResendEmail({
-      from: fromAddress,
-      to: recipientEmail,
-      subject,
-      html
-    });
+    let emailSuccess = false;
+    let emailError: string | undefined;
+    let resendId: string | undefined;
 
-    sentAlertsCooldown.set(cooldownKey, now);
+    // 2. Dispatch to Email via Resend
+    if (shouldSendEmail && (recipientEmail || process.env.ADMIN_ALERT_EMAIL) && process.env.RESEND_API_KEY) {
+      const emailTo = recipientEmail || process.env.ADMIN_ALERT_EMAIL || 'ishaankor@gmail.com';
+      try {
+        const html = buildTargetMetEmailHtml({
+          componentName,
+          category,
+          targetPrice,
+          currentPrice,
+          retailer,
+          productUrl,
+          imageUrl
+        });
+
+        const senderDomain = process.env.RESEND_DOMAIN || 'rigscouter@ishaankoradia.com';
+        const fromAddress = process.env.RESEND_FROM_EMAIL || `RigScouter Alerts <${senderDomain}>`;
+        const subject = `🎯 Target Price Met! ${componentName} is $${currentPrice.toFixed(2)} at ${retailer}`;
+
+        const resendResult = await sendResendEmail({
+          from: fromAddress,
+          to: emailTo,
+          subject,
+          html
+        });
+
+        emailSuccess = true;
+        resendId = resendResult?.id;
+      } catch (eErr: any) {
+        console.warn('Target-met Email dispatch error:', eErr.message);
+        emailError = eErr.message;
+      }
+    }
+
+    if (discordSuccess || emailSuccess) {
+      sentAlertsCooldown.set(cooldownKey, now);
+    }
 
     return NextResponse.json({
-      success: true,
-      message: `Target alert email sent immediately to ${recipientEmail}!`,
-      resendId: resendResult?.id,
-      recipient: recipientEmail
+      success: discordSuccess || emailSuccess,
+      dispatched: {
+        discord: discordSuccess,
+        email: emailSuccess
+      },
+      errors: {
+        ...(discordError ? { discord: discordError } : {}),
+        ...(emailError ? { email: emailError } : {})
+      },
+      message: discordSuccess && emailSuccess
+        ? 'Alert dispatched via Discord Webhook and Email!'
+        : discordSuccess
+        ? 'Alert dispatched to your Discord Webhook channel!'
+        : emailSuccess
+        ? `Alert dispatched via Email to ${recipientEmail}!`
+        : 'Alert could not be dispatched. Please verify your Discord Webhook URL or Email settings.'
     });
 
   } catch (e: any) {

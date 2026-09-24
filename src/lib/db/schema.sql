@@ -68,7 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_item_time ON price_snapshots(watchlist_
 CREATE TABLE IF NOT EXISTS user_preferences (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     summary_frequency VARCHAR(20) DEFAULT 'daily', -- 'daily', 'every_3_days', 'weekly', 'flash_only'
-    delivery_channels JSONB DEFAULT '{"email": true, "discord_webhook": null, "telegram_chat_id": null}'::jsonb,
+    delivery_channels JSONB DEFAULT '{"email": true, "discord_webhook": null}'::jsonb,
     comparison_intervals JSONB DEFAULT '["24h", "7d", "30d", "ATL"]'::jsonb,
     auto_recommend_alternatives BOOLEAN DEFAULT TRUE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
