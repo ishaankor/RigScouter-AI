@@ -22,6 +22,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   
   const [report, setReport] = useState<DailyDigestReport | null>(null);
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -110,15 +111,11 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     return formatted;
   };
 
+  // 1. Fetch saved user preferences once when authenticated user changes
   useEffect(() => {
     let isMounted = true;
-    if (!user?.id) {
-      setReport(null);
-      setIsGenerating(false);
-      return;
-    }
+    if (!user?.id) return;
 
-    // Load saved user preferences
     supabase
       .from('user_preferences')
       .select('*')
@@ -130,7 +127,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         if (pref.comparison_intervals) {
           try {
             const ints = typeof pref.comparison_intervals === 'string' ? JSON.parse(pref.comparison_intervals) : pref.comparison_intervals;
-            if (Array.isArray(ints)) setSelectedIntervals(ints);
+            if (Array.isArray(ints) && ints.length > 0) setSelectedIntervals(ints);
           } catch {}
         }
         if (pref.delivery_channels) {
@@ -146,20 +143,58 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         }
       });
 
+    return () => { isMounted = false; };
+  }, [user?.id]);
+
+  // 2. Fetch user watchlist items once when authenticated user changes
+  useEffect(() => {
+    let isMounted = true;
+    if (!user?.id) {
+      setWatchlistItems([]);
+      setReport(null);
+      setIsGenerating(false);
+      return;
+    }
+
     setIsGenerating(true);
-    fetchUserWatchlist().then(async items => {
-      if (isMounted) {
-        if (items.length > 0) {
-          const generated = await generateDailyDigestReport(items, frequency, selectedIntervals);
-          if (isMounted) setReport(generated);
-        } else {
-          setReport(null);
-        }
+    fetchUserWatchlist().then(items => {
+      if (!isMounted) return;
+      setWatchlistItems(items);
+      if (items.length === 0) {
+        setReport(null);
         setIsGenerating(false);
       }
     });
+
     return () => { isMounted = false; };
-  }, [user?.id, frequency, JSON.stringify(selectedIntervals)]);
+  }, [user?.id]);
+
+  // 3. Generate AI digest preview report whenever watchlist items, frequency, or intervals change
+  useEffect(() => {
+    let isCurrent = true;
+    if (!user?.id || watchlistItems.length === 0) {
+      setReport(null);
+      setIsGenerating(false);
+      return;
+    }
+
+    setIsGenerating(true);
+    generateDailyDigestReport(watchlistItems, frequency, selectedIntervals)
+      .then(generated => {
+        if (isCurrent) {
+          setReport(generated);
+          setIsGenerating(false);
+        }
+      })
+      .catch(err => {
+        console.error('Digest report generation error:', err);
+        if (isCurrent) setIsGenerating(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [user?.id, watchlistItems, frequency, JSON.stringify(selectedIntervals)]);
 
   const handleRegenerate = async () => {
     if (!user?.id) {
@@ -168,6 +203,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     }
     setIsGenerating(true);
     const items = await fetchUserWatchlist();
+    setWatchlistItems(items);
     if (items.length > 0) {
       const generated = await generateDailyDigestReport(items, frequency, selectedIntervals);
       setReport(generated);
@@ -175,6 +211,58 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
       setReport(null);
     }
     setIsGenerating(false);
+  };
+
+  // Helper to persist preferences in background without resetting local state
+  const persistPreferences = async (
+    newFreq: DigestFrequency = frequency,
+    newIntervals: ComparisonInterval[] = selectedIntervals,
+    newChannel: 'email' | 'discord' = deliveryChannel
+  ) => {
+    if (!user?.id) return;
+    try {
+      const routingEmail = customEmail.trim() || user?.email;
+      const channels = {
+        email: newChannel === 'email',
+        emailAddress: routingEmail,
+        discord: newChannel === 'discord',
+        discord_webhook: discordWebhook.trim()
+      };
+      await supabase.from('user_preferences').upsert({
+        user_id: user.id,
+        summary_frequency: newFreq,
+        delivery_channels: JSON.stringify(channels),
+        comparison_intervals: JSON.stringify(newIntervals),
+        auto_recommend_alternatives: true
+      });
+    } catch (err) {
+      console.warn('Auto-save preference notice:', err);
+    }
+  };
+
+  const handleFrequencyChange = (newFreq: DigestFrequency) => {
+    setFrequency(newFreq);
+    persistPreferences(newFreq, selectedIntervals, deliveryChannel);
+  };
+
+  const handleDeliveryChannelChange = (newChannel: 'email' | 'discord') => {
+    setDeliveryChannel(newChannel);
+    persistPreferences(frequency, selectedIntervals, newChannel);
+  };
+
+  const toggleInterval = (int: ComparisonInterval) => {
+    let updated: ComparisonInterval[];
+    if (selectedIntervals.includes(int)) {
+      if (selectedIntervals.length > 1) {
+        updated = selectedIntervals.filter(i => i !== int);
+      } else {
+        return;
+      }
+    } else {
+      updated = [...selectedIntervals, int];
+    }
+    setSelectedIntervals(updated);
+    persistPreferences(frequency, updated, deliveryChannel);
   };
 
   const handleSaveSubscription = async () => {
@@ -254,16 +342,6 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     setTimeout(() => setSaveNotice(null), 6000);
   };
 
-  const toggleInterval = (int: ComparisonInterval) => {
-    if (selectedIntervals.includes(int)) {
-      if (selectedIntervals.length > 1) {
-        setSelectedIntervals(selectedIntervals.filter(i => i !== int));
-      }
-    } else {
-      setSelectedIntervals([...selectedIntervals, int]);
-    }
-  };
-
   return (
     <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
       {/* Auth Subscription Guard Banner */}
@@ -340,7 +418,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setFrequency(item.id as DigestFrequency)}
+                  onClick={() => handleFrequencyChange(item.id as DigestFrequency)}
                   className={`p-2.5 text-xs font-semibold rounded-xl border text-left transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
                     frequency === item.id
                       ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
@@ -367,7 +445,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                 return (
                   <button
                     key={ch.id}
-                    onClick={() => setDeliveryChannel(ch.id as any)}
+                    onClick={() => handleDeliveryChannelChange(ch.id as any)}
                     className={`p-3 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm cursor-pointer ${
                       deliveryChannel === ch.id
                         ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
