@@ -44,6 +44,10 @@ export interface TrendingRetailerOffer {
   productUrl: string;
   imageUrl?: string;
   dealScore: number;
+  previousPrice?: number;
+  previousPrice24h?: number;
+  previousPrice7d?: number;
+  previousPrice30d?: number;
 }
 
 export interface ConsolidatedTrendingDeal {
@@ -63,6 +67,12 @@ export interface ConsolidatedTrendingDeal {
   savingsVsCompetitor: number;
   savingsPctVsCompetitor: number;
   dealScore: number;
+  previousPrice24h?: number;
+  previousPrice7d?: number;
+  previousPrice30d?: number;
+  allTimeLow?: number;
+  priceHistory?: any[];
+  earliestTrackedAt?: string;
 }
 
 function cleanTrendingTitle(rawName: string): string {
@@ -449,6 +459,7 @@ export function WatchlistManager({
                 const activePrice = Number(matchingHw?.current_price || group.all_time_low || group.target_price || 0);
 
                 let parsedOffers: any[] = [];
+                let catalogHistory: any[] = [];
                 if (matchingHw?.specs) {
                   try {
                     const s = typeof matchingHw.specs === 'string' ? JSON.parse(matchingHw.specs) : matchingHw.specs;
@@ -467,8 +478,13 @@ export function WatchlistManager({
                         };
                       });
                     }
+                    if (Array.isArray(s.price_history)) {
+                      catalogHistory = s.price_history;
+                    }
                   } catch (e) {}
                 }
+
+                const earliestTrackedAt = (catalogHistory.length > 0 && (catalogHistory[0]?.timestamp || catalogHistory[0]?.date)) || matchingHw?.created_at;
 
                 return {
                   id: group.id,
@@ -482,13 +498,17 @@ export function WatchlistManager({
                   previousPrice7d: group.previous_price_7d != null && Number(group.previous_price_7d) > 0 ? Number(group.previous_price_7d) : undefined,
                   previousPrice30d: group.previous_price_30d != null && Number(group.previous_price_30d) > 0 ? Number(group.previous_price_30d) : undefined,
                   allTimeLow: group.all_time_low || activePrice,
+                  earliestTrackedAt,
                   retailer: matchingHw?.retailer || 'Amazon',
                   productUrl: matchingHw?.product_url || '#',
                   imageUrl: catalogImage || group.image_url || getCategoryImage(group.category || 'GPU'),
                   inStock: true,
                   notifyOnFlashDrop: group.notify_on_flash_drop ?? true,
                   addedAt: group.added_at,
-                  specs: { RetailerOffers: parsedOffers.length > 0 ? parsedOffers : (group.RetailerOffers || []) },
+                  specs: { 
+                    RetailerOffers: parsedOffers.length > 0 ? parsedOffers : (group.RetailerOffers || []),
+                    price_history: catalogHistory.length > 0 ? catalogHistory : (group.price_history || [])
+                  },
                   retailerTargets: group.retailerTargets || group.retailer_targets || matchingHw?.specs?.retailer_targets || {}
                 };
               });
@@ -555,23 +575,32 @@ export function WatchlistManager({
         setWatchlist(dedupedList);
 
         if (hwCatalog && hwCatalog.length > 0) {
-          const formattedTrending = hwCatalog.map((item: any) => ({
-            id: item.id,
-            dbRowIds: [item.id],
-            name: item.name,
-            category: item.category,
-            brand: item.brand,
-            model: item.model,
-            specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
-            msrp: item.msrp,
-            currentPrice: item.current_price,
-            lowestPrice90d: item.lowest_price_90d,
-            retailer: item.retailer,
-            productUrl: item.product_url,
-            imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-            rating: item.rating ?? undefined,
-            dealScore: item.deal_score
-          }));
+          const formattedTrending = hwCatalog.map((item: any) => {
+            const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+            const hist = Array.isArray(specs?.price_history) ? specs.price_history : [];
+            const earliestTrackedAt = (hist.length > 0 && (hist[0]?.timestamp || hist[0]?.date)) || item.created_at;
+            return {
+              id: item.id,
+              dbRowIds: [item.id],
+              name: item.name,
+              category: item.category,
+              brand: item.brand,
+              model: item.model,
+              specs,
+              msrp: item.msrp,
+              currentPrice: item.current_price,
+              previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : Number(item.current_price || 0),
+              previousPrice7d: item.previous_price_7d != null && Number(item.previous_price_7d) > 0 ? Number(item.previous_price_7d) : undefined,
+              previousPrice30d: item.previous_price_30d != null && Number(item.previous_price_30d) > 0 ? Number(item.previous_price_30d) : undefined,
+              lowestPrice90d: item.lowest_price_90d,
+              earliestTrackedAt,
+              retailer: item.retailer,
+              productUrl: item.product_url,
+              imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+              rating: item.rating ?? undefined,
+              dealScore: item.deal_score
+            };
+          });
           setTrendingItems(formattedTrending);
         }
       } catch (e) {
@@ -596,6 +625,8 @@ export function WatchlistManager({
       imageUrl: string;
       dbRowIds: Set<string>;
       offersMap: Map<string, TrendingRetailerOffer>;
+      historyMap: Map<string, any>;
+      earliestTrackedAt?: string;
     }>();
 
     trendingItems.forEach(item => {
@@ -612,7 +643,9 @@ export function WatchlistManager({
           model: item.model || '',
           imageUrl: item.imageUrl || '',
           dbRowIds: new Set<string>(),
-          offersMap: new Map<string, TrendingRetailerOffer>()
+          offersMap: new Map<string, TrendingRetailerOffer>(),
+          historyMap: new Map<string, any>(),
+          earliestTrackedAt: item.earliestTrackedAt || (item as any).addedAt
         });
       }
 
@@ -640,6 +673,10 @@ export function WatchlistManager({
               retailer: so.retailer,
               price: Number(so.price),
               originalPrice: Number(so.originalPrice || so.price),
+              previousPrice: Number(so.previousPrice || so.previousPrice24h || so.price),
+              previousPrice24h: Number(so.previousPrice24h || so.previousPrice || so.price),
+              previousPrice7d: so.previousPrice7d != null && Number(so.previousPrice7d) > 0 ? Number(so.previousPrice7d) : (item.previousPrice7d ? Number(item.previousPrice7d) : undefined),
+              previousPrice30d: so.previousPrice30d != null && Number(so.previousPrice30d) > 0 ? Number(so.previousPrice30d) : (item.previousPrice30d ? Number(item.previousPrice30d) : undefined),
               productUrl: so.url || '#',
               imageUrl: so.imageUrl || item.imageUrl,
               dealScore: 50
@@ -656,10 +693,29 @@ export function WatchlistManager({
             retailer: retailerName,
             price,
             originalPrice: msrp > price ? msrp : (existing?.originalPrice || price),
+            previousPrice: Number(item.previousPrice24h || existing?.previousPrice24h || price),
+            previousPrice24h: Number(item.previousPrice24h || existing?.previousPrice24h || price),
+            previousPrice7d: item.previousPrice7d ?? existing?.previousPrice7d,
+            previousPrice30d: item.previousPrice30d ?? existing?.previousPrice30d,
             productUrl: item.productUrl || '#',
             imageUrl: item.imageUrl,
             dealScore
           });
+        }
+      }
+
+      if (Array.isArray(specs?.price_history)) {
+        specs.price_history.forEach((h: any) => {
+          const hKey = h?.timestamp || h?.date;
+          if (hKey && !grp.historyMap.has(hKey)) {
+            grp.historyMap.set(hKey, h);
+          }
+        });
+      }
+      const itemEarliest = item.earliestTrackedAt || (item as any).addedAt;
+      if (itemEarliest) {
+        if (!grp.earliestTrackedAt || new Date(itemEarliest).getTime() < new Date(grp.earliestTrackedAt).getTime()) {
+          grp.earliestTrackedAt = itemEarliest;
         }
       }
 
@@ -702,6 +758,10 @@ export function WatchlistManager({
       const savingsVsCompetitor = Math.max(0, competitorRefPrice - lowestPrice);
       const savingsPctVsCompetitor = competitorRefPrice > 0 ? Math.round((savingsVsCompetitor / competitorRefPrice) * 100) : 0;
 
+      const priceHistory = Array.from(grp.historyMap.values()).sort((a, b) => {
+        return new Date(a.timestamp || a.date).getTime() - new Date(b.timestamp || b.date).getTime();
+      });
+
       results.push({
         id: bestOffer.id,
         canonicalKey: grp.canonicalKey,
@@ -718,7 +778,13 @@ export function WatchlistManager({
         marketMsrp,
         savingsVsCompetitor,
         savingsPctVsCompetitor,
-        dealScore: topScore
+        dealScore: topScore,
+        previousPrice24h: bestOffer.previousPrice24h ?? bestOffer.price,
+        previousPrice7d: bestOffer.previousPrice7d,
+        previousPrice30d: bestOffer.previousPrice30d,
+        allTimeLow: lowestPrice,
+        priceHistory,
+        earliestTrackedAt: grp.earliestTrackedAt || (priceHistory[0]?.timestamp || priceHistory[0]?.date)
       });
     });
 
@@ -801,6 +867,23 @@ export function WatchlistManager({
     });
 
     const newId = `watch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const optPrev24 = typeof activeOffer.previousPrice24h === 'number' && activeOffer.previousPrice24h > 0
+      ? activeOffer.previousPrice24h
+      : (typeof deal.previousPrice24h === 'number' && deal.previousPrice24h > 0 ? deal.previousPrice24h : price);
+    const optPrev7d = typeof activeOffer.previousPrice7d === 'number' && activeOffer.previousPrice7d > 0
+      ? activeOffer.previousPrice7d
+      : deal.previousPrice7d;
+    const optPrev30d = typeof activeOffer.previousPrice30d === 'number' && activeOffer.previousPrice30d > 0
+      ? activeOffer.previousPrice30d
+      : deal.previousPrice30d;
+    const optATL = typeof deal.lowestPrice === 'number' && deal.lowestPrice > 0
+      ? deal.lowestPrice
+      : (typeof deal.allTimeLow === 'number' && deal.allTimeLow > 0 ? deal.allTimeLow : price);
+    const optHistory = Array.isArray(deal.priceHistory) && deal.priceHistory.length > 0
+      ? deal.priceHistory
+      : [{ price, timestamp: deal.earliestTrackedAt || new Date().toISOString() }];
+    const optEarliest = deal.earliestTrackedAt || (optHistory[0]?.timestamp || optHistory[0]?.date) || new Date().toISOString();
+
     const optimisticItem: WatchlistItem = {
       id: newId,
       userId: user.id,
@@ -810,26 +893,28 @@ export function WatchlistManager({
       targetPrice: defaultTargetPrice,
       currentPrice: price,
       notifyOnFlashDrop: true,
-      previousPrice24h: price,
-      previousPrice7d: undefined,
-      previousPrice30d: undefined,
-      allTimeLow: deal.lowestPrice,
+      previousPrice24h: optPrev24,
+      previousPrice7d: optPrev7d,
+      previousPrice30d: optPrev30d,
+      allTimeLow: optATL,
       retailer: activeOffer.retailer as any,
       productUrl: activeOffer.productUrl,
       imageUrl: deal.imageUrl,
       inStock: true,
-      addedAt: new Date().toISOString(),
+      addedAt: optEarliest,
+      earliestTrackedAt: optEarliest,
       retailerTargets,
       specs: {
+        price_history: optHistory,
         RetailerOffers: deal.offers.map(o => ({
           id: o.id,
           retailer: o.retailer,
           price: o.price,
           originalPrice: o.originalPrice,
-          previousPrice: o.price,
-          previousPrice24h: o.price,
-          previousPrice7d: undefined,
-          previousPrice30d: undefined,
+          previousPrice: Number(o.previousPrice || o.previousPrice24h || o.price),
+          previousPrice24h: Number(o.previousPrice24h || o.previousPrice || o.price),
+          previousPrice7d: o.previousPrice7d,
+          previousPrice30d: o.previousPrice30d,
           title: deal.name,
           url: o.productUrl,
           imageUrl: deal.imageUrl,
@@ -837,6 +922,12 @@ export function WatchlistManager({
         }))
       }
     };
+
+    // Pre-select the clicked offer's retailer so the dropdown matches immediately
+    setSelectedRetailers(prev => ({
+      ...prev,
+      [newId]: activeOffer.retailer
+    }));
 
     setWatchlist(prev => {
       const exists = prev.some(p => {
@@ -858,6 +949,7 @@ export function WatchlistManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
+          componentId: deal.id,
           componentName: deal.name,
           category: deal.category,
           targetPrice: defaultTargetPrice,
@@ -866,7 +958,13 @@ export function WatchlistManager({
           productUrl: activeOffer.productUrl,
           imageUrl: deal.imageUrl,
           brand: deal.brand,
-          model: deal.model
+          model: deal.model,
+          previousPrice24h: optPrev24,
+          previousPrice7d: optPrev7d,
+          previousPrice30d: optPrev30d,
+          allTimeLow: optATL,
+          earliestTrackedAt: optEarliest,
+          priceHistory: optHistory
         })
       });
     } catch (e) {
@@ -1537,7 +1635,7 @@ export function WatchlistManager({
   // Helper to determine the duration (in days) that this item / offer has been tracked
   const getHistoryDurationDays = (item: WatchlistItem, effectiveOffer?: any): number => {
     let maxDays = 0;
-    const addedTimestamp = item.addedAt || (item as any).added_at || (item as any).created_at;
+    const addedTimestamp = (item as any).earliestTrackedAt || (effectiveOffer as any)?.earliestTrackedAt || (item as any).firstSeenAt || item.addedAt || (item as any).added_at || (item as any).created_at;
     if (addedTimestamp) {
       const addedMs = new Date(addedTimestamp).getTime();
       if (!isNaN(addedMs)) {
@@ -1554,6 +1652,13 @@ export function WatchlistManager({
       } catch {}
     } else if (rawSpecs && Array.isArray(rawSpecs.price_history)) {
       historyList = rawSpecs.price_history;
+    }
+
+    if (Array.isArray((effectiveOffer as any)?.priceHistory)) {
+      historyList = [...historyList, ...(effectiveOffer as any).priceHistory];
+    }
+    if (Array.isArray((item as any)?.priceHistory)) {
+      historyList = [...historyList, ...(item as any).priceHistory];
     }
 
     if (historyList.length > 0) {
@@ -1602,14 +1707,19 @@ export function WatchlistManager({
         return undefined;
       }
       case '7d': {
+        const p7 = typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0
+          ? effectiveOffer.previousPrice7d
+          : (isBaseRetailer && typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : undefined);
+
+        // If an explicit price drop/increase was recorded
+        if (p7 && Math.abs(p7 - activeCurrent) >= 0.01) {
+          return p7;
+        }
+
         // Enforce that at least 7 days (~6.5 days) of historical price snapshots exist
         if (historyDays < 6.5) {
           return undefined; // Renders "Baseline Set ($<price>)"
         }
-
-        const p7 = typeof effectiveOffer?.previousPrice7d === 'number' && effectiveOffer.previousPrice7d > 0
-          ? effectiveOffer.previousPrice7d
-          : (isBaseRetailer && typeof item.previousPrice7d === 'number' && item.previousPrice7d > 0 ? item.previousPrice7d : undefined);
 
         if (p7 && p7 > 0) {
           return p7;
@@ -1619,14 +1729,19 @@ export function WatchlistManager({
         return activeCurrent > 0 ? activeCurrent : undefined;
       }
       case '30d': {
+        const p30 = typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0
+          ? effectiveOffer.previousPrice30d
+          : (isBaseRetailer && typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : undefined);
+
+        // If an explicit price drop/increase was recorded
+        if (p30 && Math.abs(p30 - activeCurrent) >= 0.01) {
+          return p30;
+        }
+
         // Enforce that at least 30 days (~28 days) of historical price snapshots exist
         if (historyDays < 28.0) {
           return undefined; // Renders "Baseline Set ($<price>)"
         }
-
-        const p30 = typeof effectiveOffer?.previousPrice30d === 'number' && effectiveOffer.previousPrice30d > 0
-          ? effectiveOffer.previousPrice30d
-          : (isBaseRetailer && typeof item.previousPrice30d === 'number' && item.previousPrice30d > 0 ? item.previousPrice30d : undefined);
 
         if (p30 && p30 > 0) {
           return p30;

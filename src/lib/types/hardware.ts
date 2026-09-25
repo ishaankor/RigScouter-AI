@@ -22,6 +22,7 @@ export interface HardwareComponent {
   previousPrice24h?: number;
   previousPrice7d?: number;
   previousPrice30d?: number;
+  earliestTrackedAt?: string;
 }
 
 export type DigestFrequency = 'daily' | 'every_3_days' | 'weekly' | 'flash_only';
@@ -33,6 +34,10 @@ export interface RetailerOffer {
   retailer: RetailerName | string;
   price: number;
   originalPrice?: number;
+  previousPrice?: number;
+  previousPrice24h?: number;
+  previousPrice7d?: number;
+  previousPrice30d?: number;
   url: string;
   imageUrl?: string;
   inStock?: boolean;
@@ -57,6 +62,7 @@ export interface WatchlistItem {
   inStock: boolean;
   notifyOnFlashDrop: boolean;
   addedAt: string;
+  earliestTrackedAt?: string;
   specs?: Record<string, any>;
   dbRowIds?: string[];
   canonicalKey?: string;

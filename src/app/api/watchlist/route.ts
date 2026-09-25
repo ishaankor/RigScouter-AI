@@ -5,6 +5,91 @@ import { calculateMultiRetailerDealScore } from '@/lib/scrapers/price-scraper';
 
 export const runtime = 'edge';
 
+function computeHistoryIntervals(historyList: any[], currentPrice: number) {
+  const current = Number(currentPrice) || 0;
+  if (!Array.isArray(historyList) || historyList.length === 0) {
+    return {
+      previousPrice24h: current > 0 ? current : undefined,
+      previousPrice7d: undefined,
+      previousPrice30d: undefined,
+      allTimeLow: current > 0 ? current : undefined,
+      earliestTrackedAt: undefined,
+      historyDays: 0,
+      cleanHistory: []
+    };
+  }
+
+  const nowMs = Date.now();
+  let earliestMs = nowMs;
+  let atl = current > 0 ? current : Infinity;
+
+  const validEntries = historyList
+    .map(h => {
+      const p = Number(h?.price || 0);
+      const ts = h?.timestamp || (h?.date ? `${h.date}T00:00:00Z` : undefined);
+      const ms = ts ? new Date(ts).getTime() : NaN;
+      return { price: p, ms, ts, raw: h };
+    })
+    .filter(h => h.price > 0 && !isNaN(h.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  if (validEntries.length === 0) {
+    return {
+      previousPrice24h: current > 0 ? current : undefined,
+      previousPrice7d: undefined,
+      previousPrice30d: undefined,
+      allTimeLow: current > 0 ? current : undefined,
+      earliestTrackedAt: undefined,
+      historyDays: 0,
+      cleanHistory: []
+    };
+  }
+
+  validEntries.forEach(h => {
+    if (h.ms < earliestMs) earliestMs = h.ms;
+    if (h.price < atl) atl = h.price;
+  });
+
+  const historyDays = Math.max(0, (nowMs - earliestMs) / (1000 * 60 * 60 * 24));
+
+  // Find 24h previous price: point recorded at least 18h ago
+  let p24: number | undefined;
+  const pointsBefore24h = validEntries.filter(h => h.ms <= nowMs - (18 * 60 * 60 * 1000));
+  if (pointsBefore24h.length > 0) {
+    p24 = pointsBefore24h[pointsBefore24h.length - 1].price;
+  } else if (historyDays >= 0.8) {
+    p24 = validEntries[0].price;
+  }
+
+  // Find 7d previous price: point recorded at least 6d ago
+  let p7: number | undefined;
+  const pointsBefore7d = validEntries.filter(h => h.ms <= nowMs - (6 * 24 * 60 * 60 * 1000));
+  if (pointsBefore7d.length > 0) {
+    p7 = pointsBefore7d[pointsBefore7d.length - 1].price;
+  } else if (historyDays >= 6.5) {
+    p7 = validEntries[0].price;
+  }
+
+  // Find 30d previous price: point recorded at least 25d ago
+  let p30: number | undefined;
+  const pointsBefore30d = validEntries.filter(h => h.ms <= nowMs - (25 * 24 * 60 * 60 * 1000));
+  if (pointsBefore30d.length > 0) {
+    p30 = pointsBefore30d[pointsBefore30d.length - 1].price;
+  } else if (historyDays >= 28.0) {
+    p30 = validEntries[0].price;
+  }
+
+  return {
+    previousPrice24h: p24 ?? (current > 0 ? current : undefined),
+    previousPrice7d: p7,
+    previousPrice30d: p30,
+    allTimeLow: atl !== Infinity ? atl : (current > 0 ? current : undefined),
+    earliestTrackedAt: new Date(earliestMs).toISOString(),
+    historyDays,
+    cleanHistory: validEntries.map(e => e.raw)
+  };
+}
+
 /**
  * GET /api/watchlist
  * Queries Supabase DB for user watchlist items AND trending hardware deals.
@@ -171,21 +256,34 @@ export async function GET(req: NextRequest) {
       const bestMatch = matches[0];
 
       const retailerOffersMap = new Map<string, any>();
+      const rawHistoryList: any[] = [];
       matches.forEach((m: any) => {
+        try {
+          const mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {});
+          if (Array.isArray(mSpecs.price_history)) {
+            rawHistoryList.push(...mSpecs.price_history);
+          }
+        } catch {}
+
         if (m && m.retailer && Number(m.current_price) > 0) {
           const rKey = m.retailer.toLowerCase();
           if (!retailerOffersMap.has(rKey)) {
             const mPrice = Number(m.current_price || 0);
             const mMsrp = Number(m.msrp || mPrice);
+            let mSpecs: any = {};
+            try { mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {}); } catch {}
+            const mHistory = Array.isArray(mSpecs.price_history) ? mSpecs.price_history : [];
+            const mComputed = computeHistoryIntervals(mHistory, mPrice);
+
             retailerOffersMap.set(rKey, {
               id: m.id,
               retailer: m.retailer,
               price: mPrice,
               originalPrice: mMsrp,
-              previousPrice: Number(m.previous_price_24h || mPrice),
-              previousPrice24h: Number(m.previous_price_24h || mPrice),
-              previousPrice7d: m.previous_price_7d != null ? Number(m.previous_price_7d) : null,
-              previousPrice30d: m.previous_price_30d != null ? Number(m.previous_price_30d) : null,
+              previousPrice: Number(mComputed.previousPrice24h || mPrice),
+              previousPrice24h: Number(mComputed.previousPrice24h || mPrice),
+              previousPrice7d: mComputed.previousPrice7d != null ? Number(mComputed.previousPrice7d) : null,
+              previousPrice30d: mComputed.previousPrice30d != null ? Number(mComputed.previousPrice30d) : null,
               title: m.name,
               url: m.product_url || '#',
               imageUrl: m.image_url,
@@ -208,7 +306,7 @@ export async function GET(req: NextRequest) {
                     retailer: ro.retailer,
                     price: roPrice,
                     originalPrice: roMsrp,
-                    previousPrice: Number(ro.previousPrice || roPrice),
+                    previousPrice: Number(ro.previousPrice || ro.previousPrice24h || roPrice),
                     previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
                     previousPrice7d: ro.previousPrice7d != null ? Number(ro.previousPrice7d) : null,
                     previousPrice30d: ro.previousPrice30d != null ? Number(ro.previousPrice30d) : null,
@@ -224,7 +322,19 @@ export async function GET(req: NextRequest) {
         } catch (e) {}
       });
 
-      const retailerOffers = Array.from(retailerOffersMap.values());
+      // Deduplicate combinedHistory
+      const historyMap = new Map<string, any>();
+      rawHistoryList.forEach(h => {
+        const key = h?.timestamp || h?.date;
+        if (key && !historyMap.has(key)) {
+          historyMap.set(key, h);
+        }
+      });
+      const combinedHistory = Array.from(historyMap.values()).sort((a, b) => {
+        const tA = new Date(a?.timestamp || a?.date).getTime();
+        const tB = new Date(b?.timestamp || b?.date).getTime();
+        return tA - tB;
+      });
 
       // If user provided a direct verified URL, preserve it; otherwise use bestMatch
       const finalPrice = hasDirectUrl 
@@ -238,6 +348,37 @@ export async function GET(req: NextRequest) {
       const finalProductUrl = hasDirectUrl 
         ? item.product_url
         : (bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#'));
+
+      const computed = computeHistoryIntervals(combinedHistory, finalPrice);
+
+      const effectiveP24 = (item.previous_price_24h != null && Math.abs(Number(item.previous_price_24h) - finalPrice) >= 0.01)
+        ? Number(item.previous_price_24h)
+        : (computed.previousPrice24h ?? Number(item.previous_price_24h || finalPrice));
+
+      const effectiveP7d = (item.previous_price_7d != null && Number(item.previous_price_7d) > 0 && Math.abs(Number(item.previous_price_7d) - finalPrice) >= 0.01)
+        ? Number(item.previous_price_7d)
+        : (computed.previousPrice7d ?? (item.previous_price_7d != null && Number(item.previous_price_7d) > 0 ? Number(item.previous_price_7d) : null));
+
+      const effectiveP30d = (item.previous_price_30d != null && Number(item.previous_price_30d) > 0 && Math.abs(Number(item.previous_price_30d) - finalPrice) >= 0.01)
+        ? Number(item.previous_price_30d)
+        : (computed.previousPrice30d ?? (item.previous_price_30d != null && Number(item.previous_price_30d) > 0 ? Number(item.previous_price_30d) : null));
+
+      const effectiveATL = Math.min(
+        Number(item.all_time_low || Infinity),
+        Number(bestMatch?.lowest_price_90d || Infinity),
+        Number(computed.allTimeLow || Infinity),
+        finalPrice > 0 ? finalPrice : Infinity
+      );
+
+      const earliestTrackedAt = computed.earliestTrackedAt || bestMatch?.created_at || item.added_at;
+
+      // Fill missing interval previous prices on individual retailer offers using computed values
+      retailerOffersMap.forEach((ro) => {
+        if (ro.previousPrice7d == null && effectiveP7d != null) ro.previousPrice7d = effectiveP7d;
+        if (ro.previousPrice30d == null && effectiveP30d != null) ro.previousPrice30d = effectiveP30d;
+      });
+
+      const retailerOffers = Array.from(retailerOffersMap.values());
 
       // Extract any saved retailer targets from hardware specs and user preferences
       let hwTargets: Record<string, number> = {};
@@ -295,19 +436,21 @@ export async function GET(req: NextRequest) {
         category: item.category || bestMatch?.category || 'GPU',
         targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.95 * 100) / 100 : 0)),
         currentPrice: finalPrice,
-        previousPrice24h: item.previous_price_24h != null ? Number(item.previous_price_24h) : (bestMatch?.current_price ? Number(bestMatch.current_price) : finalPrice),
-        previousPrice7d: item.previous_price_7d != null ? Number(item.previous_price_7d) : (bestMatch?.previous_price_7d != null ? Number(bestMatch.previous_price_7d) : null),
-        previousPrice30d: item.previous_price_30d != null ? Number(item.previous_price_30d) : (bestMatch?.previous_price_30d != null ? Number(bestMatch.previous_price_30d) : null),
-        allTimeLow: Number(item.all_time_low || bestMatch?.lowest_price_90d || finalPrice),
+        previousPrice24h: effectiveP24,
+        previousPrice7d: effectiveP7d,
+        previousPrice30d: effectiveP30d,
+        allTimeLow: effectiveATL,
         retailer: finalRetailer,
         productUrl: validatedProductUrl,
         imageUrl: finalImageUrl,
         inStock: item.in_stock ?? true,
         notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
         addedAt: item.added_at,
+        earliestTrackedAt,
         retailerTargets: combinedRetailerTargets,
         specs: {
-          RetailerOffers: retailerOffers
+          RetailerOffers: retailerOffers,
+          price_history: combinedHistory
         }
       };
     });
@@ -342,16 +485,28 @@ export async function GET(req: NextRequest) {
         computedDealScore = calculateMultiRetailerDealScore(current, siblingOffers, effectiveMsrp, lowest);
       }
 
+      const specs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
+      const historyList = Array.isArray(specs?.price_history) ? specs.price_history : [];
+      const computed = computeHistoryIntervals(historyList, current);
+
       return {
         id: item.id,
         name: item.name,
         category: item.category,
         brand: item.brand,
         model: item.model,
-        specs: typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {}),
+        specs: {
+          ...specs,
+          price_history: computed.cleanHistory
+        },
         msrp: effectiveMsrp > 0 ? effectiveMsrp : item.msrp,
         currentPrice: item.current_price,
-        lowestPrice90d: item.lowest_price_90d,
+        previousPrice24h: computed.previousPrice24h ?? current,
+        previousPrice7d: computed.previousPrice7d ?? null,
+        previousPrice30d: computed.previousPrice30d ?? null,
+        lowestPrice90d: computed.allTimeLow ?? lowest,
+        allTimeLow: computed.allTimeLow ?? lowest,
+        earliestTrackedAt: computed.earliestTrackedAt ?? item.updated_at,
         retailer: item.retailer,
         productUrl: item.product_url,
         imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
@@ -389,7 +544,14 @@ export async function POST(req: NextRequest) {
       productUrl = '#',
       imageUrl,
       brand = 'Hardware',
-      model
+      model,
+      componentId: clientComponentId,
+      previousPrice24h: clientPrev24,
+      previousPrice7d: clientPrev7d,
+      previousPrice30d: clientPrev30,
+      allTimeLow: clientAtl,
+      earliestTrackedAt: clientEarliestAt,
+      priceHistory: clientHistory
     } = body;
 
     if (!componentName || !targetPrice) {
@@ -399,53 +561,133 @@ export async function POST(req: NextRequest) {
     const price = Number(currentPrice) || Number(targetPrice);
     const target = Number(targetPrice);
     const itemId = `watch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const componentId = `comp-${componentName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const componentIdSlug = `comp-${componentName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
-    // 1. Save to GLOBAL hardware_components table (RLS open / bypass)
-    await supabaseAdmin.from('hardware_components').upsert({
-      id: componentId,
-      name: componentName,
-      category,
-      brand: brand || componentName.split(' ')[0],
-      model: model || componentName,
-      specs: JSON.stringify({ source: 'User Watchlist Addition', user_watchlist: userId, target_price: target }),
-      msrp: Math.round(price * 1.12 * 100) / 100,
-      current_price: price,
-      lowest_price_90d: price,
-      retailer,
-      product_url: productUrl,
-      image_url: imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
-      rating: 4.8,
-      deal_score: 80,
-      updated_at: new Date().toISOString()
-    });
+    // 1. Look up existing matching hardware catalog item (to inherit real price history & retailer offers)
+    const { data: allHw } = await supabaseAdmin
+      .from('hardware_components')
+      .select('*');
+
+    let matchedHw: any = null;
+    if (allHw && allHw.length > 0) {
+      if (clientComponentId) {
+        matchedHw = allHw.find((h: any) => h.id === clientComponentId || h.id.startsWith(`${clientComponentId}-`));
+      }
+      if (!matchedHw && (model || componentName)) {
+        const searchTarget = (model || componentName).toLowerCase().trim();
+        const cleanTarget = searchTarget.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const tokens = cleanTarget.split(' ').filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'brand', 'new', 'unused'].includes(t));
+        const digitTokens = tokens.filter((t: string) => /\d/.test(t));
+
+        matchedHw = allHw.find((h: any) => {
+          const hId = (h.id || '').toLowerCase();
+          const hName = (h.name || '').toLowerCase();
+          const hModel = (h.model || '').toLowerCase();
+          const fullText = `${hId} ${hName} ${hModel}`;
+          if (clientComponentId && (hId === clientComponentId || hId.startsWith(clientComponentId))) return true;
+          if (searchTarget && (hName === searchTarget || hModel === searchTarget)) return true;
+          if (digitTokens.length > 0 && digitTokens.every((d: string) => fullText.includes(d))) {
+            return true;
+          }
+          return false;
+        });
+      }
+    }
+
+    let hwSpecs: any = {};
+    if (matchedHw) {
+      try {
+        hwSpecs = typeof matchedHw.specs === 'string' ? JSON.parse(matchedHw.specs || '{}') : (matchedHw.specs || {});
+      } catch {}
+    }
+
+    const mergedHistory: any[] = [];
+    if (Array.isArray(hwSpecs.price_history)) mergedHistory.push(...hwSpecs.price_history);
+    if (Array.isArray(clientHistory)) mergedHistory.push(...clientHistory);
+    if (mergedHistory.length === 0) {
+      mergedHistory.push({ price, timestamp: clientEarliestAt || new Date().toISOString() });
+    }
+
+    const computed = computeHistoryIntervals(mergedHistory, price);
+
+    const finalCompId = matchedHw ? matchedHw.id : (clientComponentId || componentIdSlug);
+    const finalP24 = clientPrev24 != null ? Number(clientPrev24) : (computed.previousPrice24h ?? price);
+    const finalP7d = clientPrev7d != null ? Number(clientPrev7d) : (computed.previousPrice7d ?? null);
+    const finalP30d = clientPrev30 != null ? Number(clientPrev30) : (computed.previousPrice30d ?? null);
+    const finalATL = Math.min(
+      clientAtl != null ? Number(clientAtl) : Infinity,
+      computed.allTimeLow ?? Infinity,
+      matchedHw?.lowest_price_90d ? Number(matchedHw.lowest_price_90d) : Infinity,
+      price
+    );
+    const finalEarliest = clientEarliestAt || computed.earliestTrackedAt || matchedHw?.created_at || new Date().toISOString();
+
+    // If no existing hardware component, upsert new row with specs containing history
+    if (!matchedHw) {
+      await supabaseAdmin.from('hardware_components').upsert({
+        id: finalCompId,
+        name: componentName,
+        category,
+        brand: brand || componentName.split(' ')[0],
+        model: model || componentName,
+        specs: JSON.stringify({
+          source: 'User Watchlist Addition',
+          user_watchlist: userId,
+          target_price: target,
+          price_history: computed.cleanHistory,
+          RetailerOffers: [{ retailer, price, originalPrice: Math.round(price * 1.12 * 100) / 100, previousPrice24h: finalP24, url: productUrl, imageUrl, inStock: true }]
+        }),
+        msrp: Math.round(price * 1.12 * 100) / 100,
+        current_price: price,
+        lowest_price_90d: finalATL,
+        retailer,
+        product_url: productUrl,
+        image_url: imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
+        rating: 4.8,
+        deal_score: 80,
+        updated_at: new Date().toISOString()
+      });
+    }
 
     // 2. Prevent duplicate tracking in user watchlist_items
     if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
       const { data: existingWl } = await supabaseAdmin
         .from('watchlist_items')
-        .select('id, component_name')
+        .select('*')
         .eq('user_id', userId)
-        .ilike('component_name', componentName)
+        .or(`component_name.ilike.%${componentName.slice(0, 30)}%,component_id.eq.${finalCompId}`)
         .limit(1);
 
       if (existingWl && existingWl.length > 0) {
         return NextResponse.json({
           success: true,
           message: 'Already tracked in watchlist',
-          item: existingWl[0]
+          item: {
+            ...existingWl[0],
+            previousPrice24h: existingWl[0].previous_price_24h ?? finalP24,
+            previousPrice7d: existingWl[0].previous_price_7d ?? finalP7d,
+            previousPrice30d: existingWl[0].previous_price_30d ?? finalP30d,
+            allTimeLow: existingWl[0].all_time_low ?? finalATL,
+            earliestTrackedAt: finalEarliest,
+            specs: {
+              RetailerOffers: hwSpecs.RetailerOffers || [],
+              price_history: computed.cleanHistory
+            }
+          }
         });
       }
     }
 
     const wl_insert_payload: any = {
+      component_id: finalCompId,
       component_name: componentName,
-      category,
+      category: matchedHw?.category || category,
       target_price: target,
-      previous_price_24h: price,
-      previous_price_7d: price,
-      previous_price_30d: price,
-      all_time_low: price,
+      previous_price_24h: finalP24,
+      previous_price_7d: finalP7d,
+      previous_price_30d: finalP30d,
+      all_time_low: finalATL,
+      added_at: new Date().toISOString()
     };
     if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
       wl_insert_payload.user_id = userId;
@@ -475,19 +717,28 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      item: watchItem || {
-        id: itemId,
+      item: {
+        id: watchItem?.id || itemId,
         userId,
         componentName,
-        category,
+        category: matchedHw?.category || category,
         targetPrice: target,
         currentPrice: price,
-        retailer,
-        productUrl,
-        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
+        previousPrice24h: finalP24,
+        previousPrice7d: finalP7d,
+        previousPrice30d: finalP30d,
+        allTimeLow: finalATL,
+        retailer: matchedHw?.retailer || retailer,
+        productUrl: matchedHw?.product_url || productUrl,
+        imageUrl: imageUrl || matchedHw?.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80',
         inStock: true,
         notifyOnFlashDrop: true,
-        addedAt: new Date().toISOString()
+        addedAt: new Date().toISOString(),
+        earliestTrackedAt: finalEarliest,
+        specs: {
+          RetailerOffers: hwSpecs.RetailerOffers || [],
+          price_history: computed.cleanHistory
+        }
       }
     });
   } catch (e: any) {
