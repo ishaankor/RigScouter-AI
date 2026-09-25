@@ -28,7 +28,9 @@ import {
   Layers,
   Tag,
   Zap,
-  ShoppingBag
+  ShoppingBag,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
@@ -63,6 +65,21 @@ export interface ConsolidatedTrendingDeal {
   dealScore: number;
 }
 
+function cleanTrendingTitle(rawName: string): string {
+  if (!rawName) return 'Hardware Component';
+  let cleaned = rawName.trim();
+  // Strip common marketplace condition prefixes
+  cleaned = cleaned.replace(/^(USED|NEW|REFURBISHED|OPEN BOX|BRAND NEW|LIKE NEW)\s*[-—:|]\s*/i, '');
+  // Normalize brand prefixes if doubled (e.g. "PNY - NVIDIA GeForce" -> "PNY GeForce")
+  cleaned = cleaned.replace(/PNY\s*-\s*NVIDIA\s+/i, 'PNY ');
+  // Clean up excessive trailing boilerplate
+  cleaned = cleaned.replace(/\s+(Series\s+GPU\s+Card\s+NVIDIA\s+GeForce\s+RTX|GPU\s+Card\s+NVIDIA\s+GeForce\s+RTX|Graphics\s+Card\s+Model\s+.*)$/i, '');
+  cleaned = cleaned.replace(/\s+PCI\s+Express\s+5\.0\s+Graphics\s+Card.*$/i, '');
+  // Strip trailing part numbers (e.g. "08G-P4-6183-KR")
+  cleaned = cleaned.replace(/\s+[0-9A-Z]{3,}-[0-9A-Z]{3,}-[0-9A-Z]{2,}$/i, '');
+  return cleaned.trim() || rawName;
+}
+
 interface WatchlistManagerProps {
   initialWatchlist?: WatchlistItem[];
   initialTrendingItems?: HardwareComponent[];
@@ -87,8 +104,10 @@ export function WatchlistManager({
   const [trendingCategory, setTrendingCategory] = useState<string>('ALL');
   const [trendingQuality, setTrendingQuality] = useState<'all' | 'hot'>('all');
   const [trendingSort, setTrendingSort] = useState<'score' | 'savings' | 'price-asc' | 'price-desc'>('score');
+  const [trendingViewMode, setTrendingViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedTrendingRetailers, setSelectedTrendingRetailers] = useState<Record<string, string>>({});
   const [quickAddingKey, setQuickAddingKey] = useState<string | null>(null);
+  const [trackedDealKeys, setTrackedDealKeys] = useState<Set<string>>(new Set());
 
   // Autonomous bot input state
   const [liveQuery, setLiveQuery] = useState('');
@@ -124,6 +143,14 @@ export function WatchlistManager({
       const prefix = gpuMatch[2].toLowerCase();
       const num = gpuMatch[3];
       const mod = gpuMatch[4] ? ' ' + gpuMatch[4].toLowerCase() : '';
+      return (prefix + ' ' + num + mod).trim();
+    }
+    // Reverse GPU order (e.g. "5080 Series GPU Card NVIDIA GeForce RTX" -> "rtx 5080")
+    const revGpuMatch = text.match(/\b(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b.*?\b(rtx|gtx|rx|arc)\b/i);
+    if (revGpuMatch) {
+      const num = revGpuMatch[1];
+      const mod = revGpuMatch[2] ? ' ' + revGpuMatch[2].toLowerCase() : '';
+      const prefix = revGpuMatch[3].toLowerCase();
       return (prefix + ' ' + num + mod).trim();
     }
 
@@ -751,6 +778,13 @@ export function WatchlistManager({
       return;
     }
 
+    // Spam guard: Do not add if already added or in-flight
+    if (trackedDealKeys.has(deal.canonicalKey) || quickAddingKey === deal.canonicalKey) {
+      return;
+    }
+
+    // Immediately mark as tracked in state to lock the button and block repeat clicks
+    setTrackedDealKeys(prev => new Set(prev).add(deal.canonicalKey));
     setQuickAddingKey(deal.canonicalKey);
 
     const price = activeOffer.price;
@@ -771,6 +805,7 @@ export function WatchlistManager({
       id: newId,
       userId: user.id,
       componentName: deal.name,
+      canonicalKey: deal.canonicalKey,
       category: deal.category as any,
       targetPrice: defaultTargetPrice,
       currentPrice: price,
@@ -805,8 +840,13 @@ export function WatchlistManager({
 
     setWatchlist(prev => {
       const exists = prev.some(p => {
+        if ((p as any).canonicalKey && (p as any).canonicalKey === deal.canonicalKey) return true;
         const pKey = getNormalizedKey(p)?.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return pKey === deal.canonicalKey;
+        if (pKey && pKey === deal.canonicalKey) return true;
+        const pName = (p.componentName || (p as any).name || '').toLowerCase().trim();
+        const dealName = (deal.name || '').toLowerCase().trim();
+        if (pName && dealName && (pName === dealName || pName.includes(dealName) || dealName.includes(pName))) return true;
+        return false;
       });
       if (exists) return prev;
       return [optimisticItem, ...prev];
@@ -834,7 +874,7 @@ export function WatchlistManager({
     } finally {
       setTimeout(() => {
         setQuickAddingKey(null);
-      }, 1200);
+      }, 500);
     }
   };
 
@@ -1711,7 +1751,7 @@ export function WatchlistManager({
               : 'border-transparent text-gray-400 hover:text-white'
           }`}
         >
-          <Sparkles className="w-4 h-4 text-amber-400" /> Trending Deals in Database ({consolidatedTrendingDeals.length})
+          <Sparkles className="w-4 h-4 text-amber-400" /> Trending Deals ({consolidatedTrendingDeals.length})
         </button>
       </div>
 
@@ -2088,6 +2128,32 @@ export function WatchlistManager({
                   <option value="price-desc">Price: High to Low</option>
                 </select>
               </div>
+
+              {/* View Mode Toggle: Cards vs Table */}
+              <div className="flex items-center gap-1 p-1 bg-gray-950/80 rounded-xl border border-gray-800 text-xs font-semibold">
+                <button
+                  onClick={() => setTrendingViewMode('cards')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    trendingViewMode === 'cards'
+                      ? 'bg-gray-800 text-cyan-300 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title="Card Grid View"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setTrendingViewMode('table')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    trendingViewMode === 'table'
+                      ? 'bg-gray-800 text-cyan-300 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title="Table View"
+                >
+                  <List className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2115,8 +2181,8 @@ export function WatchlistManager({
                 Reset All Filters
               </button>
             </div>
-          ) : (
-            /* Consolidated Component Deal Cards Grid */
+          ) : trendingViewMode === 'cards' ? (
+            /* Consolidated Component Deal Cards Grid (Clean & Spacious) */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredTrendingDeals.map((deal) => {
                 const selectedRetailer = selectedTrendingRetailers[deal.canonicalKey];
@@ -2137,141 +2203,86 @@ export function WatchlistManager({
 
                 // Check if this component is already tracked in the user's watchlist
                 const existingWatchlistItem = watchlist.find(item => {
+                  if ((item as any).canonicalKey && (item as any).canonicalKey === deal.canonicalKey) return true;
                   const itemKey = getNormalizedKey(item)?.toLowerCase().replace(/[^a-z0-9]/g, '');
-                  return itemKey && itemKey === deal.canonicalKey;
+                  if (itemKey && itemKey === deal.canonicalKey) return true;
+                  const itemName = (item.componentName || (item as any).component_name || (item as any).name || '').toLowerCase().trim();
+                  const dealName = (deal.name || '').toLowerCase().trim();
+                  if (itemName && dealName && (itemName === dealName || itemName.includes(dealName) || dealName.includes(itemName))) return true;
+                  if (item.id && (item.id === deal.id || deal.dbRowIds?.includes(item.id))) return true;
+                  return false;
                 });
-                const isAlreadyTracked = Boolean(existingWatchlistItem);
-                const trackedTargetPrice = existingWatchlistItem?.targetPrice;
+                const isAlreadyTracked = trackedDealKeys.has(deal.canonicalKey) || Boolean(existingWatchlistItem);
                 const isTrackingLoading = quickAddingKey === deal.canonicalKey;
 
                 return (
                   <div
                     key={deal.canonicalKey}
-                    className="glass-card p-5 rounded-2xl border border-gray-800/80 bg-gray-950/70 hover:border-gray-700/80 transition-all flex flex-col justify-between group shadow-lg hover:shadow-cyan-950/20"
+                    className="glass-card p-5 rounded-2xl border border-gray-800/80 bg-gray-950/60 hover:border-gray-700/80 transition-all flex flex-col justify-between group shadow-sm hover:shadow-cyan-950/10 relative"
                   >
                     <div>
-                      {/* Card Top: Category & Deal Tier */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-cyan-950/80 text-cyan-400 border border-cyan-800/50 uppercase tracking-wider">
-                            {deal.category}
-                          </span>
-                          {deal.offers.length > 1 && (
-                            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-gray-900 text-gray-400 border border-gray-800">
-                              {deal.offers.length} Stores
-                            </span>
-                          )}
-                        </div>
+                      {/* Top row: Category Badge & Deal Score */}
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/80 border border-cyan-800/40 px-2 py-0.5 rounded uppercase tracking-wider">
+                          {deal.category}
+                        </span>
 
-                        <div className={`px-2.5 py-1 rounded-xl border flex items-center gap-1.5 text-xs font-bold ${tier.badgeBg} ${tier.textColor}`}>
-                          {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current animate-pulse" /> : <Sparkles className="w-3.5 h-3.5" />}
-                          <span>{tier.label}: {activeOffer.dealScore}/100</span>
-                        </div>
+                        <span className={`text-xs font-bold flex items-center gap-1 ${tier.isHot ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>{activeOffer.dealScore}</span>
+                        </span>
                       </div>
 
                       {/* Component Title */}
-                      <h3 className="font-bold text-white text-base leading-snug line-clamp-2 mb-3 group-hover:text-cyan-200 transition-colors">
-                        {deal.name}
+                      <h3
+                        className="font-bold text-white text-sm leading-snug line-clamp-2 mb-3 min-h-[2.5rem] group-hover:text-cyan-300 transition-colors"
+                        title={deal.name}
+                      >
+                        {cleanTrendingTitle(deal.name)}
                       </h3>
 
-                      {/* Price & Savings Display */}
-                      <div className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800/70 mb-4">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-emerald-400 tracking-tight">
-                              ${activePrice.toFixed(2)}
-                            </span>
-                            {hasSavings && (
-                              <span className="text-xs text-gray-500 line-through">
-                                ${refPrice.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-
-                          {hasSavings && (
-                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
-                              <TrendingDown className="w-3.5 h-3.5" />
-                              <span>Save ${savingsAmt.toFixed(2)} ({savingsPct}%)</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {deal.offers.length > 1 && (
-                          <div className="mt-2.5 pt-2 border-t border-gray-800/50 text-[11px] text-gray-400 flex items-center justify-between">
-                            <span>Active store: <strong className="text-gray-200">{activeOffer.retailer}</strong></span>
-                            {isBestPrice ? (
-                              <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                                ✓ Lowest in Market
-                              </span>
-                            ) : (
-                              <span className="text-amber-400/90 font-medium">
-                                +${(activePrice - deal.lowestPrice).toFixed(2)} vs lowest
-                              </span>
-                            )}
-                          </div>
+                      {/* Price Display */}
+                      <div className="flex items-baseline gap-2 mb-3">
+                        <span className="text-2xl font-black text-emerald-400 tracking-tight">
+                          ${activePrice.toFixed(0)}
+                        </span>
+                        {hasSavings && (
+                          <span className="text-xs text-gray-500 line-through">
+                            ${refPrice.toFixed(0)}
+                          </span>
                         )}
                       </div>
 
-                      {/* Live Store Comparison Pills */}
-                      {deal.offers.length > 1 && (
-                        <div className="mb-4">
-                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-                            <span>Compare Live Stores</span>
-                            <span className="text-gray-500 font-normal">Click to switch</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {deal.offers.map((offer) => {
-                              const isSelected = offer.retailer.toLowerCase() === activeOffer.retailer.toLowerCase();
-                              const isLowest = offer.price <= deal.lowestPrice + 0.01;
-                              return (
-                                <button
-                                  key={offer.id || offer.retailer}
-                                  onClick={() => setSelectedTrendingRetailers(prev => ({ ...prev, [deal.canonicalKey]: offer.retailer }))}
-                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                                    isSelected
-                                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
-                                      : 'bg-gray-900/90 text-gray-300 border border-gray-800 hover:border-gray-700 hover:text-white'
-                                  }`}
-                                >
-                                  <span>{offer.retailer}:</span>
-                                  <span className={isLowest ? 'text-emerald-400 font-bold' : 'text-gray-300'}>
-                                    ${offer.price.toFixed(2)}
-                                  </span>
-                                  {isLowest && (
-                                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-bold">
-                                      Best
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
+                      {/* Clean Retailer / Store Info (No clutter) */}
+                      <div className="flex items-center justify-between text-xs text-gray-400 mb-4 pt-2.5 border-t border-gray-800/60">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          <span>Store: <strong className="text-white font-semibold">{activeOffer.retailer}</strong></span>
                         </div>
-                      )}
+
+                        {deal.offers.length > 1 && (
+                          <div className="flex items-center gap-1 text-[11px]">
+                            <select
+                              value={activeOffer.retailer}
+                              onChange={(e) => setSelectedTrendingRetailers(prev => ({ ...prev, [deal.canonicalKey]: e.target.value }))}
+                              className="bg-gray-900 border border-gray-800 hover:border-gray-700 text-cyan-300 font-semibold text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition-colors"
+                            >
+                              {deal.offers.map((offer) => {
+                                const isLowest = offer.price <= deal.lowestPrice + 0.01;
+                                return (
+                                  <option key={offer.id || offer.retailer} value={offer.retailer}>
+                                    {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Card Bottom: Direct Link, Quick Add to Watchlist & Remove */}
-                    <div className="pt-3 border-t border-gray-800/80 flex flex-col gap-2 mt-auto">
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={activeOffer.productUrl || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2.5 px-3 bg-gray-900 hover:bg-cyan-950/70 text-gray-200 hover:text-cyan-300 font-semibold text-xs rounded-xl border border-gray-800 hover:border-cyan-800/60 flex items-center justify-center gap-1.5 transition-all text-center"
-                        >
-                          <span>View on {activeOffer.retailer}</span>
-                          <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                        </a>
-                        <button
-                          onClick={() => removeTrendingItem(deal.id, deal.name, deal.dbRowIds)}
-                          className="p-2.5 bg-gray-900 hover:bg-rose-950/60 border border-gray-800 hover:border-rose-800/40 rounded-xl text-gray-500 hover:text-rose-400 transition-colors"
-                          title="Remove Component from Database"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* 1-Click Track Alert in Watchlist Button */}
+                    {/* Card Bottom: Clean Action Row */}
+                    <div className="pt-2.5 border-t border-gray-800/60 flex items-center gap-2 mt-auto">
                       <button
                         onClick={() => {
                           if (isAlreadyTracked) {
@@ -2280,34 +2291,221 @@ export function WatchlistManager({
                             handleQuickAddToWatchlist(deal, activeOffer);
                           }
                         }}
-                        disabled={isTrackingLoading}
-                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                        disabled={isTrackingLoading || isAlreadyTracked}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
                           isAlreadyTracked
-                            ? 'bg-emerald-950/40 hover:bg-emerald-950/70 text-emerald-400 border border-emerald-800/40'
-                            : 'bg-gradient-to-r from-cyan-600/90 to-blue-600/90 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md shadow-cyan-950/50 hover:shadow-cyan-900/60 border border-cyan-400/30'
+                            ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 cursor-default'
+                            : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold shadow-sm shadow-cyan-950/30 cursor-pointer'
                         }`}
                       >
                         {isTrackingLoading ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Setting Alert...</span>
+                            <span>Tracking...</span>
                           </>
                         ) : isAlreadyTracked ? (
                           <>
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Tracked in Watchlist (Alert: ${trackedTargetPrice ? trackedTargetPrice.toFixed(2) : (activePrice * 0.95).toFixed(2)})</span>
+                            <span>Tracked</span>
                           </>
                         ) : (
                           <>
                             <Bell className="w-3.5 h-3.5" />
-                            <span>+ Track Alert in Watchlist (Alert: -5% @ ${(activePrice * 0.95).toFixed(2)})</span>
+                            <span>Track Deal</span>
                           </>
                         )}
                       </button>
+
+                      <a
+                        href={activeOffer.productUrl || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-3 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold text-xs rounded-xl border border-gray-800 flex items-center justify-center gap-1 transition-all shrink-0 cursor-pointer"
+                        title={`View on ${activeOffer.retailer}`}
+                      >
+                        <span>{activeOffer.retailer}</span>
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </a>
                     </div>
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            /* Consolidated Component Deals Table View */
+            <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] tracking-wider border-b border-gray-800">
+                    <tr>
+                      <th className="p-4">Component</th>
+                      <th className="p-4">Store</th>
+                      <th className="p-4">Best Price</th>
+                      <th className="p-4">Deal Score</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800/50">
+                    {filteredTrendingDeals.map((deal) => {
+                      const selectedRetailer = selectedTrendingRetailers[deal.canonicalKey];
+                      const activeOffer = selectedRetailer
+                        ? (deal.offers.find(o => o.retailer.toLowerCase() === selectedRetailer.toLowerCase()) || deal.bestOffer)
+                        : deal.bestOffer;
+
+                      const activePrice = activeOffer.price;
+                      const tier = getDealScoreTier(activeOffer.dealScore);
+                      const isBestPrice = activePrice <= deal.lowestPrice + 0.01;
+
+                      const refPrice = deal.highestPrice > activePrice
+                        ? deal.highestPrice
+                        : (deal.marketMsrp > activePrice ? deal.marketMsrp : activePrice);
+                      const hasSavings = refPrice > activePrice;
+                      const savingsAmt = hasSavings ? refPrice - activePrice : 0;
+                      const savingsPct = hasSavings && refPrice > 0 ? Math.round((savingsAmt / refPrice) * 100) : 0;
+
+                      // Check if this component is already tracked in the user's watchlist
+                      const existingWatchlistItem = watchlist.find(item => {
+                        if ((item as any).canonicalKey && (item as any).canonicalKey === deal.canonicalKey) return true;
+                        const itemKey = getNormalizedKey(item)?.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (itemKey && itemKey === deal.canonicalKey) return true;
+                        const itemName = (item.componentName || (item as any).component_name || (item as any).name || '').toLowerCase().trim();
+                        const dealName = (deal.name || '').toLowerCase().trim();
+                        if (itemName && dealName && (itemName === dealName || itemName.includes(dealName) || dealName.includes(itemName))) return true;
+                        if (item.id && (item.id === deal.id || deal.dbRowIds?.includes(item.id))) return true;
+                        return false;
+                      });
+                      const isAlreadyTracked = trackedDealKeys.has(deal.canonicalKey) || Boolean(existingWatchlistItem);
+                      const isTrackingLoading = quickAddingKey === deal.canonicalKey;
+
+                      return (
+                        <tr key={deal.canonicalKey} className="hover:bg-gray-900/40 transition-colors group">
+                          {/* Component Column: Name & Category (No Image) */}
+                          <td className="p-4">
+                            <div className="min-w-0 max-w-xs md:max-w-sm">
+                              <div
+                                className="font-bold text-white text-sm line-clamp-1 group-hover:text-cyan-300 transition-colors"
+                                title={deal.name}
+                              >
+                                {cleanTrendingTitle(deal.name)}
+                              </div>
+                              <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                                {deal.category}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Store Column: Retailer dropdown if multiple, or single badge */}
+                          <td className="p-4">
+                            {deal.offers.length > 1 ? (
+                              <div className="flex flex-col gap-1">
+                                <select
+                                  value={activeOffer.retailer}
+                                  onChange={(e) => setSelectedTrendingRetailers(prev => ({ ...prev, [deal.canonicalKey]: e.target.value }))}
+                                  className="bg-gray-900 hover:bg-gray-800 border border-cyan-800/60 text-cyan-300 font-bold text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 cursor-pointer shadow-sm transition-all"
+                                >
+                                  {deal.offers.map((offer) => {
+                                    const isLowest = offer.price <= deal.lowestPrice + 0.01;
+                                    return (
+                                      <option key={offer.id || offer.retailer} value={offer.retailer} className="bg-gray-950 text-white font-semibold">
+                                        {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★ Best' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                                {isBestPrice && (
+                                  <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                                    ✓ Lowest verified price
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs font-bold text-white bg-gray-900 px-2.5 py-1 rounded-lg border border-gray-800 inline-block w-fit">
+                                  {activeOffer.retailer}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Price Column */}
+                          <td className="p-4">
+                            <div className="text-sm font-black text-emerald-400">
+                              ${activePrice.toFixed(0)}
+                            </div>
+                            {hasSavings && (
+                              <div className="text-[11px] text-gray-500 line-through">
+                                ${refPrice.toFixed(0)}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Deal Score Column */}
+                          <td className="p-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                tier.isHot
+                                  ? 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
+                                  : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
+                              }`}>
+                                {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                <span>{activeOffer.dealScore}</span>
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Actions Column */}
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  if (isAlreadyTracked) {
+                                    setActiveTab('watchlist');
+                                  } else {
+                                    handleQuickAddToWatchlist(deal, activeOffer);
+                                  }
+                                }}
+                                disabled={isTrackingLoading || isAlreadyTracked}
+                                className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
+                                  isAlreadyTracked
+                                    ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 cursor-default'
+                                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold shadow-sm shadow-cyan-950/30 cursor-pointer'
+                                }`}
+                              >
+                                {isTrackingLoading ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Tracking...</span>
+                                  </>
+                                ) : isAlreadyTracked ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Tracked</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Bell className="w-3.5 h-3.5" />
+                                    <span>Track Deal</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <a
+                                href={activeOffer.productUrl || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white rounded-xl border border-gray-800 flex items-center justify-center transition-all cursor-pointer"
+                                title={`View on ${activeOffer.retailer}`}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

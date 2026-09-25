@@ -59,6 +59,7 @@ export interface WatchlistItem {
   addedAt: string;
   specs?: Record<string, any>;
   dbRowIds?: string[];
+  canonicalKey?: string;
   retailerTargets?: Record<string, number>;
   retailerOffers?: RetailerOffer[];
   maxSavings?: number;

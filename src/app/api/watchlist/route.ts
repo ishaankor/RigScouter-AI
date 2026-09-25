@@ -402,7 +402,7 @@ export async function POST(req: NextRequest) {
     const componentId = `comp-${componentName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
     // 1. Save to GLOBAL hardware_components table (RLS open / bypass)
-    await supabase.from('hardware_components').upsert({
+    await supabaseAdmin.from('hardware_components').upsert({
       id: componentId,
       name: componentName,
       category,
@@ -420,7 +420,24 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString()
     });
 
-    // 2. Save to user watchlist_items table (handles RLS 42501 gracefully)
+    // 2. Prevent duplicate tracking in user watchlist_items
+    if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      const { data: existingWl } = await supabaseAdmin
+        .from('watchlist_items')
+        .select('id, component_name')
+        .eq('user_id', userId)
+        .ilike('component_name', componentName)
+        .limit(1);
+
+      if (existingWl && existingWl.length > 0) {
+        return NextResponse.json({
+          success: true,
+          message: 'Already tracked in watchlist',
+          item: existingWl[0]
+        });
+      }
+    }
+
     const wl_insert_payload: any = {
       component_name: componentName,
       category,
@@ -434,7 +451,7 @@ export async function POST(req: NextRequest) {
       wl_insert_payload.user_id = userId;
     }
 
-    const { data: watchItem, error: watchErr } = await supabase
+    const { data: watchItem, error: watchErr } = await supabaseAdmin
       .from('watchlist_items')
       .insert(wl_insert_payload)
       .select()
@@ -446,7 +463,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Upsert to user_preferences table
     try {
-      await supabase.from('user_preferences').upsert({
+      await supabaseAdmin.from('user_preferences').upsert({
         user_id: userId,
         summary_frequency: 'daily',
         delivery_channels: JSON.stringify({ email: true, discord: true }),
