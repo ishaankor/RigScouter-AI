@@ -206,9 +206,13 @@ export async function GET(req: NextRequest) {
 
       // Find all matching hardware catalog rows with strict brand and model checks
       const matches: any[] = [];
+      const stripSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+      const baseCId = stripSuffix(cId);
+
       (hwCatalog || []).forEach((h: any) => {
         const hId = (h.id || '').toLowerCase();
-        if (hId && cId && (hId === cId || hId.startsWith(cId) || cId.startsWith(hId))) {
+        const baseHId = stripSuffix(hId);
+        if (hId && cId && (baseHId === baseCId || hId === cId || hId.startsWith(cId) || cId.startsWith(hId))) {
           matches.push(h);
         }
       });
@@ -551,7 +555,9 @@ export async function POST(req: NextRequest) {
       previousPrice30d: clientPrev30,
       allTimeLow: clientAtl,
       earliestTrackedAt: clientEarliestAt,
-      priceHistory: clientHistory
+      priceHistory: clientHistory,
+      retailerOffers: clientRetailerOffers,
+      retailerTargets: clientRetailerTargets
     } = body;
 
     if (!componentName || !targetPrice) {
@@ -601,6 +607,55 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    // Aggregate catalog sibling offers across retailers
+    const stripPostSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+    const baseCId = stripPostSuffix(matchedHw?.id || clientComponentId || '');
+
+    const catalogOffers: any[] = [];
+    if (allHw && baseCId) {
+      allHw.forEach((h: any) => {
+        const baseHId = stripPostSuffix(h.id || '');
+        if (baseHId === baseCId || h.id === clientComponentId) {
+          if (h.retailer && Number(h.current_price) > 0) {
+            catalogOffers.push({
+              id: h.id,
+              retailer: h.retailer,
+              price: Number(h.current_price),
+              originalPrice: Number(h.msrp || h.current_price),
+              title: h.name,
+              url: h.product_url || '#',
+              imageUrl: h.image_url,
+              inStock: true
+            });
+          }
+        }
+      });
+    }
+
+    const offerMap = new Map<string, any>();
+    (Array.isArray(clientRetailerOffers) ? clientRetailerOffers : []).forEach(o => {
+      if (o?.retailer) offerMap.set(o.retailer.toLowerCase().trim(), o);
+    });
+    catalogOffers.forEach(o => {
+      const rKey = (o.retailer || '').toLowerCase().trim();
+      if (!offerMap.has(rKey)) {
+        offerMap.set(rKey, o);
+      } else {
+        const existing = offerMap.get(rKey);
+        if (o.title && (!existing.title || existing.title.startsWith('http') || existing.title === componentName)) {
+          existing.title = o.title;
+        }
+        if (o.imageUrl && !existing.imageUrl) existing.imageUrl = o.imageUrl;
+      }
+    });
+    if (hwSpecs?.RetailerOffers && Array.isArray(hwSpecs.RetailerOffers)) {
+      hwSpecs.RetailerOffers.forEach((o: any) => {
+        const rKey = (o?.retailer || '').toLowerCase().trim();
+        if (rKey && !offerMap.has(rKey)) offerMap.set(rKey, o);
+      });
+    }
+    const finalRetailerOffers = Array.from(offerMap.values());
+
     const mergedHistory: any[] = [];
     if (Array.isArray(hwSpecs.price_history)) mergedHistory.push(...hwSpecs.price_history);
     if (Array.isArray(clientHistory)) mergedHistory.push(...clientHistory);
@@ -635,7 +690,7 @@ export async function POST(req: NextRequest) {
           user_watchlist: userId,
           target_price: target,
           price_history: computed.cleanHistory,
-          RetailerOffers: [{ retailer, price, originalPrice: Math.round(price * 1.12 * 100) / 100, previousPrice24h: finalP24, url: productUrl, imageUrl, inStock: true }]
+          RetailerOffers: finalRetailerOffers.length > 0 ? finalRetailerOffers : [{ retailer, price, originalPrice: Math.round(price * 1.12 * 100) / 100, previousPrice24h: finalP24, url: productUrl, imageUrl, inStock: true }]
         }),
         msrp: Math.round(price * 1.12 * 100) / 100,
         current_price: price,
@@ -670,7 +725,7 @@ export async function POST(req: NextRequest) {
             allTimeLow: existingWl[0].all_time_low ?? finalATL,
             earliestTrackedAt: finalEarliest,
             specs: {
-              RetailerOffers: hwSpecs.RetailerOffers || [],
+              RetailerOffers: finalRetailerOffers.length > 0 ? finalRetailerOffers : (hwSpecs.RetailerOffers || []),
               price_history: computed.cleanHistory
             }
           }
@@ -703,12 +758,36 @@ export async function POST(req: NextRequest) {
       console.warn('[Watchlist RLS Notice]:', watchErr.message);
     }
 
-    // 3. Upsert to user_preferences table
+    // 3. Upsert to user_preferences table (including retailer targets if supplied)
     try {
+      let channels: any = { email: true, discord: true };
+      const { data: userPref } = await supabaseAdmin
+        .from('user_preferences')
+        .select('delivery_channels')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (userPref?.delivery_channels) {
+        try {
+          channels = typeof userPref.delivery_channels === 'string'
+            ? JSON.parse(userPref.delivery_channels)
+            : userPref.delivery_channels;
+        } catch {}
+      }
+
+      if (clientRetailerTargets && typeof clientRetailerTargets === 'object') {
+        channels.retailer_targets = channels.retailer_targets || {};
+        const key = componentName.toLowerCase().trim();
+        channels.retailer_targets[key] = { ...(channels.retailer_targets[key] || {}), ...clientRetailerTargets };
+        if (finalCompId) {
+          channels.retailer_targets[finalCompId] = { ...(channels.retailer_targets[finalCompId] || {}), ...clientRetailerTargets };
+        }
+      }
+
       await supabaseAdmin.from('user_preferences').upsert({
         user_id: userId,
         summary_frequency: 'daily',
-        delivery_channels: JSON.stringify({ email: true, discord: true }),
+        delivery_channels: JSON.stringify(channels),
         comparison_intervals: JSON.stringify(['24h', '7d', '30d', 'ATL']),
         auto_recommend_alternatives: true,
         updated_at: new Date().toISOString()
@@ -736,7 +815,7 @@ export async function POST(req: NextRequest) {
         addedAt: new Date().toISOString(),
         earliestTrackedAt: finalEarliest,
         specs: {
-          RetailerOffers: hwSpecs.RetailerOffers || [],
+          RetailerOffers: finalRetailerOffers.length > 0 ? finalRetailerOffers : (hwSpecs.RetailerOffers || []),
           price_history: computed.cleanHistory
         }
       }

@@ -79,13 +79,13 @@ function resolveRetailerUrl(retailer: string, productUrl: string, specs: any, co
 
 function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; border: string } {
   const r = (retailer || '').toLowerCase();
-  if (r.includes('amazon')) return { bg: '#232f3e', color: '#ff9900', border: '#ff990055' };
-  if (r.includes('newegg')) return { bg: '#1c2237', color: '#fbbf24', border: '#fbbf2455' };
-  if (r.includes('micro')) return { bg: '#311019', color: '#fb7185', border: '#fb718555' };
-  if (r.includes('b&h') || r.includes('bh')) return { bg: '#082f49', color: '#38bdf8', border: '#38bdf855' };
-  if (r.includes('ebay')) return { bg: '#064e3b', color: '#34d399', border: '#34d39955' };
-  if (r.includes('best')) return { bg: '#0a192f', color: '#ffe000', border: '#ffe00055' };
-  return { bg: '#1f2937', color: '#9ca3af', border: '#374151' };
+  if (r.includes('amazon')) return { bg: '#fff7ed', color: '#c2410c', border: '#fdba74' };
+  if (r.includes('newegg')) return { bg: '#fef3c7', color: '#b45309', border: '#fcd34d' };
+  if (r.includes('micro')) return { bg: '#ffe4e6', color: '#be123c', border: '#fca5a5' };
+  if (r.includes('b&h') || r.includes('bh')) return { bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' };
+  if (r.includes('ebay')) return { bg: '#ecfdf5', color: '#047857', border: '#6ee7b7' };
+  if (r.includes('best')) return { bg: '#fefce8', color: '#854d0e', border: '#fde047' };
+  return { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
 
 function isHardwareOfferMatch(item: any, h: any): boolean {
@@ -231,7 +231,7 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
     const currentPrice = Number(item.currentPrice || 0).toFixed(2);
     const dropAmount = isWeekly ? (entry.change7d?.amount || 0) : (entry.change24h?.amount || 0);
     const dropPercent = isWeekly ? (entry.change7d?.percentage || 0) : (entry.change24h?.percentage || 0);
-    const isDrop = dropAmount < 0;
+    const isDrop = dropAmount < -0.01;
     const rBadge = getRetailerBadgeStyle(item.retailer);
 
     // Direct product link with fallback
@@ -244,258 +244,306 @@ function buildDigestEmailHtml(report: any, dateStr: string): string {
     const hasHistory = p30 > 0 || p7 > 0 || p24 > 0;
 
     return `
-      <div class="glow-card" style="background-color: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);">
-        <!-- Top Category & Retailer Chips -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
-          <tr>
-            <td style="vertical-align: middle;">
-              <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #38bdf8; background: #0c4a6e; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #0284c755;">
-                ${item.category || 'GPU'}
-              </span>
-              ${entry.isAllTimeLow ? `
-              <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #c084fc; background: #581c87; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px; margin-left: 6px; border: 1px solid #a855f755;">
-                🔥 90D ALL-TIME LOW
-              </span>` : ''}
-            </td>
-            <td style="text-align: right; vertical-align: middle;">
-              ${item.retailerOffers && item.retailerOffers.length > 1 ? `
-              <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: #0c4a6e66; border: 1px solid #0284c744; padding: 4px 8px; border-radius: 6px; margin-right: 6px;">
-                ${item.retailerOffers.length} Stores Compared
-              </span>` : ''}
-              <span style="font-size: 12px; font-weight: 700; color: ${rBadge.color}; background: ${rBadge.bg}; border: 1px solid ${rBadge.border}; padding: 4px 10px; border-radius: 6px;">
-                ${item.retailerOffers && item.retailerOffers.length > 1 ? `Best at ${item.retailer}` : (item.retailer || 'Retailer')}
-              </span>
-            </td>
-          </tr>
-        </table>
-
-        <!-- Component Title -->
-        <h3 style="margin: 0 0 14px 0; font-size: 16px; font-weight: 800; color: #f8fafc; line-height: 1.4;">
-          ${cleanTitle}
-        </h3>
-
-        <!-- Price Display Box -->
-        <div style="background-color: #020617; border: 1px solid #1e293b; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="color: #94a3b8; font-size: 13px; font-weight: 600;">Best Live Price:</td>
-              <td style="text-align: right; font-weight: 900; font-size: 20px; color: ${isDrop ? '#34d399' : '#f8fafc'};">
-                $${currentPrice}
-              </td>
-            </tr>
-            <tr>
-              <td style="color: #94a3b8; font-size: 13px; padding-top: 6px;">${deltaLabel}</td>
-              <td style="text-align: right; font-weight: 800; font-size: 14px; padding-top: 6px;">
-                ${isDrop ? `
-                  <span style="color: #34d399; background: #064e3b44; padding: 2px 8px; border-radius: 4px; border: 1px solid #05966955;">
-                    -$${Math.abs(dropAmount).toFixed(2)} (${dropPercent}%)
-                  </span>` : `
-                  <span style="color: #64748b;">Stable</span>`}
-              </td>
-            </tr>
-          </table>
-
-          ${hasHistory ? `
-          <!-- Visual Price Trajectory Timeline -->
-          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #1e293b;">
-            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px; letter-spacing: 0.5px;">
-              Price Trajectory
-            </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center;">
+      <!-- Product Card -->
+      <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 16px; border-collapse: separate;">
+        <tr>
+          <td style="padding: 18px;">
+            <!-- Category & Retailer Chips -->
+            <table width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 10px;">
               <tr>
-                ${p30 > 0 ? `<td style="color: #64748b;">30d: <strong style="color: #cbd5e1;">$${p30.toFixed(0)}</strong></td>` : ''}
-                ${p7 > 0 ? `<td style="color: #64748b;">&rarr; 7d: <strong style="color: #cbd5e1;">$${p7.toFixed(0)}</strong></td>` : ''}
-                ${p24 > 0 ? `<td style="color: #64748b;">&rarr; 24h: <strong style="color: #cbd5e1;">$${p24.toFixed(0)}</strong></td>` : ''}
-                <td style="color: #34d399; font-weight: 800;">&rarr; Now: $${currentPrice}</td>
+                <td style="vertical-align: middle;">
+                  <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0369a1; background-color: #e0f2fe; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #bae6fd;">
+                    ${item.category || 'GPU'}
+                  </span>
+                  ${entry.isAllTimeLow ? `
+                  <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #7e22ce; background-color: #f3e8ff; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px; margin-left: 6px; border: 1px solid #d8b4fe;">
+                    🔥 90D ALL-TIME LOW
+                  </span>` : ''}
+                </td>
+                <td style="text-align: right; vertical-align: middle;">
+                  ${item.retailerOffers && item.retailerOffers.length > 1 ? `
+                  <span style="font-size: 11px; font-weight: 700; color: #0369a1; background-color: #e0f2fe; border: 1px solid #bae6fd; padding: 4px 8px; border-radius: 6px; margin-right: 6px;">
+                    ${item.retailerOffers.length} Stores Compared
+                  </span>` : ''}
+                  <span style="font-size: 12px; font-weight: 700; color: ${rBadge.color}; background-color: ${rBadge.bg}; border: 1px solid ${rBadge.border}; padding: 4px 10px; border-radius: 6px;">
+                    ${item.retailerOffers && item.retailerOffers.length > 1 ? `Best at ${item.retailer}` : (item.retailer || 'Retailer')}
+                  </span>
+                </td>
               </tr>
             </table>
-          </div>` : ''}
-        </div>
 
-        ${item.retailerOffers && item.retailerOffers.length > 1 ? `
-        <!-- Multi-Store Live Comparison Matrix -->
-        <div style="background-color: #020617; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; margin-bottom: 14px;">
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 6px;">
-            <tr>
-              <td style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">
-                Live Store Pricing (${item.retailerOffers.length} Stores)
-              </td>
-              ${item.maxSavings && item.maxSavings > 0 ? `
-              <td style="text-align: right; font-size: 11px; font-weight: 800; color: #34d399;">
-                💰 Save up to $${Number(item.maxSavings).toFixed(2)}
-              </td>` : ''}
-            </tr>
-          </table>
+            <!-- Component Title -->
+            <h3 style="margin: 0 0 14px 0; font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.4;">
+              ${cleanTitle}
+            </h3>
 
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-            ${item.retailerOffers.map((off: any) => {
-              const rStyle = getRetailerBadgeStyle(off.retailer);
-              const isBest = off.isLowest;
-              return `
-                <tr style="border-top: 1px solid #1e293b66;">
-                  <td style="padding: 7px 4px; vertical-align: middle;">
-                    <span style="font-size: 11px; font-weight: 700; color: ${rStyle.color}; background: ${rStyle.bg}; border: 1px solid ${rStyle.border}; padding: 3px 8px; border-radius: 5px;">
-                      ${off.retailer}
-                    </span>
-                  </td>
-                  <td style="padding: 7px 4px; vertical-align: middle; text-align: right; font-weight: 800; font-size: 13px; color: ${isBest ? '#34d399' : '#f1f5f9'};">
-                    $${Number(off.price).toFixed(2)}
-                  </td>
-                  <td style="padding: 7px 4px; vertical-align: middle; text-align: center; width: 85px;">
-                    ${isBest ? `
-                      <span style="font-size: 10px; font-weight: 800; color: #34d399; background: #064e3b55; border: 1px solid #05966955; padding: 2px 6px; border-radius: 4px;">
-                        LOWEST
-                      </span>` : (off.diffVsLowest > 0 ? `
-                      <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">
-                        +$${Number(off.diffVsLowest).toFixed(2)}
-                      </span>` : '')}
-                  </td>
-                  <td style="padding: 7px 4px; vertical-align: middle; text-align: right; width: 90px;">
-                    <a href="${off.url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 11px; font-weight: 700; color: ${isBest ? '#38bdf8' : '#cbd5e1'}; background: ${isBest ? '#0c4a6e66' : '#1e293b'}; border: 1px solid ${isBest ? '#0284c788' : '#334155'}; padding: 4px 10px; border-radius: 6px; text-decoration: none;">
-                      View Deal &rarr;
-                    </a>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </table>
-        </div>` : ''}
+            <!-- Price Display Box -->
+            <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 14px;">
+              <tr>
+                <td style="padding: 14px;">
+                  <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="color: #475569; font-size: 13px; font-weight: 700;">Best Live Price:</td>
+                      <td style="text-align: right; font-weight: 900; font-size: 22px; color: ${isDrop ? '#047857' : '#0f172a'};">
+                        $${currentPrice}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="color: #64748b; font-size: 13px; padding-top: 6px;">${deltaLabel}</td>
+                      <td style="text-align: right; font-weight: 800; font-size: 14px; padding-top: 6px;">
+                        ${isDrop ? `
+                          <span style="color: #047857; background-color: #dcfce7; padding: 3px 8px; border-radius: 4px; border: 1px solid #86efac; font-weight: 800; font-size: 13px;">
+                            -$${Math.abs(dropAmount).toFixed(2)} (${dropPercent}%)
+                          </span>` : `
+                          <span style="color: #475569; background-color: #f1f5f9; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 12px;">
+                            Stable
+                          </span>`}
+                      </td>
+                    </tr>
+                  </table>
 
-        <!-- Call to Action Button -->
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="text-align: right;">
-              <a href="${directUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);">
-                ${item.retailerOffers && item.retailerOffers.length > 1 ? `View Lowest Deal on ${item.retailer} ($${currentPrice}) &rarr;` : `View Deal on ${item.retailer || 'Store'} &rarr;`}
-              </a>
-            </td>
-          </tr>
-        </table>
-      </div>
+                  ${hasHistory ? `
+                  <!-- Visual Price Trajectory Timeline -->
+                  <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 6px; letter-spacing: 0.5px;">
+                      Price Trajectory
+                    </div>
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="font-size: 11px; text-align: center;">
+                      <tr>
+                        ${p30 > 0 ? `<td style="color: #475569; padding: 2px;">30d: <strong style="color: #0f172a;">$${p30.toFixed(0)}</strong></td>` : ''}
+                        ${p7 > 0 ? `<td style="color: #475569; padding: 2px;">&rarr; 7d: <strong style="color: #0f172a;">$${p7.toFixed(0)}</strong></td>` : ''}
+                        ${p24 > 0 ? `<td style="color: #475569; padding: 2px;">&rarr; 24h: <strong style="color: #0f172a;">$${p24.toFixed(0)}</strong></td>` : ''}
+                        <td style="color: #047857; font-weight: 900; padding: 2px;">&rarr; Now: $${currentPrice}</td>
+                      </tr>
+                    </table>
+                  </div>` : ''}
+                </td>
+              </tr>
+            </table>
+
+            ${item.retailerOffers && item.retailerOffers.length > 1 ? `
+            <!-- Multi-Store Live Comparison Matrix -->
+            <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 14px;">
+              <tr>
+                <td style="padding: 12px;">
+                  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
+                    <tr>
+                      <td style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #334155; letter-spacing: 0.5px;">
+                        Live Store Pricing (${item.retailerOffers.length} Stores)
+                      </td>
+                      ${item.maxSavings && item.maxSavings > 0 ? `
+                      <td style="text-align: right; font-size: 11px; font-weight: 800; color: #047857;">
+                        💰 Save up to $${Number(item.maxSavings).toFixed(2)}
+                      </td>` : ''}
+                    </tr>
+                  </table>
+
+                  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="font-size: 12px;">
+                    ${item.retailerOffers.map((off: any) => {
+                      const rStyle = getRetailerBadgeStyle(off.retailer);
+                      const isBest = off.isLowest;
+                      return `
+                        <tr style="border-top: 1px solid #f1f5f9;">
+                          <td style="padding: 7px 4px; vertical-align: middle;">
+                            <span style="font-size: 11px; font-weight: 700; color: ${rStyle.color}; background-color: ${rStyle.bg}; border: 1px solid ${rStyle.border}; padding: 3px 8px; border-radius: 5px;">
+                              ${off.retailer}
+                            </span>
+                          </td>
+                          <td style="padding: 7px 4px; vertical-align: middle; text-align: right; font-weight: 800; font-size: 13px; color: ${isBest ? '#047857' : '#0f172a'};">
+                            $${Number(off.price).toFixed(2)}
+                          </td>
+                          <td style="padding: 7px 4px; vertical-align: middle; text-align: center; width: 85px;">
+                            ${isBest ? `
+                              <span style="font-size: 10px; font-weight: 800; color: #047857; background-color: #dcfce7; border: 1px solid #86efac; padding: 2px 6px; border-radius: 4px;">
+                                LOWEST
+                              </span>` : (off.diffVsLowest > 0 ? `
+                              <span style="font-size: 11px; color: #dc2626; font-weight: 700;">
+                                +$${Number(off.diffVsLowest).toFixed(2)}
+                              </span>` : '')}
+                          </td>
+                          <td style="padding: 7px 4px; vertical-align: middle; text-align: right; width: 90px;">
+                            <a href="${off.url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 11px; font-weight: 700; color: #0284c7; background-color: #f0f9ff; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; text-decoration: none;">
+                              View Deal &rarr;
+                            </a>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </table>
+                </td>
+              </tr>
+            </table>` : ''}
+
+            <!-- Call to Action Button -->
+            <table width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="text-align: right;">
+                  <a href="${directUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background-color: #0284c7; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px;">
+                    ${item.retailerOffers && item.retailerOffers.length > 1 ? `View Lowest Deal on ${item.retailer} ($${currentPrice}) &rarr;` : `View Deal on ${item.retailer || 'Store'} &rarr;`}
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `;
   }).join('');
 
   return `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${report.headline}</title>
         <style>
-          @keyframes pulse {
-            0% { transform: scale(0.95); opacity: 0.8; }
-            50% { transform: scale(1.15); opacity: 1; }
-            100% { transform: scale(0.95); opacity: 0.8; }
+          body {
+            margin: 0;
+            padding: 0;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
           }
-          .pulse-indicator {
-            display: inline-block;
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background-color: #10b981;
-            box-shadow: 0 0 10px #10b981;
-            animation: pulse 2s infinite ease-in-out;
-            vertical-align: middle;
-            margin-right: 6px;
+          @media print {
+            body, table, td {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
           }
-          .glow-card {
-            transition: all 0.2s ease-in-out;
-          }
-          .glow-card:hover {
-            border-color: #0284c7 !important;
-          }
-          @media only screen and (min-width: 680px) {
+          @media only screen and (max-width: 680px) {
             .digest-container {
-              max-width: 960px !important;
-              padding: 32px !important;
+              width: 100% !important;
+              border-radius: 0 !important;
+              border-left: none !important;
+              border-right: none !important;
+            }
+            .inner-padding {
+              padding: 16px !important;
+            }
+            .stats-table td {
+              display: block !important;
+              width: 100% !important;
+              border-right: none !important;
+              border-bottom: 1px solid #e2e8f0 !important;
+              padding: 10px 0 !important;
+            }
+            .stats-table tr td:last-child {
+              border-bottom: none !important;
             }
           }
         </style>
       </head>
-      <body style="margin: 0; padding: 20px 10px; background-color: #090d16; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f3f4f6; width: 100%;">
-        <div class="digest-container" style="width: 100%; max-width: 960px; margin: 0 auto; background-color: #0d1322; border: 1px solid #1e293b; border-radius: 20px; box-sizing: border-box; padding: 24px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);">
-          
-          <!-- Top Header Bar -->
-          <div style="border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 22px;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="vertical-align: middle;">
-                  <span style="font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #38bdf8;">
-                    ⚡ RigScouter AI
-                  </span>
-                </td>
-                <td style="text-align: right; vertical-align: middle;">
-                  <span style="font-size: 11px; font-weight: 700; color: #34d399; background: #064e3b55; border: 1px solid #05966966; padding: 4px 10px; border-radius: 20px;">
-                    <span class="pulse-indicator"></span> ${badgeLabel}
-                  </span>
-                </td>
-              </tr>
-            </table>
-
-            <h1 style="margin: 16px 0 6px 0; font-size: 24px; font-weight: 900; color: #ffffff; line-height: 1.3; letter-spacing: -0.3px;">
-              ${report.headline}
-            </h1>
-            <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 12px;">
-              ${dateStr} &bull; Autonomous Scraper & Market Engine
-            </div>
-
-            <!-- Monitored Retailers Banner -->
-            <div style="display: inline-block; background-color: #0b1329; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 12px; font-size: 11px; color: #94a3b8;">
-              <strong style="color: #38bdf8;">Multi-Store Coverage:</strong> Amazon &bull; eBay &bull; Best Buy &bull; Newegg &bull; Micro Center &bull; B&amp;H
-            </div>
-          </div>
-
-          <!-- Market Dashboard Stats Grid -->
-          <div style="background-color: #111827; border: 1px solid #1e293b; border-radius: 14px; padding: 18px; margin-bottom: 22px;">
-            <table style="width: 100%; border-collapse: collapse; text-align: center;">
-              <tr>
-                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 6px;">
-                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Tracked Items</div>
-                  <div style="font-size: 22px; font-weight: 900; color: #f8fafc; margin-top: 2px;">${sortedItems.length}</div>
-                </td>
-                <td style="width: 33%; border-right: 1px solid #1e293b; padding: 6px;">
-                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">Active Drops</div>
-                  <div style="font-size: 22px; font-weight: 900; color: ${activeDropsCount > 0 ? '#34d399' : '#f8fafc'}; margin-top: 2px;">${activeDropsCount}</div>
-                </td>
-                <td style="width: 33%; padding: 6px;">
-                  <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px;">${savingsLabel}</div>
-                  <div style="font-size: 22px; font-weight: 900; color: ${totalSavings > 0 ? '#38bdf8' : '#f8fafc'}; margin-top: 2px;">$${totalSavings.toFixed(2)}</div>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Executive Intelligence Briefing -->
-          <div style="background-color: #090d16; border-left: 4px solid #06b6d4; border-radius: 4px 12px 12px 4px; padding: 18px 20px; margin-bottom: 24px; border-top: 1px solid #1e293b; border-right: 1px solid #1e293b; border-bottom: 1px solid #1e293b;">
-            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #38bdf8; letter-spacing: 0.6px; margin-bottom: 6px;">
-              🧠 Executive Intelligence Summary
-            </div>
-            <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #cbd5e1; font-weight: 450;">
-              ${report.executiveSummary}
-            </p>
-          </div>
-
-          <!-- Tracked Items Section -->
-          <div style="margin-bottom: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-              <h2 style="font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin: 0;">
-                Live Watchlist Intelligence (${sortedItems.length})
-              </h2>
-            </div>
-            ${itemsHtml}
-          </div>
-
-          <!-- Footer -->
-          <div style="border-top: 1px solid #1e293b; padding-top: 20px; text-align: center; font-size: 12px; color: #64748b;">
-            <p style="margin: 0 0 6px 0;">
-              Automated hardware intelligence dispatched by <strong style="color: #94a3b8;">RigScouter AI</strong>.
-            </p>
-            <p style="margin: 0;">
-              <a href="https://rigscouter.ishaankoradia.com" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Open RigScouter Dashboard &rarr;</a>
-            </p>
-          </div>
-
+      <body bgcolor="#f8fafc" style="margin: 0; padding: 20px 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; width: 100%;">
+        <!-- Preheader preview text for inbox -->
+        <div style="display: none; max-height: 0px; overflow: hidden; font-size: 1px; line-height: 1px; color: #f8fafc; opacity: 0;">
+          ${report.headline} &bull; ${activeDropsCount} price adjustment(s) across monitored components.
         </div>
+
+        <!-- Outer Canvas Table -->
+        <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background-color: #f8fafc; width: 100%;">
+          <tr>
+            <td align="center" style="padding: 0 10px;">
+              
+              <!-- Main Email Card Container -->
+              <table class="digest-container" width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="max-width: 720px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; text-align: left; border-collapse: separate;">
+                <tr>
+                  <td class="inner-padding" style="padding: 24px;">
+
+                    <!-- Top Header Bar -->
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 18px; margin-bottom: 20px;">
+                      <tr>
+                        <td>
+                          <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="vertical-align: middle;">
+                                <span style="font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0284c7;">
+                                  ⚡ RigScouter AI
+                                </span>
+                              </td>
+                              <td style="text-align: right; vertical-align: middle;">
+                                <span style="font-size: 11px; font-weight: 800; color: #047857; background-color: #ecfdf5; border: 1px solid #6ee7b7; padding: 4px 10px; border-radius: 20px; text-transform: uppercase;">
+                                  ${badgeLabel}
+                                </span>
+                              </td>
+                            </tr>
+                          </table>
+
+                          <h1 style="margin: 16px 0 6px 0; font-size: 22px; font-weight: 900; color: #0f172a; line-height: 1.3; letter-spacing: -0.3px;">
+                            ${report.headline}
+                          </h1>
+                          <div style="font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 12px;">
+                            ${dateStr} &bull; Autonomous Scraper &amp; Market Engine
+                          </div>
+
+                          <!-- Monitored Retailers Banner -->
+                          <div style="display: inline-block; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 12px; font-size: 11px; color: #475569;">
+                            <strong style="color: #0284c7;">Multi-Store Coverage:</strong> Amazon &bull; eBay &bull; Best Buy &bull; Newegg &bull; Micro Center &bull; B&amp;H
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Market Dashboard Stats Grid -->
+                    <table class="stats-table" width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+                      <tr>
+                        <td style="width: 33%; border-right: 1px solid #e2e8f0; padding: 14px 6px;">
+                          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Tracked Items</div>
+                          <div style="font-size: 24px; font-weight: 900; color: #0f172a; margin-top: 2px;">${sortedItems.length}</div>
+                        </td>
+                        <td style="width: 33%; border-right: 1px solid #e2e8f0; padding: 14px 6px;">
+                          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Active Drops</div>
+                          <div style="font-size: 24px; font-weight: 900; color: ${activeDropsCount > 0 ? '#059669' : '#0f172a'}; margin-top: 2px;">${activeDropsCount}</div>
+                        </td>
+                        <td style="width: 33%; padding: 14px 6px;">
+                          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">${savingsLabel}</div>
+                          <div style="font-size: 24px; font-weight: 900; color: ${totalSavings > 0 ? '#0284c7' : '#0f172a'}; margin-top: 2px;">$${totalSavings.toFixed(2)}</div>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Executive Intelligence Briefing -->
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f0f9ff" style="background-color: #f0f9ff; border-left: 4px solid #0284c7; border: 1px solid #bae6fd; border-radius: 8px; margin-bottom: 22px;">
+                      <tr>
+                        <td style="padding: 16px 18px;">
+                          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0369a1; letter-spacing: 0.6px; margin-bottom: 6px;">
+                            🧠 Executive Intelligence Summary
+                          </div>
+                          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #1e293b; font-weight: 500;">
+                            ${report.executiveSummary}
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Tracked Items Section -->
+                    <div style="margin-bottom: 24px;">
+                      <h2 style="font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475569; margin: 0 0 14px 0;">
+                        Live Watchlist Intelligence (${sortedItems.length})
+                      </h2>
+                      ${itemsHtml}
+                    </div>
+
+                    <!-- Footer -->
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-top: 1px solid #e2e8f0; padding-top: 18px; text-align: center;">
+                      <tr>
+                        <td style="font-size: 12px; color: #64748b;">
+                          <p style="margin: 0 0 6px 0;">
+                            Automated hardware intelligence dispatched by <strong style="color: #0f172a;">RigScouter AI</strong>.
+                          </p>
+                          <p style="margin: 0;">
+                            <a href="https://rigscouter.ishaankoradia.com" style="color: #0284c7; text-decoration: none; font-weight: 700;">Open RigScouter Dashboard &rarr;</a>
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -534,7 +582,7 @@ export async function GET(req: NextRequest) {
           previousPrice24h: item.lowest_price_90d && item.lowest_price_90d < price ? Number(item.lowest_price_90d) : price,
           previousPrice7d: price,
           previousPrice30d: price,
-          allTimeLow: item.lowest_price_90d || price,
+          allTimeLow: item.lowest_price_90d ? Number(item.lowest_price_90d) : 0,
           retailer: item.retailer || 'Amazon',
           productUrl: item.product_url || '#',
           imageUrl: item.image_url,
@@ -726,7 +774,7 @@ export async function GET(req: NextRequest) {
             const productUrl = bestOffer.url;
             const specs = matchedHw?.specs || item.specs;
             const imageUrl = matchedHw?.image_url || item.image_url;
-            const allTimeLow = Number(item.all_time_low || matchedHw?.lowest_price_90d || currentPrice);
+            const allTimeLow = item.all_time_low ? Number(item.all_time_low) : (matchedHw?.lowest_price_90d ? Number(matchedHw.lowest_price_90d) : 0);
             const previousPrice24h = Number(item.previous_price_24h || currentPrice);
             const previousPrice7d = Number(item.previous_price_7d || currentPrice);
             const previousPrice30d = Number(item.previous_price_30d || currentPrice);
@@ -855,6 +903,7 @@ export async function GET(req: NextRequest) {
         // 4. Log sent digest into daily_digests table for interval tracking and history
         try {
           const { error: insertErr } = await supabaseAdmin.from('daily_digests').insert({
+            id: crypto.randomUUID(),
             user_id: pref.user_id,
             headline: report.headline,
             executive_summary: report.executiveSummary,

@@ -29,12 +29,13 @@ async function sendResendEmail({ from, to, subject, html }: { from: string; to: 
 
 function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; border: string } {
   const r = (retailer || '').toLowerCase();
-  if (r.includes('amazon')) return { bg: '#232f3e', color: '#ff9900', border: '#ff990055' };
-  if (r.includes('newegg')) return { bg: '#1c2237', color: '#fbbf24', border: '#fbbf2455' };
-  if (r.includes('micro')) return { bg: '#311019', color: '#fb7185', border: '#fb718555' };
-  if (r.includes('b&h') || r.includes('bh')) return { bg: '#082f49', color: '#38bdf8', border: '#38bdf855' };
-  if (r.includes('ebay')) return { bg: '#064e3b', color: '#34d399', border: '#34d39955' };
-  return { bg: '#1f2937', color: '#9ca3af', border: '#374151' };
+  if (r.includes('amazon')) return { bg: '#fff7ed', color: '#c2410c', border: '#fdba74' };
+  if (r.includes('newegg')) return { bg: '#fef3c7', color: '#b45309', border: '#fcd34d' };
+  if (r.includes('micro')) return { bg: '#ffe4e6', color: '#be123c', border: '#fca5a5' };
+  if (r.includes('b&h') || r.includes('bh')) return { bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' };
+  if (r.includes('ebay')) return { bg: '#ecfdf5', color: '#047857', border: '#6ee7b7' };
+  if (r.includes('best')) return { bg: '#fefce8', color: '#854d0e', border: '#fde047' };
+  return { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
 
 function buildTargetMetEmailHtml({
@@ -68,93 +69,127 @@ function buildTargetMetEmailHtml({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Target Price Alert: ${componentName}</title>
+  <style>
+    @media print {
+      body, table, td {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #020617; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #e2e8f0;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px; background-color: #020617;">
-    
-    <!-- Top Header -->
-    <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #1e293b;">
-      <div style="display: inline-block; background: linear-gradient(135deg, #06b6d4, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 24px; font-weight: 900; letter-spacing: -0.5px;">
-        RigScouter AI
-      </div>
-      <div style="font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">
-        🎯 Instant Target Alert Notification
-      </div>
-    </div>
-
-    <!-- Main Alert Card -->
-    <div style="background-color: #0f172a; border: 1px solid #10b98155; border-radius: 16px; padding: 24px; box-shadow: 0 8px 30px rgba(16, 185, 129, 0.15); margin-bottom: 20px;">
-      
-      <!-- Top Badges -->
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
-        <tr>
-          <td>
-            <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #10b981; background: #064e3b; padding: 4px 10px; border-radius: 6px; border: 1px solid #059669;">
-              🎯 TARGET PRICE MET
-            </span>
-            <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #38bdf8; background: #0c4a6e; padding: 4px 8px; border-radius: 6px; margin-left: 6px; border: 1px solid #0284c755;">
-              ${category}
-            </span>
-          </td>
-          <td style="text-align: right;">
-            <span style="font-size: 12px; font-weight: 700; color: ${rBadge.color}; background: ${rBadge.bg}; border: 1px solid ${rBadge.border}; padding: 4px 10px; border-radius: 6px;">
-              ${retailer}
-            </span>
-          </td>
-        </tr>
-      </table>
-
-      <!-- Product Title -->
-      <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 800; color: #f8fafc; line-height: 1.4;">
-        ${componentName}
-      </h2>
-
-      <!-- Price Comparison Box -->
-      <div style="background-color: #020617; border: 1px solid #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
-        <table style="width: 100%; border-collapse: collapse;">
+<body bgcolor="#f8fafc" style="margin: 0; padding: 20px 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; width: 100%;">
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background-color: #f8fafc; width: 100%;">
+    <tr>
+      <td align="center" style="padding: 0 10px;">
+        <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; text-align: left;">
           <tr>
-            <td style="width: 50%; vertical-align: top; border-right: 1px solid #1e293b; padding-right: 14px;">
-              <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Current Live Price</div>
-              <div style="font-size: 26px; font-weight: 900; color: #10b981; margin-top: 4px;">
-                $${currentPrice.toFixed(2)}
-              </div>
-              <div style="font-size: 11px; color: #34d399; font-weight: 700; margin-top: 2px;">
-                ${diff > 0 ? `✓ $${diff.toFixed(2)} (${savingsPct}%) under target!` : '✓ Exactly at target price!'}
-              </div>
-            </td>
-            <td style="width: 50%; vertical-align: top; padding-left: 14px;">
-              <div style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase;">Your Target Alert</div>
-              <div style="font-size: 22px; font-weight: 800; color: #cbd5e1; margin-top: 6px;">
-                $${targetPrice.toFixed(2)}
-              </div>
-              <div style="font-size: 11px; color: #64748b; font-weight: 600; margin-top: 2px;">
-                Stock: In Stock
-              </div>
+            <td style="padding: 24px;">
+              
+              <!-- Top Header -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" style="text-align: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px;">
+                <tr>
+                  <td align="center">
+                    <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.5px; color: #0284c7;">
+                      ⚡ RigScouter AI
+                    </span>
+                    <div style="font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">
+                      🎯 Instant Target Alert Notification
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Main Alert Card -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    
+                    <!-- Top Badges -->
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
+                      <tr>
+                        <td>
+                          <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #047857; background-color: #ecfdf5; padding: 4px 10px; border-radius: 6px; border: 1px solid #86efac;">
+                            🎯 TARGET PRICE MET
+                          </span>
+                          <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #0369a1; background-color: #e0f2fe; padding: 4px 8px; border-radius: 6px; margin-left: 6px; border: 1px solid #bae6fd;">
+                            ${category}
+                          </span>
+                        </td>
+                        <td style="text-align: right;">
+                          <span style="font-size: 12px; font-weight: 700; color: ${rBadge.color}; background-color: ${rBadge.bg}; border: 1px solid ${rBadge.border}; padding: 4px 10px; border-radius: 6px;">
+                            ${retailer}
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Product Title -->
+                    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1.4;">
+                      ${componentName}
+                    </h2>
+
+                    <!-- Price Comparison Box -->
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f8fafc" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px;">
+                      <tr>
+                        <td style="padding: 16px;">
+                          <table width="100%" border="0" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="width: 50%; vertical-align: top; border-right: 1px solid #e2e8f0; padding-right: 14px;">
+                                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Current Live Price</div>
+                                <div style="font-size: 26px; font-weight: 900; color: #047857; margin-top: 4px;">
+                                  $${currentPrice.toFixed(2)}
+                                </div>
+                                <div style="font-size: 11px; color: #047857; font-weight: 800; margin-top: 2px;">
+                                  ${diff > 0 ? `✓ $${diff.toFixed(2)} (${savingsPct}%) under target!` : '✓ Exactly at target price!'}
+                                </div>
+                              </td>
+                              <td style="width: 50%; vertical-align: top; padding-left: 14px;">
+                                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase;">Your Target Alert</div>
+                                <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-top: 6px;">
+                                  $${targetPrice.toFixed(2)}
+                                </div>
+                                <div style="font-size: 11px; color: #059669; font-weight: 700; margin-top: 2px;">
+                                  Stock: In Stock
+                                </div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Action Button -->
+                    <div style="text-align: center;">
+                      <a href="${directBuyUrl}" target="_blank" style="display: block; background-color: #047857; color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 24px; border-radius: 8px; letter-spacing: 0.3px;">
+                        ⚡ Buy Now at ${retailer} for $${currentPrice.toFixed(2)} &rarr;
+                      </a>
+                    </div>
+
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Footer -->
+              <table width="100%" border="0" cellpadding="0" cellspacing="0" style="text-align: center; font-size: 11px; color: #64748b; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                <tr>
+                  <td>
+                    <p style="margin: 0 0 6px 0;">
+                      You received this automated notification because flash drop alerts are enabled on your RigScouter Watchlist.
+                    </p>
+                    <p style="margin: 0;">
+                      &copy; ${new Date().getFullYear()} RigScouter AI. Real-time Multi-Retailer Hardware Engine.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
             </td>
           </tr>
         </table>
-      </div>
-
-      <!-- Action Button -->
-      <div style="text-align: center;">
-        <a href="${directBuyUrl}" target="_blank" style="display: block; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; text-decoration: none; font-weight: 800; font-size: 14px; padding: 14px 24px; border-radius: 10px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4); letter-spacing: 0.3px;">
-          ⚡ Buy Now at ${retailer} for $${currentPrice.toFixed(2)} &rarr;
-        </a>
-      </div>
-
-    </div>
-
-    <!-- Footer -->
-    <div style="text-align: center; font-size: 11px; color: #64748b; padding-top: 12px;">
-      <p style="margin: 0 0 6px 0;">
-        You received this automated notification because flash drop alerts are enabled on your RigScouter Watchlist.
-      </p>
-      <p style="margin: 0;">
-        &copy; ${new Date().getFullYear()} RigScouter AI. Real-time Multi-Retailer Hardware Engine.
-      </p>
-    </div>
-
-  </div>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `.trim();

@@ -38,7 +38,15 @@ export async function generateDailyDigestReport(
       ? (change30dAmount / p30) * 100 
       : 0;
 
-    const isATL = item.currentPrice <= item.allTimeLow;
+    const hasKnownATL = typeof item.allTimeLow === 'number' && item.allTimeLow > 0;
+    const hasActiveDrop = change24hAmount < -0.01 || change7dAmount < -0.01;
+    // An All-Time Low is only triggered if there is a known historical ATL AND:
+    // 1) The price strictly broke below the historical ATL, OR
+    // 2) The item recently experienced an active price drop bringing it to its historical ATL.
+    const isATL = hasKnownATL && (
+      (item.currentPrice < item.allTimeLow - 0.01) ||
+      (hasActiveDrop && Math.abs(item.currentPrice - item.allTimeLow) <= 0.01)
+    );
 
     // Calculate savings opportunity based on frequency horizon
     if (frequency === 'weekly') {

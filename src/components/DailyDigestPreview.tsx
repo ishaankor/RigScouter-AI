@@ -96,7 +96,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           previousPrice24h: Number(item.previous_price_24h || price),
           previousPrice7d: Number(item.previous_price_7d || price),
           previousPrice30d: Number(item.previous_price_30d || price),
-          allTimeLow: Number(item.all_time_low || price),
+          allTimeLow: item.all_time_low ? Number(item.all_time_low) : 0,
           retailer: item.retailer || 'Amazon',
           productUrl: item.product_url || '#',
           imageUrl: item.image_url,

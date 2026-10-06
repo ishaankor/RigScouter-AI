@@ -39,6 +39,7 @@ import { calculateMultiRetailerDealScore, getDealScoreTier } from '@/lib/scraper
 export interface TrendingRetailerOffer {
   id: string;
   retailer: string;
+  title?: string;
   price: number;
   originalPrice: number;
   productUrl: string;
@@ -250,22 +251,36 @@ export function WatchlistManager({
         return false;
       });
       for (const sib of siblings) {
-        if (sib.retailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase())) {
-          const sibPrice = Number(sib.currentPrice || 0);
-          const sibMsrp = Number(sib.msrp || sibPrice);
-          combinedOffers.push({
-            retailer: sib.retailer,
-            price: sibPrice,
-            originalPrice: sibMsrp,
-            previousPrice: Number(sib.previousPrice24h || sibPrice),
-            previousPrice24h: Number(sib.previousPrice24h || sibPrice),
-            previousPrice7d: sib.previousPrice7d != null && Number(sib.previousPrice7d) > 0 ? Number(sib.previousPrice7d) : undefined,
-            previousPrice30d: sib.previousPrice30d != null && Number(sib.previousPrice30d) > 0 ? Number(sib.previousPrice30d) : undefined,
-            title: sib.name,
-            url: sib.productUrl || '#',
-            imageUrl: sib.imageUrl,
-            inStock: true
-          });
+        if (sib.retailer) {
+          const existingOffer = combinedOffers.find(o => (o?.retailer || '').toLowerCase() === (sib.retailer || '').toLowerCase());
+          if (!existingOffer) {
+            const sibPrice = Number(sib.currentPrice || 0);
+            const sibMsrp = Number(sib.msrp || sibPrice);
+            combinedOffers.push({
+              retailer: sib.retailer,
+              price: sibPrice,
+              originalPrice: sibMsrp,
+              previousPrice: Number(sib.previousPrice24h || sibPrice),
+              previousPrice24h: Number(sib.previousPrice24h || sibPrice),
+              previousPrice7d: sib.previousPrice7d != null && Number(sib.previousPrice7d) > 0 ? Number(sib.previousPrice7d) : undefined,
+              previousPrice30d: sib.previousPrice30d != null && Number(sib.previousPrice30d) > 0 ? Number(sib.previousPrice30d) : undefined,
+              title: sib.name,
+              url: sib.productUrl || '#',
+              imageUrl: sib.imageUrl,
+              inStock: true
+            });
+          } else {
+            // Enrich existing offer with sibling retailer specific title and image if generic
+            if (sib.name && (!existingOffer.title || existingOffer.title === item.componentName || existingOffer.title.startsWith('http'))) {
+              existingOffer.title = sib.name;
+            }
+            if (sib.imageUrl && (!existingOffer.imageUrl || existingOffer.imageUrl === item.imageUrl)) {
+              existingOffer.imageUrl = sib.imageUrl;
+            }
+            if (sib.productUrl && (!existingOffer.url || existingOffer.url === '#')) {
+              existingOffer.url = sib.productUrl;
+            }
+          }
         }
       }
     }
@@ -445,45 +460,72 @@ export function WatchlistManager({
               formatted = Array.from(groupedMap.values()).map((group: any) => {
                 const gKey = getNormalizedKey(group);
                 const gCompId = (group.component_id || group.id || '').toLowerCase();
-                const matchingHw = (hwCatalog || []).find((h: any) => {
+                const stripSuffix = (id: string) => id.replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+                const baseGCompId = stripSuffix(gCompId);
+                const matchingHwList = (hwCatalog || []).filter((h: any) => {
                   const hId = (h.id || '').toLowerCase();
-                  const stripSuffix = (id: string) => id.replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
-                  const baseGCompId = stripSuffix(gCompId);
                   const baseHId = stripSuffix(hId);
                   if (hId && gCompId && (baseHId === baseGCompId || hId === gCompId || hId.startsWith(gCompId + '-'))) return true;
                   const hKey = getNormalizedKey(h);
                   return Boolean(gKey && hKey && gKey === hKey);
                 });
+                const matchingHw = matchingHwList[0];
 
                 const catalogImage = matchingHw?.image_url;
                 const activePrice = Number(matchingHw?.current_price || group.all_time_low || group.target_price || 0);
 
-                let parsedOffers: any[] = [];
+                const parsedOffersMap = new Map<string, any>();
                 let catalogHistory: any[] = [];
-                if (matchingHw?.specs) {
-                  try {
-                    const s = typeof matchingHw.specs === 'string' ? JSON.parse(matchingHw.specs) : matchingHw.specs;
-                    if (Array.isArray(s.RetailerOffers)) {
-                      parsedOffers = s.RetailerOffers.map((ro: any) => {
-                        const roPrice = Number(ro.price || 0);
-                        const roMsrp = Number(ro.originalPrice || roPrice);
-                        return {
-                          ...ro,
-                          price: roPrice,
-                          originalPrice: roMsrp,
-                          previousPrice: Number(ro.previousPrice || ro.previousPrice24h || roPrice),
-                          previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
-                          previousPrice7d: ro.previousPrice7d != null && Number(ro.previousPrice7d) > 0 ? Number(ro.previousPrice7d) : undefined,
-                          previousPrice30d: ro.previousPrice30d != null && Number(ro.previousPrice30d) > 0 ? Number(ro.previousPrice30d) : undefined,
-                        };
+
+                matchingHwList.forEach((hw: any) => {
+                  if (hw.retailer && Number(hw.current_price) > 0) {
+                    const rKey = (hw.retailer || '').toLowerCase().trim();
+                    if (!parsedOffersMap.has(rKey)) {
+                      parsedOffersMap.set(rKey, {
+                        id: hw.id,
+                        retailer: hw.retailer,
+                        price: Number(hw.current_price),
+                        originalPrice: Number(hw.msrp || hw.current_price),
+                        previousPrice: Number(hw.previous_price_24h || hw.current_price),
+                        previousPrice24h: Number(hw.previous_price_24h || hw.current_price),
+                        previousPrice7d: hw.previous_price_7d != null && Number(hw.previous_price_7d) > 0 ? Number(hw.previous_price_7d) : undefined,
+                        previousPrice30d: hw.previous_price_30d != null && Number(hw.previous_price_30d) > 0 ? Number(hw.previous_price_30d) : undefined,
+                        title: hw.name,
+                        url: hw.product_url || '#',
+                        imageUrl: hw.image_url,
+                        inStock: true
                       });
                     }
-                    if (Array.isArray(s.price_history)) {
-                      catalogHistory = s.price_history;
-                    }
-                  } catch (e) {}
-                }
+                  }
+                  if (hw?.specs) {
+                    try {
+                      const s = typeof hw.specs === 'string' ? JSON.parse(hw.specs) : hw.specs;
+                      if (Array.isArray(s.RetailerOffers)) {
+                        s.RetailerOffers.forEach((ro: any) => {
+                          const roPrice = Number(ro.price || 0);
+                          const roMsrp = Number(ro.originalPrice || roPrice);
+                          const roKey = (ro.retailer || '').toLowerCase().trim();
+                          if (roKey && roPrice > 0 && !parsedOffersMap.has(roKey)) {
+                            parsedOffersMap.set(roKey, {
+                              ...ro,
+                              price: roPrice,
+                              originalPrice: roMsrp,
+                              previousPrice: Number(ro.previousPrice || ro.previousPrice24h || roPrice),
+                              previousPrice24h: Number(ro.previousPrice24h || ro.previousPrice || roPrice),
+                              previousPrice7d: ro.previousPrice7d != null && Number(ro.previousPrice7d) > 0 ? Number(ro.previousPrice7d) : undefined,
+                              previousPrice30d: ro.previousPrice30d != null && Number(ro.previousPrice30d) > 0 ? Number(ro.previousPrice30d) : undefined,
+                            });
+                          }
+                        });
+                      }
+                      if (Array.isArray(s.price_history) && catalogHistory.length === 0) {
+                        catalogHistory = s.price_history;
+                      }
+                    } catch (e) {}
+                  }
+                });
 
+                const parsedOffers = Array.from(parsedOffersMap.values());
                 const earliestTrackedAt = (catalogHistory.length > 0 && (catalogHistory[0]?.timestamp || catalogHistory[0]?.date)) || matchingHw?.created_at;
 
                 return {
@@ -671,6 +713,7 @@ export function WatchlistManager({
             grp.offersMap.set(soKey, {
               id: so.id || `${item.id}-${soKey}`,
               retailer: so.retailer,
+              title: so.title || item.name,
               price: Number(so.price),
               originalPrice: Number(so.originalPrice || so.price),
               previousPrice: Number(so.previousPrice || so.previousPrice24h || so.price),
@@ -691,6 +734,7 @@ export function WatchlistManager({
           grp.offersMap.set(retKey, {
             id: item.id,
             retailer: retailerName,
+            title: item.name || (item as any).componentName || existing?.title || grp.name,
             price,
             originalPrice: msrp > price ? msrp : (existing?.originalPrice || price),
             previousPrice: Number(item.previousPrice24h || existing?.previousPrice24h || price),
@@ -698,9 +742,19 @@ export function WatchlistManager({
             previousPrice7d: item.previousPrice7d ?? existing?.previousPrice7d,
             previousPrice30d: item.previousPrice30d ?? existing?.previousPrice30d,
             productUrl: item.productUrl || '#',
-            imageUrl: item.imageUrl,
+            imageUrl: item.imageUrl || existing?.imageUrl || grp.imageUrl,
             dealScore
           });
+        } else if (existing) {
+          if (!existing.title || existing.title === grp.name || existing.title.startsWith('http')) {
+            existing.title = item.name || (item as any).componentName || existing.title;
+          }
+          if (!existing.imageUrl || existing.imageUrl === grp.imageUrl) {
+            existing.imageUrl = item.imageUrl || existing.imageUrl;
+          }
+          if (!existing.productUrl || existing.productUrl === '#') {
+            existing.productUrl = item.productUrl || existing.productUrl;
+          }
         }
       }
 
@@ -884,10 +938,25 @@ export function WatchlistManager({
       : [{ price, timestamp: deal.earliestTrackedAt || new Date().toISOString() }];
     const optEarliest = deal.earliestTrackedAt || (optHistory[0]?.timestamp || optHistory[0]?.date) || new Date().toISOString();
 
+    const optimisticOffers = deal.offers.map(o => ({
+      id: o.id,
+      retailer: o.retailer,
+      price: o.price,
+      originalPrice: o.originalPrice,
+      previousPrice: Number(o.previousPrice || o.previousPrice24h || o.price),
+      previousPrice24h: Number(o.previousPrice24h || o.previousPrice || o.price),
+      previousPrice7d: o.previousPrice7d,
+      previousPrice30d: o.previousPrice30d,
+      title: o.title || deal.name,
+      url: o.productUrl,
+      imageUrl: o.imageUrl || deal.imageUrl,
+      inStock: true
+    }));
+
     const optimisticItem: WatchlistItem = {
       id: newId,
       userId: user.id,
-      componentName: deal.name,
+      componentName: activeOffer.title || deal.name,
       canonicalKey: deal.canonicalKey,
       category: deal.category as any,
       targetPrice: defaultTargetPrice,
@@ -899,27 +968,14 @@ export function WatchlistManager({
       allTimeLow: optATL,
       retailer: activeOffer.retailer as any,
       productUrl: activeOffer.productUrl,
-      imageUrl: deal.imageUrl,
+      imageUrl: activeOffer.imageUrl || deal.imageUrl,
       inStock: true,
       addedAt: optEarliest,
       earliestTrackedAt: optEarliest,
       retailerTargets,
       specs: {
         price_history: optHistory,
-        RetailerOffers: deal.offers.map(o => ({
-          id: o.id,
-          retailer: o.retailer,
-          price: o.price,
-          originalPrice: o.originalPrice,
-          previousPrice: Number(o.previousPrice || o.previousPrice24h || o.price),
-          previousPrice24h: Number(o.previousPrice24h || o.previousPrice || o.price),
-          previousPrice7d: o.previousPrice7d,
-          previousPrice30d: o.previousPrice30d,
-          title: deal.name,
-          url: o.productUrl,
-          imageUrl: deal.imageUrl,
-          inStock: true
-        }))
+        RetailerOffers: optimisticOffers
       }
     };
 
@@ -930,7 +986,7 @@ export function WatchlistManager({
     }));
 
     setWatchlist(prev => {
-      const exists = prev.some(p => {
+      const existingIdx = prev.findIndex(p => {
         if ((p as any).canonicalKey && (p as any).canonicalKey === deal.canonicalKey) return true;
         const pKey = getNormalizedKey(p)?.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (pKey && pKey === deal.canonicalKey) return true;
@@ -939,24 +995,49 @@ export function WatchlistManager({
         if (pName && dealName && (pName === dealName || pName.includes(dealName) || dealName.includes(pName))) return true;
         return false;
       });
-      if (exists) return prev;
+
+      if (existingIdx !== -1) {
+        const existing = prev[existingIdx];
+        setSelectedRetailers(rPrev => ({
+          ...rPrev,
+          [existing.id]: activeOffer.retailer
+        }));
+
+        const existingSpecs = typeof existing.specs === 'string' ? JSON.parse(existing.specs || '{}') : (existing.specs || {});
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...existing,
+          currentPrice: price,
+          retailer: activeOffer.retailer as any,
+          productUrl: activeOffer.productUrl,
+          imageUrl: activeOffer.imageUrl || deal.imageUrl || existing.imageUrl,
+          componentName: activeOffer.title || existing.componentName,
+          retailerTargets: { ...(existing.retailerTargets || {}), ...retailerTargets },
+          specs: {
+            ...existingSpecs,
+            RetailerOffers: optimisticOffers,
+            price_history: optHistory.length > 0 ? optHistory : (existingSpecs.price_history || [])
+          }
+        };
+        return updated;
+      }
       return [optimisticItem, ...prev];
     });
 
     try {
-      await fetch('/api/watchlist', {
+      const res = await fetch('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
           componentId: deal.id,
-          componentName: deal.name,
+          componentName: activeOffer.title || deal.name,
           category: deal.category,
           targetPrice: defaultTargetPrice,
           currentPrice: price,
           retailer: activeOffer.retailer,
           productUrl: activeOffer.productUrl,
-          imageUrl: deal.imageUrl,
+          imageUrl: activeOffer.imageUrl || deal.imageUrl,
           brand: deal.brand,
           model: deal.model,
           previousPrice24h: optPrev24,
@@ -964,9 +1045,31 @@ export function WatchlistManager({
           previousPrice30d: optPrev30d,
           allTimeLow: optATL,
           earliestTrackedAt: optEarliest,
-          priceHistory: optHistory
+          priceHistory: optHistory,
+          retailerOffers: optimisticOffers,
+          retailerTargets
         })
       });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.item?.id && data.item.id !== newId) {
+          const serverId = data.item.id;
+          setWatchlist(prev => prev.map(item => item.id === newId ? {
+            ...item,
+            id: serverId,
+            specs: {
+              ...item.specs,
+              RetailerOffers: optimisticOffers
+            }
+          } : item));
+          setSelectedRetailers(prev => {
+            const next: Record<string, string> = { ...prev, [serverId]: activeOffer.retailer };
+            delete next[newId];
+            return next;
+          });
+        }
+      }
     } catch (e) {
       console.warn('Quick add to watchlist error:', e);
     } finally {
@@ -1941,7 +2044,6 @@ export function WatchlistManager({
                     <th className="p-4">Current Price</th>
                     <th className="p-4">Target Alert</th>
                     <th className="p-4">{selectedInterval.toUpperCase()} Price Delta</th>
-                    <th className="p-4">90-Day Low</th>
                     <th className="p-4 text-center">Alerts</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
@@ -1953,11 +2055,6 @@ export function WatchlistManager({
                     const { diff, percent, isDrop, isIncrease, isStable, hasHistory } = calculateDrop(effective.currentPrice, prevPrice);
                     const targetForRetailer = getRetailerTarget(item, effective.retailer, effective.currentPrice);
                     const isTargetHit = effective.currentPrice > 0 && targetForRetailer > 0 && effective.currentPrice <= targetForRetailer;
-
-                    const rawATL = Number(item.allTimeLow || 0);
-                    const currentP = Number(effective.currentPrice || 0);
-                    const atl = rawATL > 0 ? (currentP > 0 && currentP < rawATL ? currentP : rawATL) : (currentP > 0 ? currentP : (Number(item.currentPrice || 0)));
-                    const isCurrentATL = currentP > 0 && currentP <= atl;
 
                     return (
                       <tr key={`${item.id || 'item'}-${idx}`} className="hover:bg-gray-900/40 transition-colors">
@@ -2117,21 +2214,7 @@ export function WatchlistManager({
                           )}
                         </td>
 
-                        {/* 3. 90-Day Low (Guaranteed non-zero fallback & ATL badge) */}
-                        <td className="p-4 font-mono">
-                          <div className="flex items-center gap-1.5">
-                            <span className={isCurrentATL ? 'text-purple-300 font-bold' : 'text-gray-400'}>
-                              ${atl > 0 ? atl.toFixed(2) : Number(effective.currentPrice || 0).toFixed(2)}
-                            </span>
-                            {isCurrentATL && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-800/50 flex items-center gap-0.5">
-                                <Flame className="w-2.5 h-2.5 text-purple-400" /> LOW
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* 4. Alerts Bell Button (Persisted to Database) */}
+                        {/* 3. Alerts Bell Button (Persisted to Database) */}
                         <td className="p-4 text-center">
                           <button
                             onClick={() => toggleNotification(item.id)}
