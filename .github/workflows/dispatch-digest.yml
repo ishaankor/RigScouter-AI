@@ -1,9 +1,8 @@
 name: "Daily Hardware Digest Dispatcher"
 
+# Automated schedule disabled: Digests are now handled authoritatively by the unified backend scheduler.
+# To trigger manually on demand, use workflow_dispatch from the GitHub Actions tab.
 on:
-  schedule:
-    # Runs every day at 08:00 UTC (evaluates daily, every_3_days, weekly, and flash_only subscribers)
-    - cron: "0 8 * * *"
   workflow_dispatch: # Allows manual click-to-run from GitHub UI
 
 jobs:
