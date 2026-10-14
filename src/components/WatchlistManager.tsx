@@ -1133,6 +1133,7 @@ export function WatchlistManager({
     // 2. Setup an SSE listener to catch the streaming results
     const es = new EventSource(`${BACKEND_URL}/api/stream`);
     let bestPrice = Infinity;
+    let watchdogTimer: NodeJS.Timeout | null = null;
 
     es.addEventListener('retailer_found', async (e: MessageEvent) => {
       const payload = JSON.parse(e.data);
@@ -1211,6 +1212,7 @@ export function WatchlistManager({
             message: payload.message || payload.error || `Could not find live pricing for "${payload.original_query || payload.query || queryToScrape}".`,
             query: payload.original_query || payload.query || queryToScrape
           });
+          if (watchdogTimer) clearTimeout(watchdogTimer);
           es.close();
         }
       } catch (err) {
@@ -1288,6 +1290,7 @@ export function WatchlistManager({
               };
             }));
           }
+          if (watchdogTimer) clearTimeout(watchdogTimer);
           es.close();
         }
       } catch (err) {
@@ -1296,25 +1299,55 @@ export function WatchlistManager({
     });
 
     es.addEventListener('error', () => {
-      // Close on error to prevent infinite retries
-      setIsScraping(false);
-      es.close();
+      // Don't kill stream prematurely during brief reconnects; let watchdog handle complete timeouts
+      console.warn('[SSE Feed] Stream disconnected or reconnecting...');
     });
 
-    // 3. Trigger the actual backend agent in the background (fire & forget)
-    try {
-      fetch(`${BACKEND_URL}/api/agent/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: queryToScrape,
-          userId: userId,
-          pendingId: pendingId
-        })
-      }).catch(err => console.warn('Background trigger fetch error:', err));
-    } catch (err) {
-      console.warn('Background trigger exception:', err);
-    }
+    // 3. Watchdog timer: Clean up stuck placeholder if cold boot / timeout exceeds 80s
+    watchdogTimer = setTimeout(() => {
+      setIsScraping(false);
+      es.close();
+      setWatchlist(prev => {
+        const item = prev.find(i => i.id === pendingId);
+        if (item && item.currentPrice === 0) {
+          setSearchError({
+            title: 'Scrape Timed Out',
+            message: `Scraping for "${queryToScrape}" timed out. The backend server may have been sleeping or rebooting. Please try adding it again.`,
+            query: queryToScrape
+          });
+          return prev.filter(i => i.id !== pendingId);
+        }
+        return prev;
+      });
+    }, 80000);
+
+    // 4. Robust Trigger of backend agent with retry for Render cold starts
+    const triggerScrapeWithRetry = async (attempt = 1, maxAttempts = 3) => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/agent/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            query: queryToScrape,
+            userId: userId,
+            pendingId: pendingId
+          })
+        });
+        if (!res.ok && attempt < maxAttempts) {
+          console.warn(`[Backend Trigger] Attempt ${attempt} returned HTTP ${res.status}. Retrying in 2.5s (likely Render cold-boot)...`);
+          setTimeout(() => triggerScrapeWithRetry(attempt + 1, maxAttempts), 2500);
+        }
+      } catch (err) {
+        if (attempt < maxAttempts) {
+          console.warn(`[Backend Trigger] Attempt ${attempt} failed (${err}). Retrying in 2.5s (likely Render cold-boot)...`);
+          setTimeout(() => triggerScrapeWithRetry(attempt + 1, maxAttempts), 2500);
+        } else {
+          console.warn('[Backend Trigger] Max retries reached:', err);
+        }
+      }
+    };
+
+    triggerScrapeWithRetry();
   };
 
   const removeItem = async (id: string) => {
