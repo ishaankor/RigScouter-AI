@@ -45,6 +45,7 @@ export interface TrendingRetailerOffer {
   productUrl: string;
   imageUrl?: string;
   dealScore: number;
+  inStock?: boolean;
   previousPrice?: number;
   previousPrice24h?: number;
   previousPrice7d?: number;
@@ -722,7 +723,8 @@ export function WatchlistManager({
               previousPrice30d: so.previousPrice30d != null && Number(so.previousPrice30d) > 0 ? Number(so.previousPrice30d) : (item.previousPrice30d ? Number(item.previousPrice30d) : undefined),
               productUrl: so.url || '#',
               imageUrl: so.imageUrl || item.imageUrl,
-              dealScore: 50
+              dealScore: 50,
+              inStock: so.inStock !== false && (so as any).in_stock !== false && (so as any).is_sold_out !== true
             });
           }
         }
@@ -730,7 +732,8 @@ export function WatchlistManager({
 
       if (price > 0) {
         const existing = grp.offersMap.get(retKey);
-        if (!existing || price < existing.price) {
+        const itemStock = (item as any).inStock !== false && (item as any).in_stock !== false && specs?.in_stock !== false && specs?.is_sold_out !== true && dealScore > 0;
+        if (!existing || (itemStock && existing.inStock === false) || (itemStock === (existing.inStock !== false) && price < existing.price)) {
           grp.offersMap.set(retKey, {
             id: item.id,
             retailer: retailerName,
@@ -743,7 +746,8 @@ export function WatchlistManager({
             previousPrice30d: item.previousPrice30d ?? existing?.previousPrice30d,
             productUrl: item.productUrl || '#',
             imageUrl: item.imageUrl || existing?.imageUrl || grp.imageUrl,
-            dealScore
+            dealScore: itemStock ? dealScore : 0,
+            inStock: itemStock
           });
         } else if (existing) {
           if (!existing.title || existing.title === grp.name || existing.title.startsWith('http')) {
@@ -784,8 +788,13 @@ export function WatchlistManager({
       const rawOffers = Array.from(grp.offersMap.values());
       if (rawOffers.length === 0) return;
 
-      // Sort offers: lowest price first
-      rawOffers.sort((a, b) => a.price - b.price);
+      // Sort offers: in-stock first, then lowest price
+      rawOffers.sort((a, b) => {
+        const aStock = a.inStock !== false;
+        const bStock = b.inStock !== false;
+        if (aStock !== bStock) return aStock ? -1 : 1;
+        return a.price - b.price;
+      });
 
       const lowestPrice = rawOffers[0].price;
       const highestPrice = Math.max(...rawOffers.map(o => o.price));
@@ -793,9 +802,15 @@ export function WatchlistManager({
 
       // Recalculate dynamic deal scores for each offer factoring market spread & ATL
       const offersWithScores: TrendingRetailerOffer[] = rawOffers.map(offer => {
+        if (offer.inStock === false) {
+          return {
+            ...offer,
+            dealScore: 0
+          };
+        }
         const score = calculateMultiRetailerDealScore(
           offer.price,
-          rawOffers.map(o => ({ price: o.price, retailer: o.retailer })),
+          rawOffers.filter(o => o.inStock !== false).map(o => ({ price: o.price, retailer: o.retailer })),
           marketMsrp
         );
         return {
@@ -804,7 +819,7 @@ export function WatchlistManager({
         };
       });
 
-      // Best offer is the lowest price / highest deal score
+      // Best offer is the lowest price / highest deal score among in-stock offers
       const bestOffer = offersWithScores[0];
       const topScore = bestOffer.dealScore;
 
@@ -861,13 +876,17 @@ export function WatchlistManager({
       });
     }
 
-    // Quality / Hot deals filter (Deal score >= 75)
+    // Quality / Hot deals filter (Deal score >= 75 and in-stock)
     if (trendingQuality === 'hot') {
-      list = list.filter(item => item.dealScore >= 75);
+      list = list.filter(item => item.dealScore >= 75 && item.offers.some(o => o.inStock !== false && (o as any).in_stock !== false));
     }
 
-    // Sorting
+    // Sorting: Prioritize in-stock deals, then apply chosen sorting criteria
     list.sort((a, b) => {
+      const aInStock = a.offers.some(o => o.inStock !== false && (o as any).in_stock !== false);
+      const bInStock = b.offers.some(o => o.inStock !== false && (o as any).in_stock !== false);
+      if (aInStock !== bInStock) return aInStock ? -1 : 1;
+
       if (trendingSort === 'score') {
         return b.dealScore - a.dealScore;
       }
@@ -2107,9 +2126,16 @@ export function WatchlistManager({
                             />
                             <div>
                               <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>
-                              <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
-                                {item.category}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                                  {item.category}
+                                </span>
+                                {effective.inStock === false && (
+                                  <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-rose-950/90 text-rose-300 border border-rose-800/60 uppercase tracking-wider">
+                                    Sold Out
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -2124,9 +2150,10 @@ export function WatchlistManager({
                               {effective.availableRetailers.map(rName => {
                                 const offerObj = effective.offers?.find(o => (o?.retailer || '').toLowerCase() === (rName || '').toLowerCase());
                                 const priceTag = offerObj && offerObj.price ? ` ($${Number(offerObj.price).toFixed(2)})` : '';
+                                const stockNote = offerObj && offerObj.inStock === false ? ' [Out of Stock]' : '';
                                 return (
                                   <option key={rName} value={rName} className="bg-gray-950 text-white font-semibold">
-                                    {rName}{priceTag}
+                                    {rName}{priceTag}{stockNote}
                                   </option>
                                 );
                               })}
@@ -2134,11 +2161,22 @@ export function WatchlistManager({
                         </td>
 
                         <td className="p-4">
-                          <div className="text-sm font-black text-white">${Number(effective.currentPrice || 0).toFixed(2)}</div>
-                          {isTargetHit && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
-                              <TrendingDown className="w-3 h-3" /> Target Price Met!
-                            </span>
+                          {effective.inStock !== false ? (
+                            <>
+                              <div className="text-sm font-black text-white">${Number(effective.currentPrice || 0).toFixed(2)}</div>
+                              {isTargetHit && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded mt-1">
+                                  <TrendingDown className="w-3 h-3" /> Target Price Met!
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-sm font-black text-gray-500 line-through">${Number(effective.currentPrice || 0).toFixed(2)}</div>
+                              <span className="inline-block text-[10px] font-bold text-rose-400 mt-0.5">
+                                Out of Stock at {effective.retailer}
+                              </span>
+                            </>
                           )}
                         </td>
 
@@ -2268,8 +2306,12 @@ export function WatchlistManager({
                               href={effective.productUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-2 bg-gray-900 hover:bg-cyan-950/80 border border-gray-800 hover:border-cyan-700/60 rounded-xl text-gray-300 hover:text-cyan-300 transition-colors"
-                              title={`View Direct Listing at ${effective.retailer}`}
+                              className={`p-2 bg-gray-900 border rounded-xl transition-colors ${
+                                effective.inStock === false
+                                  ? 'border-rose-900/50 text-rose-400/80 hover:text-rose-300 hover:border-rose-700/60'
+                                  : 'border-gray-800 hover:border-cyan-700/60 text-gray-300 hover:text-cyan-300 hover:bg-cyan-950/80'
+                              }`}
+                              title={effective.inStock === false ? `Listing out of stock / sold out at ${effective.retailer}` : `View Direct Listing at ${effective.retailer}`}
                             >
                               <ExternalLink className="w-4 h-4" />
                             </a>
@@ -2446,22 +2488,41 @@ export function WatchlistManager({
                 const isAlreadyTracked = trackedDealKeys.has(deal.canonicalKey) || Boolean(existingWatchlistItem);
                 const isTrackingLoading = quickAddingKey === deal.canonicalKey;
 
+                const isOfferInStock = activeOffer.inStock !== false && (activeOffer as any).in_stock !== false;
+
                 return (
                   <div
                     key={deal.canonicalKey}
-                    className="glass-card p-5 rounded-2xl border border-gray-800/80 bg-gray-950/60 hover:border-gray-700/80 transition-all flex flex-col justify-between group shadow-sm hover:shadow-cyan-950/10 relative"
+                    className={`glass-card p-5 rounded-2xl border transition-all flex flex-col justify-between group shadow-sm relative ${
+                      isOfferInStock 
+                        ? 'border-gray-800/80 bg-gray-950/60 hover:border-gray-700/80 hover:shadow-cyan-950/10' 
+                        : 'border-rose-950/40 bg-gray-950/40 opacity-80'
+                    }`}
                   >
                     <div>
                       {/* Top row: Category Badge & Deal Score */}
                       <div className="flex items-center justify-between gap-2 mb-2.5">
-                        <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/80 border border-cyan-800/40 px-2 py-0.5 rounded uppercase tracking-wider">
-                          {deal.category}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/80 border border-cyan-800/40 px-2 py-0.5 rounded uppercase tracking-wider">
+                            {deal.category}
+                          </span>
+                          {!isOfferInStock && (
+                            <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 border border-rose-800/60 px-2 py-0.5 rounded uppercase tracking-wider">
+                              Sold Out
+                            </span>
+                          )}
+                        </div>
 
-                        <span className={`text-xs font-bold flex items-center gap-1 ${tier.isHot ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
-                          <span>{activeOffer.dealScore}</span>
-                        </span>
+                        {isOfferInStock ? (
+                          <span className={`text-xs font-bold flex items-center gap-1 ${tier.isHot ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            <span>{activeOffer.dealScore}</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold text-rose-400/80">
+                            Expired
+                          </span>
+                        )}
                       </div>
 
                       {/* Component Title */}
@@ -2474,21 +2535,34 @@ export function WatchlistManager({
 
                       {/* Price Display */}
                       <div className="flex items-baseline gap-2 mb-3">
-                        <span className="text-2xl font-black text-emerald-400 tracking-tight">
-                          ${activePrice.toFixed(0)}
-                        </span>
-                        {hasSavings && (
-                          <span className="text-xs text-gray-500 line-through">
-                            ${refPrice.toFixed(0)}
-                          </span>
+                        {isOfferInStock ? (
+                          <>
+                            <span className="text-2xl font-black text-emerald-400 tracking-tight">
+                              ${activePrice.toFixed(0)}
+                            </span>
+                            {hasSavings && (
+                              <span className="text-xs text-gray-500 line-through">
+                                ${refPrice.toFixed(0)}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-2xl font-black text-gray-500 line-through tracking-tight">
+                              ${activePrice.toFixed(0)}
+                            </span>
+                            <span className="text-xs font-bold text-rose-400">
+                              Out of Stock
+                            </span>
+                          </>
                         )}
                       </div>
 
                       {/* Clean Retailer / Store Info (No clutter) */}
                       <div className="flex items-center justify-between text-xs text-gray-400 mb-4 pt-2.5 border-t border-gray-800/60">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          <span>Store: <strong className="text-white font-semibold">{activeOffer.retailer}</strong></span>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isOfferInStock ? 'bg-emerald-400' : 'bg-rose-500'}`}></span>
+                          <span>Store: <strong className="text-white font-semibold">{activeOffer.retailer}{!isOfferInStock ? ' (Sold Out)' : ''}</strong></span>
                         </div>
 
                         {deal.offers.length > 1 && (
@@ -2500,9 +2574,10 @@ export function WatchlistManager({
                             >
                               {deal.offers.map((offer) => {
                                 const isLowest = offer.price <= deal.lowestPrice + 0.01;
+                                const stockNote = offer.inStock === false ? ' [Out of Stock]' : '';
                                 return (
                                   <option key={offer.id || offer.retailer} value={offer.retailer}>
-                                    {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★' : ''}
+                                    {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★' : ''}{stockNote}
                                   </option>
                                 );
                               })}
@@ -2542,7 +2617,7 @@ export function WatchlistManager({
                         ) : (
                           <>
                             <Bell className="w-3.5 h-3.5" />
-                            <span>Track Deal</span>
+                            <span>{isOfferInStock ? 'Track Deal' : 'Track Restock'}</span>
                           </>
                         )}
                       </button>
@@ -2551,10 +2626,14 @@ export function WatchlistManager({
                         href={activeOffer.productUrl || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="py-2 px-3 bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold text-xs rounded-xl border border-gray-800 flex items-center justify-center gap-1 transition-all shrink-0 cursor-pointer"
-                        title={`View on ${activeOffer.retailer}`}
+                        className={`py-2 px-3 font-semibold text-xs rounded-xl border flex items-center justify-center gap-1 transition-all shrink-0 ${
+                          isOfferInStock 
+                            ? 'bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white border-gray-800 cursor-pointer' 
+                            : 'bg-rose-950/20 text-rose-400/80 border-rose-900/40 hover:bg-rose-950/30'
+                        }`}
+                        title={isOfferInStock ? `View on ${activeOffer.retailer}` : `Listing currently sold out on ${activeOffer.retailer}`}
                       >
-                        <span>{activeOffer.retailer}</span>
+                        <span>{isOfferInStock ? activeOffer.retailer : 'Sold Out'}</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </a>
                     </div>
@@ -2607,10 +2686,11 @@ export function WatchlistManager({
                       });
                       const isAlreadyTracked = trackedDealKeys.has(deal.canonicalKey) || Boolean(existingWatchlistItem);
                       const isTrackingLoading = quickAddingKey === deal.canonicalKey;
+                      const isOfferInStock = activeOffer.inStock !== false && (activeOffer as any).in_stock !== false;
 
                       return (
-                        <tr key={deal.canonicalKey} className="hover:bg-gray-900/40 transition-colors group">
-                          {/* Component Column: Name & Category (No Image) */}
+                        <tr key={deal.canonicalKey} className={`transition-colors group ${isOfferInStock ? 'hover:bg-gray-900/40' : 'hover:bg-rose-950/10 opacity-80'}`}>
+                          {/* Component Column: Name & Category */}
                           <td className="p-4">
                             <div className="min-w-0 max-w-xs md:max-w-sm">
                               <div
@@ -2619,9 +2699,16 @@ export function WatchlistManager({
                               >
                                 {cleanTrendingTitle(deal.name)}
                               </div>
-                              <span className="inline-block px-2 py-0.5 mt-1 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
-                                {deal.category}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                                  {deal.category}
+                                </span>
+                                {!isOfferInStock && (
+                                  <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-rose-950/90 text-rose-300 border border-rose-800/60 uppercase tracking-wider">
+                                    Sold Out
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </td>
 
@@ -2636,14 +2723,15 @@ export function WatchlistManager({
                                 >
                                   {deal.offers.map((offer) => {
                                     const isLowest = offer.price <= deal.lowestPrice + 0.01;
+                                    const stockNote = offer.inStock === false ? ' [Out of Stock]' : '';
                                     return (
                                       <option key={offer.id || offer.retailer} value={offer.retailer} className="bg-gray-950 text-white font-semibold">
-                                        {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★ Best' : ''}
+                                        {offer.retailer} (${offer.price.toFixed(0)}) {isLowest ? '★ Best' : ''}{stockNote}
                                       </option>
                                     );
                                   })}
                                 </select>
-                                {isBestPrice && (
+                                {isBestPrice && isOfferInStock && (
                                   <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
                                     ✓ Lowest verified price
                                   </span>
@@ -2651,8 +2739,8 @@ export function WatchlistManager({
                               </div>
                             ) : (
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-xs font-bold text-white bg-gray-900 px-2.5 py-1 rounded-lg border border-gray-800 inline-block w-fit">
-                                  {activeOffer.retailer}
+                                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border inline-block w-fit ${isOfferInStock ? 'text-white bg-gray-900 border-gray-800' : 'text-rose-300 bg-rose-950/40 border-rose-900/50'}`}>
+                                  {activeOffer.retailer}{!isOfferInStock ? ' (Sold Out)' : ''}
                                 </span>
                               </div>
                             )}
@@ -2660,27 +2748,46 @@ export function WatchlistManager({
 
                           {/* Price Column */}
                           <td className="p-4">
-                            <div className="text-sm font-black text-emerald-400">
-                              ${activePrice.toFixed(0)}
-                            </div>
-                            {hasSavings && (
-                              <div className="text-[11px] text-gray-500 line-through">
-                                ${refPrice.toFixed(0)}
-                              </div>
+                            {isOfferInStock ? (
+                              <>
+                                <div className="text-sm font-black text-emerald-400">
+                                  ${activePrice.toFixed(0)}
+                                </div>
+                                {hasSavings && (
+                                  <div className="text-[11px] text-gray-500 line-through">
+                                    ${refPrice.toFixed(0)}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-sm font-black text-gray-500 line-through">
+                                  ${activePrice.toFixed(0)}
+                                </div>
+                                <span className="text-[10px] font-bold text-rose-400">
+                                  Out of Stock
+                                </span>
+                              </>
                             )}
                           </td>
 
                           {/* Deal Score Column */}
                           <td className="p-4">
                             <div className="flex items-center gap-1.5">
-                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                tier.isHot
-                                  ? 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
-                                  : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
-                              }`}>
-                                {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                <span>{activeOffer.dealScore}</span>
-                              </span>
+                              {isOfferInStock ? (
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                  tier.isHot
+                                    ? 'bg-amber-950/40 text-amber-400 border border-amber-800/40'
+                                    : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
+                                }`}>
+                                  {tier.isHot ? <Flame className="w-3.5 h-3.5 fill-current" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                  <span>{activeOffer.dealScore}</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-rose-950/40 text-rose-400 border border-rose-900/40">
+                                  Expired
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -2715,7 +2822,7 @@ export function WatchlistManager({
                                 ) : (
                                   <>
                                     <Bell className="w-3.5 h-3.5" />
-                                    <span>Track Deal</span>
+                                    <span>{isOfferInStock ? 'Track Deal' : 'Track Restock'}</span>
                                   </>
                                 )}
                               </button>
@@ -2724,8 +2831,12 @@ export function WatchlistManager({
                                 href={activeOffer.productUrl || '#'}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="p-1.5 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white rounded-xl border border-gray-800 flex items-center justify-center transition-all cursor-pointer"
-                                title={`View on ${activeOffer.retailer}`}
+                                className={`p-1.5 rounded-xl border flex items-center justify-center transition-all ${
+                                  isOfferInStock 
+                                    ? 'bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border-gray-800 cursor-pointer' 
+                                    : 'bg-rose-950/20 text-rose-400/80 border-rose-900/40 hover:bg-rose-950/30'
+                                }`}
+                                title={isOfferInStock ? `View on ${activeOffer.retailer}` : `Listing currently sold out on ${activeOffer.retailer}`}
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                               </a>

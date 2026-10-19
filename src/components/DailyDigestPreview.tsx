@@ -736,13 +736,24 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
                                 <span className="font-bold text-white text-xs">{cleanName}</span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                                <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
-                                {isDrop ? (
-                                  <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                                    -${Math.abs(displayDrop).toFixed(2)} {frequency === 'weekly' ? '(7d)' : ''}
-                                  </span>
+                                {itemSummary?.item?.inStock !== false ? (
+                                  <>
+                                    <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
+                                    {isDrop ? (
+                                      <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                                        -${Math.abs(displayDrop).toFixed(2)} {frequency === 'weekly' ? '(7d)' : ''}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500 font-medium text-xs">Stable</span>
+                                    )}
+                                  </>
                                 ) : (
-                                  <span className="text-gray-500 font-medium text-xs">Stable</span>
+                                  <>
+                                    <span className="font-black text-gray-500 line-through text-sm">${curr.toFixed(2)}</span>
+                                    <span className="text-rose-400 font-bold text-xs bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800/40">
+                                      Out of Stock
+                                    </span>
+                                  </>
                                 )}
                                 {itemSummary?.item?.retailerOffers && itemSummary.item.retailerOffers.length > 1 ? (
                                   <div className="flex items-center gap-1">

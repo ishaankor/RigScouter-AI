@@ -48,20 +48,23 @@ export async function generateDailyDigestReport(
       (hasActiveDrop && Math.abs(item.currentPrice - item.allTimeLow) <= 0.01)
     );
 
-    // Calculate savings opportunity based on frequency horizon
-    if (frequency === 'weekly') {
-      if (change7dAmount < 0) totalSavedOpportunity += Math.abs(change7dAmount);
-    } else if (frequency === 'every_3_days') {
-      // 3-day approximation using primary recent dip
-      const drop = change24hAmount < change7dAmount ? change24hAmount : change7dAmount;
-      if (drop < 0) totalSavedOpportunity += Math.abs(drop);
-    } else if (frequency === 'flash_only') {
-      if (isATL || change24hAmount < -15) {
-        totalSavedOpportunity += Math.abs(change24hAmount < 0 ? change24hAmount : (item.targetPrice - item.currentPrice));
+    // Calculate savings opportunity based on frequency horizon (only for in-stock items)
+    const isItemInStock = item.inStock !== false && item.specs?.in_stock !== false && item.specs?.is_sold_out !== true;
+    if (isItemInStock) {
+      if (frequency === 'weekly') {
+        if (change7dAmount < 0) totalSavedOpportunity += Math.abs(change7dAmount);
+      } else if (frequency === 'every_3_days') {
+        // 3-day approximation using primary recent dip
+        const drop = change24hAmount < change7dAmount ? change24hAmount : change7dAmount;
+        if (drop < 0) totalSavedOpportunity += Math.abs(drop);
+      } else if (frequency === 'flash_only') {
+        if (isATL || change24hAmount < -15) {
+          totalSavedOpportunity += Math.abs(change24hAmount < 0 ? change24hAmount : (item.targetPrice - item.currentPrice));
+        }
+      } else {
+        // Daily
+        if (change24hAmount < 0) totalSavedOpportunity += Math.abs(change24hAmount);
       }
-    } else {
-      // Daily
-      if (change24hAmount < 0) totalSavedOpportunity += Math.abs(change24hAmount);
     }
 
     // Evaluate potential alternative recommendations
@@ -78,9 +81,15 @@ export async function generateDailyDigestReport(
 
     // Simple deal score calculation
     let dealScore = 60;
-    if (isATL) dealScore = 98;
-    else if (change24hAmount < -20 || change7dAmount < -30) dealScore = 90;
-    else if (change7dAmount < 0) dealScore = 80;
+    if (!isItemInStock) {
+      dealScore = 0;
+    } else if (isATL) {
+      dealScore = 98;
+    } else if (change24hAmount < -20 || change7dAmount < -30) {
+      dealScore = 90;
+    } else if (change7dAmount < 0) {
+      dealScore = 80;
+    }
 
     return {
       item,
@@ -93,15 +102,18 @@ export async function generateDailyDigestReport(
     };
   });
 
-  // Determine biggest drop relevant to the chosen frequency
+  // Determine biggest drop relevant to the chosen frequency (preferring in-stock items)
+  const inStockSummaries = itemSummaries.filter(i => i.item.inStock !== false && i.item.specs?.in_stock !== false && i.item.specs?.is_sold_out !== true);
+  const candidateSummaries = inStockSummaries.length > 0 ? inStockSummaries : itemSummaries;
+
   let biggestDrop: DigestItemSummary | null = null;
   if (frequency === 'weekly') {
-    biggestDrop = [...itemSummaries].sort((a, b) => a.change7d.amount - b.change7d.amount)[0] || null;
+    biggestDrop = [...candidateSummaries].sort((a, b) => a.change7d.amount - b.change7d.amount)[0] || null;
   } else if (frequency === 'flash_only') {
-    const flashDeals = itemSummaries.filter(i => i.isAllTimeLow || i.change24h.amount < -15);
-    biggestDrop = (flashDeals.length > 0 ? flashDeals : itemSummaries).sort((a, b) => a.change24h.amount - b.change24h.amount)[0] || null;
+    const flashDeals = candidateSummaries.filter(i => i.isAllTimeLow || i.change24h.amount < -15);
+    biggestDrop = (flashDeals.length > 0 ? flashDeals : candidateSummaries).sort((a, b) => a.change24h.amount - b.change24h.amount)[0] || null;
   } else {
-    biggestDrop = [...itemSummaries].sort((a, b) => a.change24h.amount - b.change24h.amount)[0] || null;
+    biggestDrop = [...candidateSummaries].sort((a, b) => a.change24h.amount - b.change24h.amount)[0] || null;
   }
 
   const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -158,13 +170,14 @@ export async function generateDailyDigestReport(
       const prompt = `You are RigScouter AI, a precise, data-driven PC hardware market intelligence analyst.
 Analyze the user's tracked hardware watchlist for a "${frequencyLabel}" and generate:
 1. "headline": A crisp, professional headline summarizing the most significant price movement or market state for this timeframe (max 1 emoji like 📉 or ⚡ or 🔥, use concise model names like "RTX 4080 Super" instead of long SEO strings).
-2. "executiveSummary": A concise 2-3 sentence executive summary providing concrete hardware market insights for this ${frequencyLabel} timeframe: mention the exact models, retailers, price movements, and whether components are at a 90-day All-Time Low. Strictly avoid marketing fluff, hype words ("beast", "powerhouse", "hottest", "grab it now"), or generic filler. Focus on actionable pricing intelligence for a PC builder.
+2. "executiveSummary": A concise 2-3 sentence executive summary providing concrete hardware market insights for this ${frequencyLabel} timeframe: mention the exact models, retailers, price movements, and whether components are at a 90-day All-Time Low. Strictly avoid marketing fluff, hype words ("beast", "powerhouse", "hottest", "grab it now"), or generic filler. Focus on actionable pricing intelligence for a PC builder. Do not recommend or highlight out-of-stock items (inStock: false) as actionable deals.
 
 Return a SINGLE JSON object with keys "headline" and "executiveSummary".
 Watchlist Data: ${JSON.stringify(itemSummaries.map(i => ({
   model: cleanDisplayTitle(i.item.componentName || ''),
   category: i.item.category,
   retailer: i.item.retailer,
+  inStock: i.item.inStock !== false && i.item.specs?.in_stock !== false && i.item.specs?.is_sold_out !== true,
   currentPrice: i.item.currentPrice,
   previousPrice24h: i.item.previousPrice24h,
   previousPrice7d: i.item.previousPrice7d,

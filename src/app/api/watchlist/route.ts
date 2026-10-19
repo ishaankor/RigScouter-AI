@@ -278,6 +278,7 @@ export async function GET(req: NextRequest) {
             try { mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {}); } catch {}
             const mHistory = Array.isArray(mSpecs.price_history) ? mSpecs.price_history : [];
             const mComputed = computeHistoryIntervals(mHistory, mPrice);
+            const isInStock = mSpecs.in_stock !== false && mSpecs.inStock !== false && mSpecs.is_sold_out !== true && Number(m.deal_score ?? 50) > 0;
 
             retailerOffersMap.set(rKey, {
               id: m.id,
@@ -291,7 +292,7 @@ export async function GET(req: NextRequest) {
               title: m.name,
               url: m.product_url || '#',
               imageUrl: m.image_url,
-              inStock: true
+              inStock: isInStock
             });
           }
         }
@@ -305,6 +306,7 @@ export async function GET(req: NextRequest) {
                 if (!retailerOffersMap.has(roKey)) {
                   const roPrice = Number(ro.price || 0);
                   const roMsrp = Number(ro.originalPrice || roPrice);
+                  const roInStock = ro.inStock !== false && ro.in_stock !== false && ro.is_sold_out !== true;
                   retailerOffersMap.set(roKey, {
                     id: ro.id || `${m.id}-${roKey}`,
                     retailer: ro.retailer,
@@ -317,7 +319,7 @@ export async function GET(req: NextRequest) {
                     title: ro.title || m.name,
                     url: ro.url || '#',
                     imageUrl: ro.imageUrl || ro.image_url || m.image_url,
-                    inStock: ro.inStock ?? true
+                    inStock: roInStock
                   });
                 }
               }
@@ -447,14 +449,19 @@ export async function GET(req: NextRequest) {
         retailer: finalRetailer,
         productUrl: validatedProductUrl,
         imageUrl: finalImageUrl,
-        inStock: item.in_stock ?? true,
+        inStock: matchingRetailerOffer 
+          ? Boolean(matchingRetailerOffer.inStock) 
+          : (bestMatch ? (bestMatch.specs?.in_stock !== false && bestMatch.specs?.inStock !== false && bestMatch.specs?.is_sold_out !== true && Number(bestMatch.deal_score ?? 50) > 0) : (item.in_stock ?? true)),
         notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
         addedAt: item.added_at,
         earliestTrackedAt,
         retailerTargets: combinedRetailerTargets,
         specs: {
           RetailerOffers: retailerOffers,
-          price_history: combinedHistory
+          price_history: combinedHistory,
+          in_stock: matchingRetailerOffer 
+            ? Boolean(matchingRetailerOffer.inStock) 
+            : (bestMatch ? (bestMatch.specs?.in_stock !== false && bestMatch.specs?.inStock !== false && bestMatch.specs?.is_sold_out !== true && Number(bestMatch.deal_score ?? 50) > 0) : true)
         }
       };
     });

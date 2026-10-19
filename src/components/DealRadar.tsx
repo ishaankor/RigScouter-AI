@@ -36,7 +36,14 @@ export function DealRadar() {
       if (res.ok) {
         const data = await res.json();
         if (data.components && data.components.length > 0) {
-          setDeals(data.components.filter((c: HardwareComponent) => c.dealScore >= 80));
+          const isCompInStock = (c: any) => {
+            let specs = c.specs || {};
+            if (typeof specs === 'string') {
+              try { specs = JSON.parse(specs); } catch { specs = {}; }
+            }
+            return specs.in_stock !== false && specs.inStock !== false && specs.is_sold_out !== true && c.dealScore >= 80;
+          };
+          setDeals(data.components.filter(isCompInStock));
         }
       }
     } catch (e) {
@@ -53,10 +60,14 @@ export function DealRadar() {
       if (res.ok) {
         const data = await res.json();
         if (data.components && data.components.length > 0) {
-          setDeals(prev => {
-            const incoming = data.components.filter((c: HardwareComponent) => c.dealScore >= 80);
-            return incoming;
-          });
+          const isCompInStock = (c: any) => {
+            let specs = c.specs || {};
+            if (typeof specs === 'string') {
+              try { specs = JSON.parse(specs); } catch { specs = {}; }
+            }
+            return specs.in_stock !== false && specs.inStock !== false && specs.is_sold_out !== true && c.dealScore >= 80;
+          };
+          setDeals(() => data.components.filter(isCompInStock));
         }
       }
     } catch (e) {}
