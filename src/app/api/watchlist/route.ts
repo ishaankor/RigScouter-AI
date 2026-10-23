@@ -5,6 +5,19 @@ import { calculateMultiRetailerDealScore } from '@/lib/scrapers/price-scraper';
 
 export const runtime = 'edge';
 
+function normalizeCat(c: string): string {
+  const s = (c || '').toLowerCase().trim();
+  if (s.includes('cpu') || s.includes('processor')) return 'cpu';
+  if (s.includes('gpu') || s.includes('graphics') || s.includes('video card')) return 'gpu';
+  if (s.includes('motherboard') || s.includes('mobo')) return 'motherboard';
+  if (s.includes('ram') || s.includes('memory')) return 'ram';
+  if (s.includes('ssd') || s.includes('storage') || s.includes('drive')) return 'storage';
+  if (s.includes('psu') || s.includes('power supply')) return 'psu';
+  if (s.includes('case') || s.includes('chassis')) return 'case';
+  if (s.includes('cooler') || s.includes('cooling')) return 'cooler';
+  return s;
+}
+
 function computeHistoryIntervals(historyList: any[], currentPrice: number) {
   const current = Number(currentPrice) || 0;
   if (!Array.isArray(historyList) || historyList.length === 0) {
@@ -224,6 +237,12 @@ export async function GET(req: NextRequest) {
         const modelTokens = tokens.filter((t: string) => /\d/.test(t) || t.length >= 4);
 
         (hwCatalog || []).forEach((h: any) => {
+          const itemCat = normalizeCat(item.category || '');
+          const hCat = normalizeCat(h.category || '');
+          if (itemCat && hCat && itemCat !== hCat && itemCat !== 'hardware' && hCat !== 'hardware') {
+            return;
+          }
+
           const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''} ${h.brand || ''}`.toLowerCase();
           
           // Brand conflict check: If item specifies brand A, do not match candidate with brand B
@@ -231,6 +250,17 @@ export async function GET(req: NextRequest) {
             const hasBrand = cBrands.some((b: string) => new RegExp(`\\b${b}\\b`, 'i').test(hText));
             const hasConflict = PRIMARY_BRANDS.some((b: string) => !cBrands.includes(b) && new RegExp(`\\b${b}\\b`, 'i').test(hText));
             if (!hasBrand && hasConflict) return;
+          }
+
+          // GPU variant isolation (e.g. prevent RTX 4070 matching 4070 Ti or 4070 Super)
+          const isSuper = (s: string) => /\bsuper\b/i.test(s);
+          const isTi = (s: string) => /\bti\b/i.test(s);
+          const isXtx = (s: string) => /\bxtx\b/i.test(s);
+          const hasGpuIndicator = (s: string) => s.includes('40') || s.includes('50') || s.includes('rtx') || s.includes('7900') || s.includes('rx');
+          if (hasGpuIndicator(cName) || hasGpuIndicator(hText)) {
+            if (isSuper(cName) !== isSuper(hText)) return;
+            if (isTi(cName) !== isTi(hText)) return;
+            if (isXtx(cName) !== isXtx(hText)) return;
           }
 
           // Model token check: All critical digit tokens must match
@@ -278,7 +308,7 @@ export async function GET(req: NextRequest) {
             try { mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {}); } catch {}
             const mHistory = Array.isArray(mSpecs.price_history) ? mSpecs.price_history : [];
             const mComputed = computeHistoryIntervals(mHistory, mPrice);
-            const isInStock = mSpecs.in_stock !== false && mSpecs.inStock !== false && mSpecs.is_sold_out !== true && Number(m.deal_score ?? 50) > 0;
+            const isInStock = mSpecs.in_stock !== false && mSpecs.inStock !== false && mSpecs.is_sold_out !== true;
 
             retailerOffersMap.set(rKey, {
               id: m.id,
@@ -435,35 +465,41 @@ export async function GET(req: NextRequest) {
 
       const finalImageUrl = item.image_url || bestMatch?.image_url || 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
 
+      let bestSpecs: any = {};
+      try { bestSpecs = typeof bestMatch?.specs === 'string' ? JSON.parse(bestMatch.specs || '{}') : (bestMatch?.specs || {}); } catch {}
+      const isMatchInStock = bestMatch 
+        ? (bestSpecs.in_stock !== false && bestSpecs.inStock !== false && bestSpecs.is_sold_out !== true) 
+        : (item.in_stock ?? true);
+
       return {
-        id: item.id,
-        userId: item.user_id || userId,
-        componentName: item.component_name || item.name,
-        category: item.category || bestMatch?.category || 'GPU',
-        targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.95 * 100) / 100 : 0)),
-        currentPrice: finalPrice,
-        previousPrice24h: effectiveP24,
-        previousPrice7d: effectiveP7d,
-        previousPrice30d: effectiveP30d,
-        allTimeLow: effectiveATL,
-        retailer: finalRetailer,
-        productUrl: validatedProductUrl,
-        imageUrl: finalImageUrl,
-        inStock: matchingRetailerOffer 
-          ? Boolean(matchingRetailerOffer.inStock) 
-          : (bestMatch ? (bestMatch.specs?.in_stock !== false && bestMatch.specs?.inStock !== false && bestMatch.specs?.is_sold_out !== true && Number(bestMatch.deal_score ?? 50) > 0) : (item.in_stock ?? true)),
-        notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
-        addedAt: item.added_at,
-        earliestTrackedAt,
-        retailerTargets: combinedRetailerTargets,
-        specs: {
-          RetailerOffers: retailerOffers,
-          price_history: combinedHistory,
-          in_stock: matchingRetailerOffer 
+          id: item.id,
+          userId: item.user_id || userId,
+          componentName: item.component_name || item.name,
+          category: item.category || bestMatch?.category || 'GPU',
+          targetPrice: Number(item.target_price || (finalPrice > 0 ? Math.round(finalPrice * 0.95 * 100) / 100 : 0)),
+          currentPrice: finalPrice,
+          previousPrice24h: effectiveP24,
+          previousPrice7d: effectiveP7d,
+          previousPrice30d: effectiveP30d,
+          allTimeLow: effectiveATL,
+          retailer: finalRetailer,
+          productUrl: validatedProductUrl,
+          imageUrl: finalImageUrl,
+          inStock: matchingRetailerOffer 
             ? Boolean(matchingRetailerOffer.inStock) 
-            : (bestMatch ? (bestMatch.specs?.in_stock !== false && bestMatch.specs?.inStock !== false && bestMatch.specs?.is_sold_out !== true && Number(bestMatch.deal_score ?? 50) > 0) : true)
-        }
-      };
+            : isMatchInStock,
+          notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
+          addedAt: item.added_at,
+          earliestTrackedAt,
+          retailerTargets: combinedRetailerTargets,
+          specs: {
+            RetailerOffers: retailerOffers,
+            price_history: combinedHistory,
+            in_stock: matchingRetailerOffer 
+              ? Boolean(matchingRetailerOffer.inStock) 
+              : isMatchInStock
+          }
+        };
     });
 
     // Aggregate sibling offers per model/name across hardware_components
@@ -977,4 +1013,28 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'Watchlist update failed' }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/watchlist
+ * Deletes a watchlist item by id passed in query parameter or json body.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const urlId = req.nextUrl.searchParams.get('id');
+    let bodyId: string | undefined;
+    try {
+      const body = await req.json();
+      bodyId = body?.id;
+    } catch {}
+    const idToDelete = urlId || bodyId;
+    if (!idToDelete) {
+      return NextResponse.json({ error: 'Missing item id' }, { status: 400 });
+    }
+    await supabaseAdmin.from('watchlist_items').delete().eq('id', idToDelete);
+    return NextResponse.json({ success: true, deletedId: idToDelete });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Delete failed' }, { status: 500 });
+  }
+}
+
 

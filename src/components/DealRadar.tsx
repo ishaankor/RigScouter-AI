@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { HardwareComponent } from '@/lib/types/hardware';
 import { Flame, ExternalLink, RefreshCw, Radio, Zap, TrendingDown, Wifi, WifiOff } from 'lucide-react';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
 
 interface LivePriceDrop {
   query: string;
