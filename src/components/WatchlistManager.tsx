@@ -96,6 +96,7 @@ interface WatchlistManagerProps {
   initialWatchlist?: WatchlistItem[];
   initialTrendingItems?: HardwareComponent[];
   user?: any;
+  isAuthLoading?: boolean;
   onOpenAuth?: () => void;
 }
 
@@ -103,11 +104,13 @@ export function WatchlistManager({
   initialWatchlist = [],
   initialTrendingItems = [],
   user,
+  isAuthLoading = false,
   onOpenAuth
 }: WatchlistManagerProps) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialWatchlist);
   const [trendingItems, setTrendingItems] = useState<HardwareComponent[]>(initialTrendingItems);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedInterval, setSelectedInterval] = useState<'24h' | '7d' | '30d'>('24h');
   const [activeTab, setActiveTab] = useState<'watchlist' | 'trending'>('watchlist');
@@ -650,6 +653,7 @@ export function WatchlistManager({
         console.warn('Database fetch warning:', e);
       } finally {
         setIsLoading(false);
+        setHasLoaded(true);
       }
     }
     loadDatabaseWatchlist();
@@ -2026,9 +2030,31 @@ export function WatchlistManager({
       </div>
 
       {activeTab === 'watchlist' ? (
-        !user ? (
+        (isAuthLoading || !hasLoaded || (isLoading && watchlist.length === 0)) ? (
+          /* Premium Skeleton Loading State */
+          <div key="watchlist-skeleton" className="glass-card rounded-2xl border border-gray-800 p-8 space-y-4 animate-pulse">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-800/60">
+              <div className="h-5 bg-gray-800/80 rounded-lg w-48" />
+              <div className="h-8 bg-gray-800/60 rounded-xl w-32" />
+            </div>
+            <div className="space-y-3 pt-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-16 bg-gray-900/60 rounded-xl border border-gray-800/40 flex items-center justify-between px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-800/80 rounded-lg" />
+                    <div className="space-y-1.5">
+                      <div className="h-3.5 bg-gray-800/80 rounded w-44" />
+                      <div className="h-2.5 bg-gray-800/50 rounded w-28" />
+                    </div>
+                  </div>
+                  <div className="h-4 bg-gray-800/60 rounded w-20" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : !user ? (
           /* Logged Out / Guest Prompt */
-          <div className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <div key="watchlist-guest" className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
             <div className="w-16 h-16 rounded-2xl bg-cyan-950/60 border border-cyan-800/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/10">
               <Lock className="w-8 h-8" />
             </div>
@@ -2057,7 +2083,7 @@ export function WatchlistManager({
           </div>
         ) : watchlist.length === 0 ? (
           /* Logged In but Empty Watchlist */
-          <div className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <div key="watchlist-empty" className="glass-card rounded-2xl border border-gray-800 p-12 text-center flex flex-col items-center justify-center space-y-4">
             <div className="w-16 h-16 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-cyan-400 shadow-lg">
               <Bell className="w-8 h-8" />
             </div>
@@ -2086,7 +2112,7 @@ export function WatchlistManager({
           </div>
         ) : (
           /* Watchlist Table */
-          <div className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
+          <div key="watchlist-table" className="glass-card rounded-2xl border border-gray-800 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-gray-900/60 text-gray-400 uppercase font-semibold text-[10px] tracking-wider border-b border-gray-800">

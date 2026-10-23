@@ -43,6 +43,8 @@ code, pre, .font-mono {
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.35);
   border-radius: 16px;
   transform: translateZ(0);
+  isolation: isolate;
+  backface-visibility: hidden;
 }
 
 .glass-card-hover {

@@ -21,17 +21,22 @@ import {
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'watchlist' | 'digest'>('watchlist');
   const [user, setUser] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     // Fetch initial auth session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setIsAuthLoading(false);
+    }).catch(() => {
+      setIsAuthLoading(false);
     });
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      setIsAuthLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -143,7 +148,7 @@ export default function DashboardPage() {
 
       {/* Dynamic Tab Views */}
       <div className={activeTab === 'watchlist' ? 'block' : 'hidden'}>
-        <WatchlistManager user={user} onOpenAuth={() => setAuthModalOpen(true)} />
+        <WatchlistManager user={user} isAuthLoading={isAuthLoading} onOpenAuth={() => setAuthModalOpen(true)} />
       </div>
       <div className={activeTab === 'digest' ? 'block' : 'hidden'}>
         <DailyDigestPreview user={user} onOpenAuth={() => setAuthModalOpen(true)} />
