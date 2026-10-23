@@ -13,6 +13,39 @@ const rawTavilyKey = process.env.TAVILY_API_KEY || 'tvly-dev-POYwI-ISInW8TGOwNfn
 const TAVILY_API_KEYS = rawTavilyKey.split(',').map(k => k.trim()).filter(Boolean);
 const DIFFBOT_TOKEN = process.env.DIFFBOT_TOKEN || '';
 
+function isLegacyHardware(query: string): boolean {
+  const upper = (query || '').toUpperCase();
+  // Motherboards (AM4 and older AMD, Intel LGA 1200 / 1151 / 1150 / 1155)
+  if (/\b(AM4|AM3\+?|AM2\+?|FM2\+?)\b/.test(upper)) return true;
+  if (/\b(A320|B350|X370|B450|X470|A520|B550|X570)[A-Z0-9\-]*\b/.test(upper)) return true;
+  if (/\b(LGA\s*(?:1200|1151|1150|1155|775|1366|2011|2066))\b/.test(upper)) return true;
+  if (/\b(Z590|B560|H570|H510|Z490|B460|H470|H410|W480|Z390|Z370|H370|B365|B360|H310|Z270|H270|B250|Z170|H170|B150|H110|Z97|H97|Z87|H87|B85|H81|Z77|Z75|Z68|P67|H67|H61)[A-Z0-9\-]*\b/.test(upper)) return true;
+
+  // Intel CPUs (11th Gen and older: guarded by INTEL or CORE or I3/5/7/9)
+  if (/\b(INTEL|CORE|I[3579][ -]?)\b/.test(upper)) {
+    const intelMatch = upper.match(/\b(?:I[3579][ -]?)?([2-9]\d{3}|1[01]\d{3})([A-Z]{0,3})\b/);
+    if (intelMatch && parseInt(intelMatch[1], 10) <= 11900) return true;
+  }
+
+  // AMD CPUs (Ryzen 1000-4000, FX, Phenom, Athlon, Threadripper 1000-3000)
+  if (/\b(RYZEN|AMD|THREADRIPPER)\b/.test(upper)) {
+    if (/\b(?:RYZEN\s*[3579]\s*)?([1-4]\d{3})([A-Z]{0,3})\b/.test(upper)) return true;
+    if (/\b(FX-\d+|AM3|AM3\+|PHENOM|ATHLON)\b/.test(upper)) return true;
+  }
+
+  // GPUs (GTX, RTX 20/30, RX 400/500/5000/6000)
+  if (/\bGTX\s*(?:\d{3,4})\b/.test(upper)) return true;
+  if (/\bRTX\s*20\d{2}\b/.test(upper)) return true;
+  if (/\bRTX\s*30\d{2}(?:\s*TI)?\b/.test(upper)) return true;
+  if (/\bRX\s*[45][6-9]0\b/.test(upper)) return true;
+  if (/\bRX\s*[56]\d{3}(?:\s*XT)?\b/.test(upper)) return true;
+
+  // DDR3 / DDR2 RAM
+  if (/\b(DDR3|DDR2|DDR1)\b/.test(upper)) return true;
+
+  return false;
+}
+
 // Live Web Scraper using Tavily Search API + DiffBot Product Extraction
 export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<TavilyScrapeResponse> {
   const cleanQuery = queryOrUrl.trim();
@@ -32,16 +65,22 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
       bestPrice = diffData.price;
       if (diffData.title) bestTitle = diffData.title;
       bestRetailer = detectRetailer(cleanQuery);
+      bestImageUrl = diffData.imageUrl || null;
     }
   } else {
     // 2. Hybrid: Tavily Search -> DiffBot Extraction
     let urlsToCheck: string[] = [];
+    const isLegacy = isLegacyHardware(cleanQuery);
+    const domainList = isLegacy
+      ? ['amazon.com', 'newegg.com', 'bhphotovideo.com', 'ebay.com']
+      : ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com'];
+    const searchRetailers = isLegacy ? 'amazon OR newegg OR ebay' : 'amazon OR newegg OR bestbuy OR microcenter';
     
     // Step A: Find Product URLs
     for (const activeKey of TAVILY_API_KEYS) {
       if (urlsToCheck.length > 0) break;
       try {
-        const searchQuery = `${cleanQuery} amazon OR newegg OR bestbuy OR microcenter`;
+        const searchQuery = `${cleanQuery} ${searchRetailers}`;
         const res = await fetch('https://api.tavily.com/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -50,15 +89,30 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
             query: searchQuery,
             search_depth: 'basic',
             max_results: 1,
-            include_domains: ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com']
+            include_domains: domainList
           })
         });
 
         if (res.ok) {
           const data = await res.json();
           const results = data.results || [];
-          urlsToCheck = results.map((r: any) => r.url).filter(Boolean);
-          console.log(`Tavily found ${urlsToCheck.length} URLs for DiffBot extraction.`);
+          urlsToCheck = results
+            .filter((r: any) => {
+              const text = `${r.title || ''} ${r.content || ''}`.toLowerCase();
+              if (
+                text.includes('no longer carried') ||
+                text.includes('item no longer carried') ||
+                text.includes('this item is no longer available') ||
+                text.includes('not available in store or online')
+              ) {
+                console.log(`[Tavily Filter] Dropping discontinued hit: ${r.url}`);
+                return false;
+              }
+              return true;
+            })
+            .map((r: any) => r.url)
+            .filter(Boolean);
+          console.log(`Tavily found ${urlsToCheck.length} active URLs for DiffBot extraction.`);
         } else {
           console.log('Tavily Primary HTTP Error:', res.status, await res.text());
         }
@@ -189,6 +243,17 @@ async function extractProductWithDiffBot(url: string, retryCount = 0): Promise<{
     if (res.ok && data) {
       const object = data.objects?.[0];
       if (object) {
+        const rawContent = `${object.title || ''} ${object.text || ''} ${object.availability || ''}`.toLowerCase();
+        if (
+          rawContent.includes('no longer carried') ||
+          rawContent.includes('item no longer carried') ||
+          rawContent.includes('this item is no longer carried') ||
+          rawContent.includes('not available in store or online')
+        ) {
+          console.warn(`[DiffBot] Rejecting product as no longer carried: ${url}`);
+          return null;
+        }
+
         console.log(`[DiffBot RAW Object for ${url}]:`, JSON.stringify({
            offerPrice: object.offerPrice,
            offerPriceDetails: object.offerPriceDetails,
