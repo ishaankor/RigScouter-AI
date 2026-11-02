@@ -126,10 +126,17 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
       console.log(`[DiffBot] Checking URL: ${url}`);
       const diffData = await extractProductWithDiffBot(url);
       if (diffData && diffData.price) {
-        // Pick the lowest price we can find across the top results
+        const itemTitle = diffData.title || '';
+        const validation = isValidHardwareOffer(cleanQuery, itemTitle, diffData.price, category);
+        if (!validation.valid) {
+          console.log(`[DiffBot Filter] Skipping candidate: ${validation.reason} -> "${itemTitle}" ($${diffData.price})`);
+          continue;
+        }
+
+        // Pick the lowest price we can find across the top valid results
         if (!bestPrice || diffData.price < bestPrice) {
           bestPrice = diffData.price;
-          bestTitle = diffData.title || bestTitle;
+          bestTitle = itemTitle || bestTitle;
           bestUrl = url;
           bestRetailer = detectRetailer(url);
           bestImageUrl = diffData.imageUrl || bestImageUrl;
@@ -337,4 +344,43 @@ function getCategoryImage(category: ComponentCategory): string {
     case 'SSD': return 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=600&q=80';
     default: return 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80';
   }
+}
+
+export function isValidHardwareOffer(query: string, title: string, price: number, category: ComponentCategory): { valid: boolean; reason?: string } {
+  if (price <= 0) return { valid: false, reason: 'Price <= 0' };
+  const tLower = (title || '').toLowerCase();
+  const qLower = (query || '').toLowerCase();
+
+  // 1. Relational/compatibility phrasing:
+  // Standalone PC hardware never describes itself as "Compatible with [X]", "Fits [X]", "Replacement for [X]"
+  const hasRelational = /\b(compatible\s+(with|for)|compatibility\s+with|replacement\s+for|designed\s+for|fits?|for\s+(gigabyte|asus|msi|nvidia|amd|intel))\b/i.test(tLower);
+  const queryWantsRelational = /\b(compatible|fits?|for|replacement|bracket|plate|adapter)\b/i.test(qLower);
+  if (hasRelational && !queryWantsRelational) {
+    return { valid: false, reason: 'Accessory compatibility phrasing detected' };
+  }
+
+  // 2. Multi-model slash compatibility pattern (e.g. 5060/5050, 4070/4080)
+  if (tLower.includes('/') && !qLower.includes('/')) {
+    if (/\b\d{3,4}[a-z]*\s*\/\s*\d{3,4}[a-z]*\b/i.test(tLower)) {
+      return { valid: false, reason: 'Multi-model slash accessory detected' };
+    }
+  }
+
+  // 3. Prebuilt / laptop rejection if searching for standalone components
+  if (['GPU', 'CPU', 'Motherboard', 'RAM', 'SSD', 'PSU'].includes(category)) {
+    const isPrebuilt = /\b(gaming\s+pc|gaming\s+desktop|desktop\s+pc|prebuilt|gaming\s+computer|laptop|notebook)\b/i.test(tLower);
+    const userWantsPrebuilt = /\b(pc|desktop|prebuilt|laptop|computer)\b/i.test(qLower);
+    if (isPrebuilt && !userWantsPrebuilt) {
+      return { valid: false, reason: 'Prebuilt system detected instead of standalone component' };
+    }
+  }
+
+  // 4. Dynamic realistic hardware price floor
+  if (category === 'GPU') {
+    if (price < 75.0) return { valid: false, reason: 'Price below realistic GPU floor ($75)' };
+  } else if (category === 'CPU') {
+    if (price < 40.0) return { valid: false, reason: 'Price below realistic CPU floor ($40)' };
+  }
+
+  return { valid: true };
 }
