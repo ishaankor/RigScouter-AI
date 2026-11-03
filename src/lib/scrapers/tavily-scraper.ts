@@ -359,14 +359,7 @@ export function isValidHardwareOffer(query: string, title: string, price: number
     return { valid: false, reason: 'Accessory compatibility phrasing detected' };
   }
 
-  // 2. Multi-model slash compatibility pattern (e.g. 5060/5050, 4070/4080)
-  if (tLower.includes('/') && !qLower.includes('/')) {
-    if (/\b\d{3,4}[a-z]*\s*\/\s*\d{3,4}[a-z]*\b/i.test(tLower)) {
-      return { valid: false, reason: 'Multi-model slash accessory detected' };
-    }
-  }
-
-  // 3. Prebuilt / laptop rejection if searching for standalone components
+  // 2. Prebuilt / laptop rejection if searching for standalone components
   if (['GPU', 'CPU', 'Motherboard', 'RAM', 'SSD', 'PSU'].includes(category)) {
     const isPrebuilt = /\b(gaming\s+pc|gaming\s+desktop|desktop\s+pc|prebuilt|gaming\s+computer|laptop|notebook)\b/i.test(tLower);
     const userWantsPrebuilt = /\b(pc|desktop|prebuilt|laptop|computer)\b/i.test(qLower);
