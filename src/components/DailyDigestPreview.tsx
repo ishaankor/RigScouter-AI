@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSummary, WatchlistItem } from '@/lib/types/hardware';
 import { generateDailyDigestReport, cleanDisplayTitle } from '@/lib/ai/digest-generator';
 import { supabase } from '@/lib/db/supabase';
-import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
+import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck, History, Clock, ChevronDown, ChevronUp, Database, BookmarkCheck, ArrowUpRight } from 'lucide-react';
 
 interface DailyDigestPreviewProps {
   user?: any;
@@ -12,6 +12,7 @@ interface DailyDigestPreviewProps {
 }
 
 export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps) {
+  const [activeTab, setActiveTab] = useState<'preview' | 'history'>('preview');
   const [frequency, setFrequency] = useState<DigestFrequency>('daily');
   const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'discord'>('email');
   const [customEmail, setCustomEmail] = useState('');
@@ -25,6 +26,29 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [pastDigests, setPastDigests] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoggingSnapshot, setIsLoggingSnapshot] = useState(false);
+  const [expandedDigestId, setExpandedDigestId] = useState<string | null>(null);
+
+  const fetchPastDigests = async () => {
+    if (!user?.id) {
+      setPastDigests([]);
+      return;
+    }
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/digests?userId=${encodeURIComponent(user.id)}`);
+      if (res.ok) {
+        const json = await res.json();
+        setPastDigests(json.digests || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching past digests:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const fetchUserWatchlist = async (): Promise<WatchlistItem[]> => {
     if (!user?.id) return [];
@@ -166,8 +190,38 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
       }
     });
 
+    fetchPastDigests();
+
     return () => { isMounted = false; };
   }, [user?.id]);
+
+  const handleLogDigestSnapshot = async () => {
+    if (!user?.id) {
+      onOpenAuth?.();
+      return;
+    }
+    if (!report) return;
+    setIsLoggingSnapshot(true);
+    try {
+      const res = await fetch('/api/digests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, report })
+      });
+      if (res.ok) {
+        setSaveNotice('✅ Digest snapshot recorded directly to Supabase daily_digests!');
+        await fetchPastDigests();
+      } else {
+        const err = await res.json();
+        setSaveNotice(`⚠️ Failed to record snapshot: ${err.error || 'Server error'}`);
+      }
+    } catch (e: any) {
+      setSaveNotice(`⚠️ Network error: ${e.message}`);
+    } finally {
+      setIsLoggingSnapshot(false);
+      setTimeout(() => setSaveNotice(null), 5000);
+    }
+  };
 
   // 3. Generate AI digest preview report whenever watchlist items, frequency, or intervals change
   useEffect(() => {
@@ -384,11 +438,21 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {user && (
             <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4" /> Subscribed (Active)
             </span>
+          )}
+          {report && (
+            <button
+              onClick={handleLogDigestSnapshot}
+              disabled={isLoggingSnapshot}
+              className="bg-purple-950/60 hover:bg-purple-900/60 border border-purple-700/50 text-purple-200 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            >
+              <BookmarkCheck className="w-3.5 h-3.5 text-purple-400" />
+              <span>{isLoggingSnapshot ? 'Saving...' : 'Save Snapshot to Supabase'}</span>
+            </button>
           )}
           <button
             onClick={handleRegenerate}
@@ -401,6 +465,188 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         </div>
       </div>
 
+      {/* Tab Navigation: Live Preview vs Past Digests History */}
+      <div className="flex items-center gap-2 border-b border-gray-800 pb-3 mb-6">
+        <button
+          onClick={() => setActiveTab('preview')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'preview'
+              ? 'bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Live Digest Preview & Settings</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('history');
+            fetchPastDigests();
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          <History className="w-3.5 h-3.5 text-purple-400" />
+          <span>Past Digests / History</span>
+          {pastDigests.length > 0 && (
+            <span className="bg-purple-500/30 text-purple-200 text-[10px] px-2 py-0.5 rounded-full border border-purple-500/40">
+              {pastDigests.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'history' ? (
+        <div className="bg-gray-950/80 p-6 rounded-2xl border border-gray-800 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-800">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Database className="w-4 h-4 text-cyan-400" />
+                Supabase Daily Digest Logs
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Archived records generated by the scheduled cron worker or saved snapshots.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchPastDigests}
+                disabled={isLoadingHistory}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold rounded-lg border border-gray-700 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isLoadingHistory ? 'animate-spin' : ''}`} />
+                Refresh Logs
+              </button>
+              {report && (
+                <button
+                  onClick={handleLogDigestSnapshot}
+                  disabled={isLoggingSnapshot}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold rounded-lg shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <BookmarkCheck className="w-3.5 h-3.5" />
+                  {isLoggingSnapshot ? 'Saving...' : 'Save Current Preview to Supabase'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isLoadingHistory ? (
+            <div className="py-16 text-center space-y-3">
+              <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
+              <p className="text-sm text-gray-300 font-semibold">Loading digest history from Supabase...</p>
+            </div>
+          ) : pastDigests.length === 0 ? (
+            <div className="py-14 text-center max-w-md mx-auto space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 mx-auto shadow-inner">
+                <History className="w-6 h-6 text-purple-400" />
+              </div>
+              <h4 className="text-sm font-bold text-white">No Archived Digests in Supabase Yet</h4>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Automated briefings are inserted into the <code className="text-purple-300 bg-purple-950/40 px-1 py-0.5 rounded">daily_digests</code> table whenever the daily cron triggers at 08:00 UTC. You can also save your current live preview right now to start your archive.
+              </p>
+              {report && (
+                <button
+                  onClick={handleLogDigestSnapshot}
+                  disabled={isLoggingSnapshot}
+                  className="mt-3 px-4 py-2 bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-gray-950 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+                >
+                  <BookmarkCheck className="w-4 h-4" />
+                  <span>{isLoggingSnapshot ? 'Saving...' : 'Save Current Preview Snapshot to Supabase'}</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {pastDigests.map((digest) => {
+                const isExpanded = expandedDigestId === digest.id;
+                const dateObj = new Date(digest.generated_at);
+                const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                const reportData = digest.report_data || {};
+                const itemsCount = reportData.items?.length || 0;
+                const savings = Number(digest.total_saved_opportunity || 0);
+
+                return (
+                  <div
+                    key={digest.id}
+                    className="bg-white/5 border border-white/10 rounded-xl p-5 hover:border-purple-500/30 transition-all shadow-sm"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="flex items-center gap-1 font-mono text-gray-400">
+                            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                            {dateStr} at {timeStr}
+                          </span>
+                          {savings > 0 && (
+                            <span className="bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 px-2 py-0.5 rounded-full font-bold text-[11px] flex items-center gap-1">
+                              <TrendingDown className="w-3 h-3" />
+                              ${savings.toFixed(2)} Total Opportunity
+                            </span>
+                          )}
+                          <span className="bg-purple-950/60 text-purple-300 border border-purple-800/40 px-2 py-0.5 rounded-full font-semibold text-[11px]">
+                            {itemsCount} Component{itemsCount === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white">
+                          {digest.headline}
+                        </h4>
+                        <p className="text-xs text-gray-300 leading-relaxed pt-1">
+                          {digest.executive_summary}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setExpandedDigestId(isExpanded ? null : digest.id)}
+                        className="self-start sm:self-center px-3 py-1.5 bg-gray-900 hover:bg-gray-800 border border-gray-700 text-gray-300 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                      >
+                        <span>{isExpanded ? 'Hide Details' : 'View Snapshot'}</span>
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* Expandable Report Items Snapshot */}
+                    {isExpanded && (
+                      <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
+                        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Database className="w-3 h-3 text-cyan-400" />
+                          Tracked Hardware State at Dispatch
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          {(reportData.items || []).map((entry: any, iIdx: number) => {
+                            const it = entry.item || entry;
+                            const title = cleanDisplayTitle(it.componentName || it.name || 'Component');
+                            const price = Number(it.currentPrice || 0);
+                            const retailer = it.retailer || 'Retailer';
+                            return (
+                              <div
+                                key={iIdx}
+                                className="bg-black/30 border border-white/5 p-3 rounded-lg flex items-center justify-between text-xs"
+                              >
+                                <div className="truncate pr-2">
+                                  <div className="font-semibold text-gray-200 truncate">{title}</div>
+                                  <div className="text-[10px] text-gray-400 font-mono mt-0.5">{retailer}</div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="font-bold text-white">${price.toFixed(2)}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Controls Configuration */}
         <div className="lg:col-span-4 bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-6">
@@ -917,6 +1163,7 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
