@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { getVerifiedUser } from '@/lib/auth/server-auth';
 import { sendDiscordTargetAlertWebhook, isValidDiscordWebhookUrl } from '@/lib/notifications/discord';
 
 export const runtime = 'edge';
@@ -197,9 +198,17 @@ function buildTargetMetEmailHtml({
 
 export async function POST(req: NextRequest) {
   try {
+    const verifiedUser = await getVerifiedUser(req);
+    if (!verifiedUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid session or token required to dispatch notifications.' },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
+    const effectiveUserId = (verifiedUser.role === 'service' && body.userId) ? body.userId : verifiedUser.id;
     const {
-      userId,
       userEmail,
       componentName,
       category = 'GPU',
@@ -210,6 +219,7 @@ export async function POST(req: NextRequest) {
       imageUrl,
       force = false
     } = body;
+    const userId = effectiveUserId;
 
     if (!componentName || typeof targetPrice !== 'number' || typeof currentPrice !== 'number') {
       return NextResponse.json({ error: 'componentName, targetPrice, and currentPrice are required' }, { status: 400 });

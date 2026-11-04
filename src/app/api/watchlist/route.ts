@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { getVerifiedUser } from '@/lib/auth/server-auth';
 import { calculateMultiRetailerDealScore } from '@/lib/scrapers/price-scraper';
 
 export const runtime = 'edge';
@@ -110,12 +111,24 @@ function computeHistoryIntervals(historyList: any[], currentPrice: number) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const userId = req.nextUrl.searchParams.get('userId');
+    const requestedUserId = req.nextUrl.searchParams.get('userId');
+    let userId: string | null = null;
 
     // 1. Fetch User Watchlist Items ONLY if a valid userId is provided
     let rawWatchlist: any[] = [];
     let userPrefTargets: Record<string, Record<string, number>> = {};
-    if (userId && userId !== 'guest') {
+    if (requestedUserId && requestedUserId !== 'guest') {
+      const verifiedUser = await getVerifiedUser(req);
+      if (!verifiedUser) {
+        return NextResponse.json(
+          { error: 'Unauthorized: Valid Supabase session required to access watchlist.' },
+          { status: 401 }
+        );
+      }
+
+      // Ensure users only access their own items unless caller is internal system
+      userId = (verifiedUser.role === 'service') ? requestedUserId : verifiedUser.id;
+
       const { data: userWatchlist } = await supabaseAdmin
         .from('watchlist_items')
         .select('*')
@@ -580,9 +593,17 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const verifiedUser = await getVerifiedUser(req);
+    if (!verifiedUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid Supabase session required to add items to watchlist.' },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
+    const effectiveUserId = (verifiedUser.role === 'service' && body.userId) ? body.userId : verifiedUser.id;
     const {
-      userId = 'demo-user-123',
       componentName,
       category = 'GPU',
       targetPrice,
@@ -602,6 +623,7 @@ export async function POST(req: NextRequest) {
       retailerOffers: clientRetailerOffers,
       retailerTargets: clientRetailerTargets
     } = body;
+    const userId = effectiveUserId;
 
     if (!componentName || !targetPrice) {
       return NextResponse.json({ error: 'componentName and targetPrice are required' }, { status: 400 });
@@ -876,8 +898,18 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
+    const verifiedUser = await getVerifiedUser(req);
+    if (!verifiedUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid Supabase session required to update watchlist items.' },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
-    const { id, ids, userId, componentName, targetPrice, retailer, notifyOnFlashDrop } = body;
+    const effectiveUserId = (verifiedUser.role === 'service' && body.userId) ? body.userId : verifiedUser.id;
+    const { id, ids, componentName, targetPrice, retailer, notifyOnFlashDrop } = body;
+    const userId = effectiveUserId;
 
     const updates: any = {};
     if (typeof targetPrice === 'number' && targetPrice > 0) {
@@ -1020,6 +1052,14 @@ export async function PATCH(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const verifiedUser = await getVerifiedUser(req);
+    if (!verifiedUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid Supabase session required to delete watchlist items.' },
+        { status: 401 }
+      );
+    }
+
     const urlId = req.nextUrl.searchParams.get('id');
     let bodyId: string | undefined;
     try {
@@ -1030,7 +1070,13 @@ export async function DELETE(req: NextRequest) {
     if (!idToDelete) {
       return NextResponse.json({ error: 'Missing item id' }, { status: 400 });
     }
-    await supabaseAdmin.from('watchlist_items').delete().eq('id', idToDelete);
+
+    // Ensure users can only delete their own watchlist items
+    let deleteQuery = supabaseAdmin.from('watchlist_items').delete().eq('id', idToDelete);
+    if (verifiedUser.role !== 'service') {
+      deleteQuery = deleteQuery.eq('user_id', verifiedUser.id);
+    }
+    await deleteQuery;
     return NextResponse.json({ success: true, deletedId: idToDelete });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Delete failed' }, { status: 500 });

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getVerifiedUser } from '@/lib/auth/server-auth';
 import { sendDiscordTestWebhook, sendDiscordTargetAlertWebhook } from '@/lib/notifications/discord';
 
 export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
   try {
+    const verifiedUser = await getVerifiedUser(req);
+    if (!verifiedUser) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Sign-in required to test Discord webhook integrations.' },
+        { status: 401 }
+      );
+    }
+
     const { webhookUrl, sampleAlert } = await req.json();
 
     if (!webhookUrl || typeof webhookUrl !== 'string') {

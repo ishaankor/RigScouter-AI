@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
+import { getAuthHeaders } from '@/lib/auth/client-auth';
 import { calculateMultiRetailerDealScore, getDealScoreTier } from '@/lib/scrapers/price-scraper';
 
 export interface TrendingRetailerOffer {
@@ -385,7 +386,10 @@ export function WatchlistManager({
 
           // Try fetching from /api/watchlist (uses supabaseAdmin service role)
           try {
-            const apiRes = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`);
+            const authHeaders = await getAuthHeaders();
+            const apiRes = await fetch(`/api/watchlist?userId=${encodeURIComponent(userId)}`, {
+              headers: authHeaders
+            });
             if (apiRes.ok) {
               const apiData = await apiRes.json();
               if (apiData.items && Array.isArray(apiData.items) && apiData.items.length > 0) {
@@ -1048,9 +1052,10 @@ export function WatchlistManager({
     });
 
     try {
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/watchlist', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           userId: user.id,
           componentId: deal.id,
@@ -1401,10 +1406,9 @@ export function WatchlistManager({
     // 3. Direct Supabase DB Table Delete for valid UUIDs
     if (validUuids.length > 0) {
       try {
-        const { error: wlErr } = await supabase
-          .from('watchlist_items')
-          .delete()
-          .in('id', validUuids);
+        let wlQuery = supabase.from('watchlist_items').delete().in('id', validUuids);
+        if (user?.id) wlQuery = wlQuery.eq('user_id', user.id);
+        const { error: wlErr } = await wlQuery;
 
         if (wlErr) {
           console.warn('[Supabase DB Delete Warning] watchlist_items:', wlErr.message);
@@ -1419,10 +1423,9 @@ export function WatchlistManager({
     // 4. Also delete any matching component_name rows as fallback
     if (itemToDelete?.componentName) {
       try {
-        await supabase
-          .from('watchlist_items')
-          .delete()
-          .ilike('component_name', `%${itemToDelete.componentName}%`);
+        let nameQuery = supabase.from('watchlist_items').delete().ilike('component_name', `%${itemToDelete.componentName}%`);
+        if (user?.id) nameQuery = nameQuery.eq('user_id', user.id);
+        await nameQuery;
       } catch (e) {}
     }
 
@@ -1627,9 +1630,10 @@ export function WatchlistManager({
 
       // Server API PATCH (persists per-retailer target to user_preferences and hardware specs)
       try {
+        const authHeaders = await getAuthHeaders();
         await fetch('/api/watchlist', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
             id: targetItem.id,
             ids: targetItem.dbRowIds || [],
@@ -1665,9 +1669,10 @@ export function WatchlistManager({
       const currentPrice = effectiveOffer.currentPrice > 0 ? effectiveOffer.currentPrice : (targetItem.currentPrice || 0);
       if (currentPrice > 0 && newPrice >= currentPrice && targetItem.notifyOnFlashDrop) {
         try {
+          const authHeaders = await getAuthHeaders();
           fetch('/api/notifications/target-met', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
             body: JSON.stringify({
               userId: user.id,
               userEmail: user.email,
@@ -1731,9 +1736,10 @@ export function WatchlistManager({
 
       // 2. Server API PATCH fallback (guarantees persistence)
       try {
+        const authHeaders = await getAuthHeaders();
         await fetch('/api/watchlist', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
             id: targetItem.id,
             ids: targetItem.dbRowIds || [],
@@ -1768,9 +1774,10 @@ export function WatchlistManager({
         const targetP = getRetailerTarget(targetItem, effectiveOffer.retailer, currentPrice);
         if (currentPrice > 0 && targetP > 0 && currentPrice <= targetP) {
           try {
+            const authHeaders = await getAuthHeaders();
             fetch('/api/notifications/target-met', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...authHeaders },
               body: JSON.stringify({
                 userId: user.id,
                 userEmail: user.email,

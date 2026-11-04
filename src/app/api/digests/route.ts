@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { getVerifiedUser } from '@/lib/auth/server-auth';
 
 export const runtime = 'edge';
 
-// GET /api/digests?userId=... - Fetch past digests for a user
+// GET /api/digests - Fetch past digests for the authenticated user
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get('userId');
+  const verifiedUser = await getVerifiedUser(req);
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Missing userId parameter' }, { status: 400 });
+  if (!verifiedUser) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Valid Supabase session required to access digest history.' },
+      { status: 401 }
+    );
   }
+
+  // System/cron jobs can pass a target userId; normal users strictly access their own data
+  const requestedUserId = req.nextUrl.searchParams.get('userId');
+  const targetUserId = (verifiedUser.role === 'service' && requestedUserId) ? requestedUserId : verifiedUser.id;
 
   try {
     const { data: digests, error } = await supabaseAdmin
       .from('daily_digests')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', targetUserId)
       .order('generated_at', { ascending: false })
       .limit(30);
 
@@ -29,19 +37,28 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/digests - Manually record/snapshot a digest into daily_digests
+// POST /api/digests - Record a digest snapshot for the authenticated user
 export async function POST(req: NextRequest) {
+  const verifiedUser = await getVerifiedUser(req);
+
+  if (!verifiedUser) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Valid Supabase session required to save digest records.' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
-    const { userId, report } = body;
+    const { report } = body;
 
-    if (!userId || !report) {
-      return NextResponse.json({ error: 'Missing userId or report payload' }, { status: 400 });
+    if (!report) {
+      return NextResponse.json({ error: 'Missing report payload' }, { status: 400 });
     }
 
     const newDigest = {
       id: crypto.randomUUID(),
-      user_id: userId,
+      user_id: verifiedUser.id,
       headline: report.headline || 'Hardware Market Intelligence Briefing',
       executive_summary: report.executiveSummary || 'Live hardware pricing snapshot.',
       report_data: report,
@@ -64,4 +81,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Failed to save digest snapshot' }, { status: 500 });
   }
 }
-
