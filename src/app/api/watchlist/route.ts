@@ -385,18 +385,20 @@ export async function GET(req: NextRequest) {
         return tA - tB;
       });
 
-      // If user provided a direct verified URL, preserve it; otherwise use bestMatch
-      const finalPrice = hasDirectUrl 
-        ? Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0)
-        : (bestMatch ? Number(bestMatch.current_price || 0) : Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0));
+      // Determine effective price & retailer: prefer verified active catalog data if item price is stale or out of stock
+      let finalPrice = Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0);
+      let finalRetailer = item.retailer || 'Online Retailer';
+      let finalProductUrl = item.product_url || '#';
 
-      const finalRetailer = hasDirectUrl 
-        ? (item.retailer || 'Online Retailer')
-        : (bestMatch ? (bestMatch.retailer || 'Amazon') : (item.retailer || 'Amazon'));
-
-      const finalProductUrl = hasDirectUrl 
-        ? item.product_url
-        : (bestMatch ? (bestMatch.product_url || '#') : (item.product_url || '#'));
+      if (bestMatch && Number(bestMatch.current_price || 0) > 0) {
+        const bestPrice = Number(bestMatch.current_price);
+        const itemIsStale = !finalPrice || finalPrice <= 0 || (bestMatch.updated_at && (!item.updated_at || new Date(bestMatch.updated_at) > new Date(item.updated_at)));
+        if (itemIsStale) {
+          finalPrice = bestPrice;
+          if (bestMatch.retailer) finalRetailer = bestMatch.retailer;
+          if (bestMatch.product_url && bestMatch.product_url.startsWith('http')) finalProductUrl = bestMatch.product_url;
+        }
+      }
 
       const computed = computeHistoryIntervals(combinedHistory, finalPrice);
 
@@ -574,6 +576,18 @@ export async function GET(req: NextRequest) {
         dealScore: computedDealScore
       };
     });
+
+    // Autonomous Background Self-Healing (Zero manual clicks required):
+    // If any item in the user's watchlist is flagged as out-of-stock or sold-out,
+    // silently notify the backend engine to refresh and acquire active in-stock listings.
+    const hasOutdatedOrOutOfStock = formattedWatchlist.some(it => it.inStock === false || (it.specs as any)?.is_sold_out === true);
+    if (hasOutdatedOrOutOfStock) {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      fetch(`${backendUrl.replace(/\/$/, '')}/api/cron/trigger-daily-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       source: 'supabase_database_direct',
