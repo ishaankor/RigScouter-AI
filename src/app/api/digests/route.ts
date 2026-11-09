@@ -20,20 +20,108 @@ export async function GET(req: NextRequest) {
   const targetUserId = (verifiedUser.role === 'service' && requestedUserId) ? requestedUserId : verifiedUser.id;
 
   try {
-    const { data: digests, error } = await supabaseAdmin
-      .from('daily_digests')
-      .select('*')
-      .eq('user_id', targetUserId)
-      .order('generated_at', { ascending: false })
-      .limit(30);
+    const [{ data: digests, error }, { data: preferences }] = await Promise.all([
+      supabaseAdmin
+        .from('daily_digests')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .order('generated_at', { ascending: false })
+        .limit(30),
+      supabaseAdmin
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .maybeSingle()
+    ]);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ digests: digests || [] });
+    return NextResponse.json({ digests: digests || [], preferences: preferences || null });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to fetch digests' }, { status: 500 });
+  }
+}
+
+// PUT /api/digests - Authoritative server-side update for user digest preferences
+export async function PUT(req: NextRequest) {
+  const verifiedUser = await getVerifiedUser(req);
+
+  if (!verifiedUser) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Valid Supabase session required to update digest preferences.' },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const body = await req.json();
+    const { summary_frequency, delivery_channels, comparison_intervals } = body;
+
+    const { data: existingPref } = await supabaseAdmin
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', verifiedUser.id)
+      .maybeSingle();
+
+    let existingChannels: Record<string, any> = {};
+    if (existingPref?.delivery_channels) {
+      try {
+        existingChannels = typeof existingPref.delivery_channels === 'string'
+          ? JSON.parse(existingPref.delivery_channels)
+          : existingPref.delivery_channels;
+      } catch {}
+    }
+
+    let incomingChannels: Record<string, any> = {};
+    if (delivery_channels) {
+      try {
+        incomingChannels = typeof delivery_channels === 'string'
+          ? JSON.parse(delivery_channels)
+          : delivery_channels;
+      } catch {}
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextFreq = summary_frequency || existingPref?.summary_frequency || 'daily';
+
+    // Preserve last_sent_at and retailer_targets across preference updates.
+    // If switching to every_3_days or weekly and no last_sent_at exists yet, anchor the interval timer to now.
+    const mergedChannels: Record<string, any> = {
+      ...existingChannels,
+      ...incomingChannels,
+    };
+    if (!mergedChannels.last_sent_at && (nextFreq === 'every_3_days' || nextFreq === 'weekly')) {
+      mergedChannels.last_sent_at = nowIso;
+    }
+
+    const nextIntervals = comparison_intervals
+      ? (typeof comparison_intervals === 'string' ? comparison_intervals : JSON.stringify(comparison_intervals))
+      : (existingPref?.comparison_intervals
+          ? (typeof existingPref.comparison_intervals === 'string' ? existingPref.comparison_intervals : JSON.stringify(existingPref.comparison_intervals))
+          : JSON.stringify(['24h', '7d', '30d', 'ATL']));
+
+    const { data, error } = await supabaseAdmin
+      .from('user_preferences')
+      .upsert({
+        user_id: verifiedUser.id,
+        summary_frequency: nextFreq,
+        delivery_channels: JSON.stringify(mergedChannels),
+        comparison_intervals: nextIntervals,
+        auto_recommend_alternatives: existingPref?.auto_recommend_alternatives ?? true,
+        updated_at: nowIso
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, preferences: data });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to update digest preferences' }, { status: 500 });
   }
 }
 

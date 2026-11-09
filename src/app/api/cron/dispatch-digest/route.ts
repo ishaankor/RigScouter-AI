@@ -676,7 +676,10 @@ export async function GET(req: NextRequest) {
 
           const dbLastSentTime = lastDigest?.generated_at ? new Date(lastDigest.generated_at).getTime() : 0;
           const channelLastSentTime = (deliveryChannels as any)?.last_sent_at ? new Date((deliveryChannels as any).last_sent_at).getTime() : 0;
-          const lastSentTime = Math.max(dbLastSentTime, channelLastSentTime);
+          const prefUpdatedTime = (frequency === 'every_3_days' || frequency === 'weekly') && pref.updated_at
+            ? new Date(pref.updated_at).getTime()
+            : 0;
+          const lastSentTime = Math.max(dbLastSentTime, channelLastSentTime, prefUpdatedTime);
 
           const hoursSinceLast = lastSentTime > 0 ? (Date.now() - lastSentTime) / (1000 * 60 * 60) : Infinity;
 

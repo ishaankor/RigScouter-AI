@@ -870,12 +870,12 @@ export async function POST(req: NextRequest) {
       console.warn('[Watchlist RLS Notice]:', watchErr.message);
     }
 
-    // 3. Upsert to user_preferences table (including retailer targets if supplied)
+    // 3. Upsert to user_preferences table (preserving existing frequency & intervals)
     try {
       let channels: any = { email: true, discord: true };
       const { data: userPref } = await supabaseAdmin
         .from('user_preferences')
-        .select('delivery_channels')
+        .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -898,11 +898,13 @@ export async function POST(req: NextRequest) {
 
       await supabaseAdmin.from('user_preferences').upsert({
         user_id: userId,
-        summary_frequency: 'daily',
+        summary_frequency: userPref?.summary_frequency || 'daily',
         delivery_channels: JSON.stringify(channels),
-        comparison_intervals: JSON.stringify(['24h', '7d', '30d', 'ATL']),
-        auto_recommend_alternatives: true,
-        updated_at: new Date().toISOString()
+        comparison_intervals: userPref?.comparison_intervals
+          ? (typeof userPref.comparison_intervals === 'string' ? userPref.comparison_intervals : JSON.stringify(userPref.comparison_intervals))
+          : JSON.stringify(['24h', '7d', '30d', 'ATL']),
+        auto_recommend_alternatives: userPref?.auto_recommend_alternatives ?? true,
+        updated_at: userPref?.updated_at || new Date().toISOString()
       });
     } catch (e) {}
 

@@ -232,13 +232,43 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         discord: newChannel === 'discord',
         discord_webhook: discordWebhook.trim()
       };
-      await supabase.from('user_preferences').upsert({
-        user_id: user.id,
-        summary_frequency: newFreq,
-        delivery_channels: JSON.stringify(channels),
-        comparison_intervals: JSON.stringify(newIntervals),
-        auto_recommend_alternatives: true
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/digests', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          summary_frequency: newFreq,
+          delivery_channels: channels,
+          comparison_intervals: newIntervals,
+        }),
       });
+      if (!res.ok) {
+        const { data: existingPref } = await supabase
+          .from('user_preferences')
+          .select('delivery_channels')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        let existingChannels: Record<string, any> = {};
+        if (existingPref?.delivery_channels) {
+          try {
+            existingChannels = typeof existingPref.delivery_channels === 'string'
+              ? JSON.parse(existingPref.delivery_channels)
+              : existingPref.delivery_channels;
+          } catch {}
+        }
+        const mergedChannels: Record<string, any> = { ...existingChannels, ...channels };
+        if (!mergedChannels.last_sent_at && (newFreq === 'every_3_days' || newFreq === 'weekly')) {
+          mergedChannels.last_sent_at = new Date().toISOString();
+        }
+        await supabase.from('user_preferences').upsert({
+          user_id: user.id,
+          summary_frequency: newFreq,
+          delivery_channels: JSON.stringify(mergedChannels),
+          comparison_intervals: JSON.stringify(newIntervals),
+          auto_recommend_alternatives: true,
+          updated_at: new Date().toISOString()
+        });
+      }
     } catch (err) {
       console.warn('Auto-save preference notice:', err);
     }
@@ -294,15 +324,46 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
         discord_webhook: discordWebhook.trim()
       };
 
-      // 1. Save user preferences to DB
-      const { error } = await supabase.from('user_preferences').upsert({
-        user_id: user.id,
-        summary_frequency: frequency,
-        delivery_channels: JSON.stringify(channels),
-        comparison_intervals: JSON.stringify(selectedIntervals),
-        auto_recommend_alternatives: true
+      // 1. Save user preferences to DB via authoritative server route
+      const authHeaders = await getAuthHeaders();
+      const putRes = await fetch('/api/digests', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          summary_frequency: frequency,
+          delivery_channels: channels,
+          comparison_intervals: selectedIntervals,
+        }),
       });
-      if (error) throw error;
+
+      if (!putRes.ok) {
+        const { data: existingPref } = await supabase
+          .from('user_preferences')
+          .select('delivery_channels')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        let existingChannels: Record<string, any> = {};
+        if (existingPref?.delivery_channels) {
+          try {
+            existingChannels = typeof existingPref.delivery_channels === 'string'
+              ? JSON.parse(existingPref.delivery_channels)
+              : existingPref.delivery_channels;
+          } catch {}
+        }
+        const mergedChannels: Record<string, any> = { ...existingChannels, ...channels };
+        if (!mergedChannels.last_sent_at && (frequency === 'every_3_days' || frequency === 'weekly')) {
+          mergedChannels.last_sent_at = new Date().toISOString();
+        }
+        const { error } = await supabase.from('user_preferences').upsert({
+          user_id: user.id,
+          summary_frequency: frequency,
+          delivery_channels: JSON.stringify(mergedChannels),
+          comparison_intervals: JSON.stringify(selectedIntervals),
+          auto_recommend_alternatives: true,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+      }
 
       // 2. If Discord channel selected, automatically send a confirmation ping to the webhook
       let pingSuccess = false;
