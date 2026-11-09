@@ -1133,14 +1133,13 @@ export function WatchlistManager({
     const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
     const userId = user.id;
     const pendingId = `w-${Date.now()}`;
-    const category = autoDetectCategory(queryToScrape);
 
-    // 1. Create a "Pending" item in the Watchlist instantly
+    // 1. Create a "Pending" item in the Watchlist instantly (category hidden until scraper identifies it)
     const pendingItem: WatchlistItem = {
       id: pendingId,
       userId,
       componentName: queryToScrape,
-      category,
+      category: '' as any,
       targetPrice: 0,
       currentPrice: 0,
       previousPrice24h: 0,
@@ -1149,7 +1148,7 @@ export function WatchlistManager({
       allTimeLow: 0,
       retailer: 'Scraping live prices...' as any,
       productUrl: '',
-      imageUrl: getCategoryImage(category),
+      imageUrl: getCategoryImage('' as any),
       inStock: false,
       notifyOnFlashDrop: true,
       addedAt: new Date().toISOString()
@@ -1223,6 +1222,7 @@ export function WatchlistManager({
 
           return {
             ...item,
+            category: payload.category || item.category,
             // Only promote to primary card if preferred condition & price
             ...(shouldPromote ? {
               componentName: payload.title,
@@ -2176,10 +2176,12 @@ export function WatchlistManager({
                             <div>
                               <div className="font-bold text-white text-sm line-clamp-1">{effective.title || item.componentName}</div>
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
-                                  {item.category}
-                                </span>
-                                {effective.inStock === false && (
+                                {item.category && effective.retailer !== 'Scraping live prices...' && (
+                                  <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
+                                    {item.category}
+                                  </span>
+                                )}
+                                {effective.inStock === false && effective.retailer !== 'Scraping live prices...' && (
                                   <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded bg-rose-950/90 text-rose-300 border border-rose-800/60 uppercase tracking-wider">
                                     Sold Out
                                   </span>
@@ -2983,28 +2985,6 @@ export function WatchlistManager({
 }
 
 // Client helpers
-function autoDetectCategory(query: string): WatchlistItem['category'] {
-  const lower = query.toLowerCase();
-  if (lower.includes('4080') || lower.includes('4090') || lower.includes('4070') || lower.includes('rtx') || lower.includes('gpu') || lower.includes('radeon')) return 'GPU';
-  if (lower.includes('7800x3d') || lower.includes('ryzen') || lower.includes('intel') || lower.includes('cpu') || lower.includes('14700k')) return 'CPU';
-  if (lower.includes('ddr5') || lower.includes('ddr4') || lower.includes('ram')) return 'RAM';
-  if (lower.includes('ssd') || lower.includes('nvme') || lower.includes('990 pro')) return 'SSD';
-  if (lower.includes('motherboard') || lower.includes('mobo') || lower.includes('b650')) return 'Motherboard';
-  if (lower.includes('psu') || lower.includes('power supply')) return 'PSU';
-  if (lower.includes('case')) return 'Case';
-  return 'Cooler';
-}
-
-function autoDetectRetailer(query: string): WatchlistItem['retailer'] {
-  const lower = query.toLowerCase();
-  if (lower.includes('microcenter') || lower.includes('micro center')) return 'Micro Center';
-  if (lower.includes('newegg')) return 'Newegg';
-  if (lower.includes('bestbuy') || lower.includes('best buy')) return 'Best Buy';
-  if (lower.includes('b&h') || lower.includes('bhphotovideo')) return 'B&H';
-  if (lower.includes('ebay')) return 'eBay';
-  return 'Amazon';
-}
-
 function getCategoryImage(category: WatchlistItem['category']): string {
   switch (category) {
     case 'GPU': return 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80';
