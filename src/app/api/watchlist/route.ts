@@ -160,6 +160,26 @@ export async function GET(req: NextRequest) {
         .select('*')
         .order('updated_at', { ascending: false });
 
+    // Dynamically trigger background re-scrape for any orphaned watchlist_items missing from hardware_components
+    if (rawWatchlist.length > 0) {
+      const stripSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+      const catalogBaseIds = new Set((hwCatalog || []).map((h: any) => stripSuffix(h.id || '')));
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:10001';
+      for (const w of rawWatchlist) {
+        const wBaseId = stripSuffix(w.component_id || '');
+        if (wBaseId && !catalogBaseIds.has(wBaseId)) {
+          fetch(`${backendUrl}/api/agent/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: w.component_id || w.component_name,
+              userId: w.user_id || userId
+            })
+          }).catch(() => {});
+        }
+      }
+    }
+
     let userHwItems: any[] = [];
     if (userId && userId !== 'guest') {
       userHwItems = (hwCatalog || [])
@@ -387,8 +407,21 @@ export async function GET(req: NextRequest) {
 
       // Determine effective price & retailer: prefer verified active catalog data if item price is stale or out of stock
       let finalPrice = Number(item.current_price || item.all_time_low || item.previous_price_24h || item.target_price || 0);
-      let finalRetailer = item.retailer || 'Online Retailer';
-      let finalProductUrl = item.product_url || '#';
+      const inferRetailerFromMetadata = (urlStr: string, nameStr: string) => {
+        const u = (urlStr || '').toLowerCase();
+        if (u.includes('ebay.')) return 'eBay';
+        if (u.includes('newegg.')) return 'Newegg';
+        if (u.includes('bestbuy.')) return 'Best Buy';
+        if (u.includes('microcenter.')) return 'Micro Center';
+        if (u.includes('bhphotovideo.')) return 'B&H';
+        if (u.includes('amazon.')) return 'Amazon';
+        if (/\bmpn\b/i.test(nameStr || '')) return 'eBay';
+        return 'Amazon';
+      };
+      let finalRetailer = (item.retailer && item.retailer !== 'Online Retailer')
+        ? item.retailer
+        : (bestMatch?.retailer || inferRetailerFromMetadata(item.product_url, item.component_name || item.name));
+      let finalProductUrl = item.product_url || bestMatch?.product_url || '#';
 
       if (bestMatch && Number(bestMatch.current_price || 0) > 0) {
         const bestPrice = Number(bestMatch.current_price);

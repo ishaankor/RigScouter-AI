@@ -290,7 +290,10 @@ export function WatchlistManager({
       }
     }
 
-    const itemRetailer = item.retailer || '';
+    const rawItemRetailer = item.retailer || '';
+    const itemRetailer = (rawItemRetailer && rawItemRetailer.toLowerCase() !== 'online retailer')
+      ? rawItemRetailer
+      : (/\bmpn\b/i.test(item.componentName || item.name || '') ? 'eBay' : '');
     if (itemRetailer && !combinedOffers.some(o => (o?.retailer || '').toLowerCase() === itemRetailer.toLowerCase())) {
       const explicitPrice = Number(item.currentPrice || item.current_price || item.allTimeLow || item.all_time_low || item.previousPrice24h || item.targetPrice || item.target_price || 0);
       if (explicitPrice > 0) {
@@ -311,21 +314,24 @@ export function WatchlistManager({
       }
     }
 
-    // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty)
-    const validOffers = combinedOffers.filter(o => o && o.retailer && Number(o.price) > 0);
-    const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer) || []);
+    // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty or 'Online Retailer')
+    const validOffers = combinedOffers.filter(o => o && o.retailer && o.retailer.toLowerCase() !== 'online retailer' && Number(o.price) > 0);
+    const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer && o.retailer.toLowerCase() !== 'online retailer') || []);
 
-    const defaultFallbackRetailer = finalOffers[0]?.retailer || item.retailer || 'Amazon';
+    const cleanFallbackRetailer = (item.retailer && item.retailer.toLowerCase() !== 'online retailer')
+      ? item.retailer
+      : (/\bmpn\b/i.test(item.componentName || item.name || '') ? 'eBay' : 'Amazon');
+    const defaultFallbackRetailer = finalOffers[0]?.retailer || cleanFallbackRetailer;
     const activeRetailer = selectedRetailers[item.id] || defaultFallbackRetailer;
     const matchedOffer = finalOffers.find(o => (o?.retailer || '').toLowerCase() === (activeRetailer || '').toLowerCase()) || 
-                         finalOffers.find(o => (o?.retailer || '').toLowerCase() === (item.retailer || '').toLowerCase()) || 
+                         finalOffers.find(o => (o?.retailer || '').toLowerCase() === cleanFallbackRetailer.toLowerCase()) || 
                          finalOffers[0];
 
     const rawFallbackPrice = Number(item.currentPrice ?? item.current_price ?? item.allTimeLow ?? item.all_time_low ?? item.previousPrice24h ?? item.targetPrice ?? item.target_price ?? 0);
     const currentPrice = matchedOffer ? Number(matchedOffer.price || 0) : rawFallbackPrice;
     const msrp = matchedOffer ? Number(matchedOffer.originalPrice ?? currentPrice) : (item.msrp ? Number(item.msrp) : currentPrice);
     const productUrl = matchedOffer ? (matchedOffer.url || '#') : (item.productUrl ?? item.product_url ?? '#');
-    const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : (item.retailer || activeRetailer || 'Amazon');
+    const retailer = matchedOffer ? (matchedOffer.retailer || activeRetailer) : (cleanFallbackRetailer || activeRetailer || 'Amazon');
     
     let cleanName = item.componentName ?? item.name ?? 'Component';
     if (cleanName.startsWith('http://') || cleanName.startsWith('https://')) {
@@ -431,7 +437,9 @@ export function WatchlistManager({
                 
                 const itemOffer = {
                   id: item.id,
-                  retailer: item.retailer || 'Online Retailer',
+                  retailer: (item.retailer && item.retailer.toLowerCase() !== 'online retailer')
+                    ? item.retailer
+                    : (/\bmpn\b/i.test(item.component_name || '') ? 'eBay' : 'Amazon'),
                   price: Number(item.current_price || 0),
                   originalPrice: Number(item.msrp || item.current_price || 0),
                   previousPrice: Number(item.previous_price_24h || item.current_price || 0),
@@ -1161,6 +1169,7 @@ export function WatchlistManager({
     // 2. Setup an SSE listener to catch the streaming results
     const es = new EventSource(`${BACKEND_URL}/api/stream`);
     let bestPrice = Infinity;
+    let hasBrandNewOffer = false;
     let watchdogTimer: NodeJS.Timeout | null = null;
 
     es.addEventListener('retailer_found', async (e: MessageEvent) => {
@@ -1173,7 +1182,7 @@ export function WatchlistManager({
       if (isMatch) {
         const offerImage = payload.imageUrl || (payload.offer && (payload.offer.imageUrl || payload.offer.image_url));
         const offerPrice = Number(payload.price || 0);
-        const offerMsrp = Number(payload.originalPrice || offerPrice);
+        const isUsedOffer = Boolean(payload.condition && payload.condition !== 'new') || Boolean(payload.offer?.isRefurbished);
         const newOffer = {
           retailer: payload.retailer,
           price: offerPrice,
@@ -1188,8 +1197,16 @@ export function WatchlistManager({
           inStock: payload.inStock,
         };
 
-        if (payload.price < bestPrice) {
+        let shouldPromote = false;
+        if (!isUsedOffer) {
+          if (!hasBrandNewOffer || payload.price < bestPrice) {
+            hasBrandNewOffer = true;
+            bestPrice = payload.price;
+            shouldPromote = true;
+          }
+        } else if (!hasBrandNewOffer && payload.price < bestPrice) {
           bestPrice = payload.price;
+          shouldPromote = true;
         }
 
         // Accumulate ALL retailer offers so the dropdown shows every price
@@ -1204,11 +1221,10 @@ export function WatchlistManager({
             ? existingOffers.map(o => o.retailer === payload.retailer ? newOffer : o)
             : [...existingOffers, newOffer];
 
-          const isBest = payload.price <= bestPrice;
           return {
             ...item,
-            // Only promote to best price if this is the cheapest so far
-            ...(isBest ? {
+            // Only promote to primary card if preferred condition & price
+            ...(shouldPromote ? {
               componentName: payload.title,
               currentPrice: payload.price,
               targetPrice: Math.round(payload.price * 0.95 * 100) / 100,
