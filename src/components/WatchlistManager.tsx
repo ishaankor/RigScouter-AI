@@ -1115,6 +1115,44 @@ export function WatchlistManager({
     }
   };
 
+  const formatQueryLabel = (raw?: string): string => {
+    if (!raw) return '';
+    const trimmed = raw.trim();
+    if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        const parsed = new URL(trimmed);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        const decodedPath = decodeURIComponent(parsed.pathname || '');
+        for (const seg of decodedPath.split('/')) {
+          if (!seg || /^ref=/i.test(seg)) continue;
+          if (/[a-zA-Z]{2,}-[a-zA-Z0-9]{2,}-[a-zA-Z0-9]{2,}/.test(seg)) {
+            const readable = seg.replace(/[-_]+/g, ' ').trim();
+            if (readable.length >= 6) {
+              return readable.length > 55 ? `${readable.slice(0, 52)}...` : readable;
+            }
+          }
+        }
+        const cleanPath = decodedPath.replace(/\/ref=[^/]*/i, '').replace(/\/+$/, '');
+        const compact = `${host}${cleanPath}`;
+        return compact.length > 55 ? `${compact.slice(0, 52)}...` : compact;
+      } catch {
+        return trimmed.length > 55 ? `${trimmed.slice(0, 52)}...` : trimmed;
+      }
+    }
+    return trimmed.length > 55 ? `${trimmed.slice(0, 52)}...` : trimmed;
+  };
+
+  const formatErrorMessage = (rawMsg?: string, fallbackQuery?: string): string => {
+    if (!rawMsg) {
+      return `Could not find live pricing for "${formatQueryLabel(fallbackQuery)}".`;
+    }
+    // Replace any long raw URLs embedded inside backend error messages with "This item"
+    const cleaned = rawMsg
+      .replace(/^['"]?https?:\/\/\S+['"]?\s+(does not appear|is not a)/i, 'This item $1')
+      .replace(/['"]?https?:\/\/[^\s'"]+['"]?/gi, (match) => `"${formatQueryLabel(match)}"`);
+    return cleaned;
+  };
+
   // 100% Autonomous Bot Add-to-Watchlist Handler (NO manual form filling)
   const handleAutonomousAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1126,6 +1164,64 @@ export function WatchlistManager({
 
     const queryToScrape = liveQuery.trim();
     if (!queryToScrape) return;
+    const displayQueryLabel = formatQueryLabel(queryToScrape);
+
+    // Strict client-side link validation when a URL is pasted
+    if (/^https?:\/\//i.test(queryToScrape)) {
+      let urlError: string | null = null;
+      try {
+        const parsed = new URL(queryToScrape);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        const path = parsed.pathname;
+        const pathLower = path.toLowerCase();
+        const searchLower = parsed.search.toLowerCase();
+
+        if (host === 'amzn.to' || host === 'a.co') {
+          if (path.replace(/^\/+|\/+$/g, '').length < 4) {
+            urlError = 'Invalid Amazon short link. Please paste a full product link.';
+          }
+        } else if (host.startsWith('amazon.') || host.includes('.amazon.')) {
+          if (!/\/(?:dp|gp\/product|gp\/aw\/d|d)\/[A-Z0-9]{10}/i.test(path)) {
+            urlError = 'Only direct Amazon product page links (/dp/...) are supported. Search or category pages cannot be tracked.';
+          }
+        } else if (host.startsWith('ebay.') || host.includes('.ebay.')) {
+          if (!pathLower.includes('/itm/') || !/\d{9,15}/.test(path)) {
+            urlError = 'Only direct eBay item listing links (/itm/...) are supported.';
+          }
+        } else if (host === 'newegg.com' || host === 'newegg.ca' || host.endsWith('.newegg.com')) {
+          if (pathLower.includes('/p/pl') || pathLower.includes('search') || (!pathLower.includes('/p/') && !(pathLower.includes('/product/product.aspx') && searchLower.includes('item=')))) {
+            urlError = 'Only direct Newegg product page links (/p/...) are supported.';
+          }
+        } else if (host === 'bestbuy.com' || host.endsWith('.bestbuy.com')) {
+          if (pathLower.includes('searchpage') || (!pathLower.includes('/site/') && !pathLower.includes('/product/'))) {
+            urlError = 'Only direct Best Buy product page links are supported.';
+          }
+        } else if (host === 'microcenter.com' || host.endsWith('.microcenter.com')) {
+          if (!pathLower.includes('/product/')) {
+            urlError = 'Only direct Micro Center product page links (/product/...) are supported.';
+          }
+        } else if (host === 'bhphotovideo.com' || host.endsWith('.bhphotovideo.com')) {
+          if (!pathLower.includes('/c/product/')) {
+            urlError = 'Only direct B&H product page links (/c/product/...) are supported.';
+          }
+        } else {
+          urlError = `Unsupported link domain "${host}". Only direct PC hardware product links from Amazon, eBay, Newegg, Best Buy, Micro Center, or B&H are allowed.`;
+        }
+      } catch {
+        urlError = 'Invalid URL format. Please paste a valid direct retailer product link or search by component model.';
+      }
+
+      if (urlError) {
+        setShowAddModal(false);
+        setLiveQuery('');
+        setSearchError({
+          title: 'Invalid Product Link',
+          message: urlError,
+          query: displayQueryLabel
+        });
+        return;
+      }
+    }
 
     setIsScraping(true);
     setScrapeNotice(null);
@@ -1138,7 +1234,7 @@ export function WatchlistManager({
     const pendingItem: WatchlistItem = {
       id: pendingId,
       userId,
-      componentName: queryToScrape,
+      componentName: displayQueryLabel,
       category: '' as any,
       targetPrice: 0,
       currentPrice: 0,
@@ -1247,14 +1343,25 @@ export function WatchlistManager({
                         (payload.query && payload.query.toLowerCase() === queryToScrape.toLowerCase());
         if (isMatch) {
           setIsScraping(false);
-          // Remove pending placeholder item from watchlist
+          // Remove pending placeholder item from watchlist and sessionStorage
           setWatchlist(prev => prev.filter(item => item.id !== pendingId));
+          try {
+            const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+            sessionStorage.setItem('pendingScrapes', JSON.stringify(stored.filter((p: any) => p.id !== pendingId)));
+          } catch {}
+          const rawErrMsg = payload.message || payload.error || '';
+          const isUnsupported = payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ||
+                                payload.error_type === 'NON_HARDWARE_QUERY' ||
+                                /not a (?:supported )?pc|does not appear to be a pc/i.test(rawErrMsg);
+          const cleanLabel = formatQueryLabel(
+            (payload.query && !/^https?:\/\//i.test(payload.query)) ? payload.query : (payload.original_query || queryToScrape)
+          );
           setSearchError({
             title: payload.error_type === 'GENERIC_QUERY_ERROR' ? 'Search Too Broad' :
-                   payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ? 'Item Not Supported' :
+                   isUnsupported ? 'Item Not Supported' :
                    'Search Error',
-            message: payload.message || payload.error || `Could not find live pricing for "${payload.original_query || payload.query || queryToScrape}".`,
-            query: payload.original_query || payload.query || queryToScrape
+            message: formatErrorMessage(rawErrMsg, cleanLabel),
+            query: cleanLabel
           });
           if (watchdogTimer) clearTimeout(watchdogTimer);
           es.close();
@@ -1275,15 +1382,26 @@ export function WatchlistManager({
                         
         if (isMatch) {
           setIsScraping(false);
+          try {
+            const stored = JSON.parse(sessionStorage.getItem('pendingScrapes') || '[]');
+            sessionStorage.setItem('pendingScrapes', JSON.stringify(stored.filter((p: any) => p.id !== pendingId)));
+          } catch {}
           if (!payload.bestOffer || payload.is_error) {
             // Remove the empty/pending placeholder card from the watchlist
             setWatchlist(prev => prev.filter(item => item.id !== pendingId));
+            const rawSummary = payload.summary || '';
+            const isUnsupported = payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ||
+                                  payload.error_type === 'NON_HARDWARE_QUERY' ||
+                                  /not a (?:supported )?pc|does not appear to be a pc/i.test(rawSummary);
+            const cleanLabel = formatQueryLabel(
+              (payload.query && !/^https?:\/\//i.test(payload.query)) ? payload.query : (payload.original_query || queryToScrape)
+            );
             setSearchError({
               title: payload.error_type === 'GENERIC_QUERY_ERROR' ? 'Search Too Broad' :
-                     payload.error_type === 'INCOMPATIBLE_ITEM_ERROR' ? 'Item Not Supported' :
+                     isUnsupported ? 'Item Not Supported' :
                      'No Live Prices Found',
-              message: payload.summary || `No live retailer listings found for "${payload.original_query || payload.query || queryToScrape}".`,
-              query: payload.original_query || payload.query || queryToScrape
+              message: formatErrorMessage(rawSummary || `No live retailer listings found for "${cleanLabel}".`, cleanLabel),
+              query: cleanLabel
             });
           } else {
             // Update the pending item with bestOffer details (especially critical for direct URL scrapes!)
@@ -1356,8 +1474,8 @@ export function WatchlistManager({
         if (item && item.currentPrice === 0) {
           setSearchError({
             title: 'Scrape Timed Out',
-            message: `Scraping for "${queryToScrape}" timed out. The backend server may have been sleeping or rebooting. Please try adding it again.`,
-            query: queryToScrape
+            message: `Scraping for "${displayQueryLabel}" timed out. The backend server may have been sleeping or rebooting. Please try adding it again.`,
+            query: displayQueryLabel
           });
           return prev.filter(i => i.id !== pendingId);
         }
@@ -2001,27 +2119,27 @@ export function WatchlistManager({
       {/* Search Error / Warning Notice */}
       {searchError && (
         <div className="bg-amber-950/70 border border-amber-500/50 p-4 rounded-2xl flex items-start justify-between gap-3 shadow-xl shadow-amber-950/40 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
             <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-amber-200">{searchError.title}</h4>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-bold text-amber-200 shrink-0">{searchError.title}</h4>
                 {searchError.query && (
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-black/50 text-amber-300 border border-amber-800/50">
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-black/50 text-amber-300 border border-amber-800/50 max-w-[260px] sm:max-w-[420px] truncate inline-block">
                     &quot;{searchError.query}&quot;
                   </span>
                 )}
               </div>
-              <p className="text-xs text-amber-300/90 mt-1 leading-relaxed">
+              <p className="text-xs text-amber-300/90 mt-1 leading-relaxed break-words">
                 {searchError.message}
               </p>
             </div>
           </div>
           <button
             onClick={() => setSearchError(null)}
-            className="text-amber-400/60 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-900/40 transition-colors cursor-pointer"
+            className="text-amber-400/60 hover:text-amber-300 p-1.5 rounded-lg hover:bg-amber-900/40 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
