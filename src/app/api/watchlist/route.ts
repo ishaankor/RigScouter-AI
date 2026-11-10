@@ -213,14 +213,51 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    // Merge without duplicates
-    const combinedMap = new Map();
+    // Merge without duplicates and auto-clean duplicate watchlist_items rows in DB
+    const combinedMap = new Map<string, any>();
+    const seenCompIds = new Map<string, string>();
+    const duplicateDbIdsToRemove: string[] = [];
+
     [...rawWatchlist, ...userHwItems].forEach(item => {
-      const nameKey = (item.component_name || item.name || '').toLowerCase();
-      if (!combinedMap.has(nameKey)) {
-        combinedMap.set(nameKey, item);
+      const nameKey = (item.component_name || item.name || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+      const compIdKey = (item.component_id || '')
+        .toLowerCase()
+        .replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '')
+        .trim();
+
+      const matchedKey = combinedMap.has(nameKey)
+        ? nameKey
+        : (compIdKey && seenCompIds.has(compIdKey) ? seenCompIds.get(compIdKey)! : null);
+
+      if (!matchedKey) {
+        const keyToUse = nameKey || compIdKey || String(item.id);
+        combinedMap.set(keyToUse, {
+          ...item,
+          dbRowIds: item.id && !String(item.id).startsWith('w-') ? [item.id] : []
+        });
+        if (compIdKey) seenCompIds.set(compIdKey, keyToUse);
+      } else {
+        const existing = combinedMap.get(matchedKey);
+        if (item.id && !String(item.id).startsWith('w-')) {
+          existing.dbRowIds = Array.from(new Set([...(existing.dbRowIds || []), item.id]));
+          if (existing.id && item.id !== existing.id) {
+            duplicateDbIdsToRemove.push(item.id);
+          }
+        }
       }
     });
+
+    if (duplicateDbIdsToRemove.length > 0 && userId) {
+      supabaseAdmin
+        .from('watchlist_items')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', duplicateDbIdsToRemove)
+        .then(() => {});
+    }
 
     const combinedList = Array.from(combinedMap.values());
 
@@ -233,24 +270,11 @@ export async function GET(req: NextRequest) {
       'eBay': 6
     };
 
-    const PRIMARY_BRANDS = [
-      'asus', 'gigabyte', 'msi', 'zotac', 'pny', 'evga', 'sapphire', 'powercolor', 'xfx', 
-      'asrock', 'inno3d', 'gainward', 'palit', 'galax', 'kfa2', 'samsung', 'western digital', 
-      'wd', 'seagate', 'crucial', 'sk hynix', 'sabrent', 'corsair', 'g.skill', 'gskill', 
-      'kingston', 'teamgroup', 'patriot', 'adata', 'noctua', 'be quiet', 'lian li', 'nzxt', 
-      'fractal', 'thermalright', 'deepcool', 'arctic', 'seasonic', 'super flower', 
-      'thermaltake', 'silverstone', 'cooler master', 'montech', 'phanteks', 'antec', 'logitech', 
-      'razer', 'steelseries', 'wooting', 'keychron', 'hyperx', 'shure', 'elgato', 'rode', 
-      'audio-technica', 'ducky', 'epomaker', 'glorious'
-    ];
-
-    const formattedWatchlist = combinedList.map(item => {
+    const rawFormattedWatchlist = combinedList.map(item => {
       const cId = (item.component_id || item.id || '').toLowerCase();
       const cName = (item.component_name || item.name || '').toLowerCase();
 
-      const hasDirectUrl = Boolean(item.product_url && typeof item.product_url === 'string' && item.product_url.startsWith('http') && item.product_url !== '#');
-
-      // Find all matching hardware catalog rows with strict brand and model checks
+      // Find all matching hardware catalog rows
       const matches: any[] = [];
       const stripSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
       const baseCId = stripSuffix(cId);
@@ -264,9 +288,8 @@ export async function GET(req: NextRequest) {
       });
 
       if (matches.length === 0) {
-        const cBrands = PRIMARY_BRANDS.filter((b: string) => new RegExp(`\\b${b}\\b`, 'i').test(cName));
         const cleanName = cName.replace(/[^a-z0-9\s]/g, ' ').replace(/\b\d+\s*(?:gb|tb|mb|mhz|ghz|w|bit)\b/g, '');
-        const tokens: string[] = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'super', 'dual', 'triple', 'graphics', 'card', 'desktop', 'processor', 'solid', 'state', 'drive', 'internal', 'nvme', 'power', 'supply', 'memory'].includes(t));
+        const tokens: string[] = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'dual', 'triple', 'graphics', 'card', 'desktop', 'processor', 'solid', 'state', 'drive', 'internal', 'nvme', 'power', 'supply', 'memory'].includes(t));
         const modelTokens = tokens.filter((t: string) => /\d/.test(t) || t.length >= 4);
 
         (hwCatalog || []).forEach((h: any) => {
@@ -277,23 +300,14 @@ export async function GET(req: NextRequest) {
           }
 
           const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''} ${h.brand || ''}`.toLowerCase();
-          
-          // Brand conflict check: If item specifies brand A, do not match candidate with brand B
-          if (cBrands.length > 0) {
-            const hasBrand = cBrands.some((b: string) => new RegExp(`\\b${b}\\b`, 'i').test(hText));
-            const hasConflict = PRIMARY_BRANDS.some((b: string) => !cBrands.includes(b) && new RegExp(`\\b${b}\\b`, 'i').test(hText));
-            if (!hasBrand && hasConflict) return;
-          }
 
-          // GPU variant isolation (e.g. prevent RTX 4070 matching 4070 Ti or 4070 Super)
-          const isSuper = (s: string) => /\bsuper\b/i.test(s);
-          const isTi = (s: string) => /\bti\b/i.test(s);
-          const isXtx = (s: string) => /\bxtx\b/i.test(s);
-          const hasGpuIndicator = (s: string) => s.includes('40') || s.includes('50') || s.includes('rtx') || s.includes('7900') || s.includes('rx');
-          if (hasGpuIndicator(cName) || hasGpuIndicator(hText)) {
-            if (isSuper(cName) !== isSuper(hText)) return;
-            if (isTi(cName) !== isTi(hText)) return;
-            if (isXtx(cName) !== isXtx(hText)) return;
+          // Brand conflict check using the catalog's own brand column
+          const hBrand = (h.brand || '').toLowerCase().trim();
+          if (hBrand && hBrand !== 'hardware' && cName.length > 10 && !cName.includes(hBrand)) {
+            const firstWord = cleanName.trim().split(/\s+/)[0];
+            if (firstWord && firstWord.length >= 3 && firstWord !== hBrand && !hText.includes(firstWord)) {
+              return;
+            }
           }
 
           // Model token check: All critical digit tokens must match
@@ -521,6 +535,7 @@ export async function GET(req: NextRequest) {
 
       return {
           id: item.id,
+          dbRowIds: item.dbRowIds || (item.id ? [item.id] : []),
           userId: item.user_id || userId,
           componentName: item.component_name || item.name,
           category: item.category || bestMatch?.category || 'GPU',
@@ -549,6 +564,41 @@ export async function GET(req: NextRequest) {
           }
         };
     });
+
+    // Final deduplication by resolved componentName and productUrl so identical resolved items never stack
+    const formattedWatchlist: any[] = [];
+    const extraDupIdsToDelete: string[] = [];
+    rawFormattedWatchlist.forEach(fw => {
+      const normName = (fw.componentName || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const normUrl = (fw.productUrl && fw.productUrl.startsWith('http'))
+        ? fw.productUrl.toLowerCase().split('?')[0].replace(/\/ref=[^/]*/, '').replace(/\/+$/, '')
+        : '';
+      const existing = formattedWatchlist.find(ex => {
+        const exName = (ex.componentName || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const exUrl = (ex.productUrl && ex.productUrl.startsWith('http'))
+          ? ex.productUrl.toLowerCase().split('?')[0].replace(/\/ref=[^/]*/, '').replace(/\/+$/, '')
+          : '';
+        if (normName && exName && normName === exName) return true;
+        if (normUrl && exUrl && normUrl === exUrl) return true;
+        return false;
+      });
+      if (!existing) {
+        formattedWatchlist.push(fw);
+      } else {
+        const extraIds = (fw.dbRowIds || []).filter((id: string) => id && !String(id).startsWith('w-') && id !== existing.id);
+        existing.dbRowIds = Array.from(new Set([...(existing.dbRowIds || []), ...(fw.dbRowIds || [])]));
+        extraDupIdsToDelete.push(...extraIds);
+      }
+    });
+
+    if (extraDupIdsToDelete.length > 0 && userId) {
+      supabaseAdmin
+        .from('watchlist_items')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', extraDupIdsToDelete)
+        .then(() => {});
+    }
 
     // Aggregate sibling offers per model/name across hardware_components
     const catalogGroupMap = new Map<string, { offers: { retailer: string; price: number }[]; maxPrice: number; msrp: number }>();

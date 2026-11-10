@@ -147,63 +147,133 @@ export function WatchlistManager({
   // Dynamic Retailer selection state (itemId -> retailerName)
   const [selectedRetailers, setSelectedRetailers] = useState<Record<string, string>>({});
 
-  // Helper to extract a canonical hardware key from an item (groups all retailer listings together)
-  const getNormalizedKey = (itm: any) => {
+  // Helper to extract canonical product URL identity (e.g. ASIN or eBay item ID)
+  const getCanonicalUrlKey = (rawUrl?: string): string => {
+    if (!rawUrl || typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl.trim())) return '';
+    try {
+      const parsed = new URL(rawUrl.trim());
+      const path = parsed.pathname || '';
+      const asinMatch = path.match(/\/(?:dp|gp\/product|gp\/aw\/d|d)\/([A-Z0-9]{10})/i);
+      if (asinMatch) return `asin:${asinMatch[1].toLowerCase()}`;
+      const ebayMatch = path.match(/\/itm\/(?:[^/]+\/)?(\d{9,15})/i);
+      if (ebayMatch) return `ebay:${ebayMatch[1]}`;
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      const cleanPath = path.toLowerCase().replace(/\/ref=[^/]*/, '').replace(/\/+$/, '');
+      if (cleanPath && cleanPath.length > 4) return `${host}${cleanPath}`;
+    } catch {}
+    return '';
+  };
+
+  // Helper to extract a canonical hardware key from an item without hardcoded brand or model lists
+  const getNormalizedKey = (itm: any): string => {
     if (!itm) return '';
-    const text = (itm.model || itm.component_name || itm.componentName || itm.name || '').toLowerCase();
-    const compId = (itm.component_id || itm.id || '').toLowerCase();
-
-    // 1. GPU Pattern (e.g. RTX 4080 Super, RX 7900 XTX)
-    const gpuMatch = text.match(/\b(geforce\s+)?(rtx|gtx|rx|arc)\s*(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b/i);
-    if (gpuMatch) {
-      const prefix = gpuMatch[2].toLowerCase();
-      const num = gpuMatch[3];
-      const mod = gpuMatch[4] ? ' ' + gpuMatch[4].toLowerCase() : '';
-      return (prefix + ' ' + num + mod).trim();
-    }
-    // Reverse GPU order (e.g. "5080 Series GPU Card NVIDIA GeForce RTX" -> "rtx 5080")
-    const revGpuMatch = text.match(/\b(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b.*?\b(rtx|gtx|rx|arc)\b/i);
-    if (revGpuMatch) {
-      const num = revGpuMatch[1];
-      const mod = revGpuMatch[2] ? ' ' + revGpuMatch[2].toLowerCase() : '';
-      const prefix = revGpuMatch[3].toLowerCase();
-      return (prefix + ' ' + num + mod).trim();
+    const rawText = (itm.model || itm.componentName || itm.component_name || itm.name || '').trim();
+    if (rawText) {
+      let cleanText = rawText.toLowerCase();
+      if (/^https?:\/\//i.test(cleanText)) {
+        const urlKey = getCanonicalUrlKey(cleanText);
+        if (urlKey) return urlKey;
+      }
+      cleanText = cleanText
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cleanText) {
+        return cleanText.split(' ').slice(0, 8).join(' ');
+      }
     }
 
-    // 2. CPU Pattern (e.g. Ryzen 9 9900X3D, Core i9 14900K, Ultra 9 285K)
-    const cpuMatch = text.match(/\b(ryzen\s*[3579]\s*\d{4,5}[a-z0-9]*(?:\s*x3d)?|core\s*i[3579][ -]\d{4,5}[a-z]*|ultra\s*[3579]\s*[- ]?\d{3,4}[a-z]*)\b/i);
-    if (cpuMatch) {
-      return cpuMatch[0].replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+    const compId = (itm.component_id || '').toLowerCase().trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(compId);
+    if (compId && !isUuid && !/^w-\d+$/.test(compId)) {
+      return compId
+        .replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
     }
 
-    // 3. Motherboard Pattern (e.g. Prime Q270M-C, Z890 WiFi, B650 Tomahawk)
-    const moboMatch = text.match(/\b(prime|strix|tuf|aorus|tomahawk|proart|taichi|maximus|hero|plus|elite)\s+([a-z0-9-]+)\b/i) ||
-                      text.match(/\b([zbxqa]\d{3}[a-z0-9-]*)\b/i);
-    if (moboMatch) {
-      return (moboMatch[1] + (moboMatch[2] ? ' ' + moboMatch[2] : '')).replace(/[^a-z0-9]+/g, ' ').trim();
+    return '';
+  };
+
+  // Consolidates duplicate watchlist items (matching normalized key, title, or product URL) into a single row
+  const deduplicateWatchlist = (items: WatchlistItem[]): WatchlistItem[] => {
+    const result: WatchlistItem[] = [];
+
+    for (const item of items) {
+      if (!item) continue;
+      const itemNormKey = getNormalizedKey(item);
+      const itemTitleNorm = (item.componentName || (item as any).name || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+      const itemUrlKey = getCanonicalUrlKey(item.productUrl || (item as any).product_url);
+
+      const existingIdx = result.findIndex(existing => {
+        if (existing.id && item.id && existing.id === item.id) return true;
+        const exUrlKey = getCanonicalUrlKey(existing.productUrl || (existing as any).product_url);
+        if (itemUrlKey && exUrlKey && itemUrlKey === exUrlKey) return true;
+        const exTitleNorm = (existing.componentName || (existing as any).name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+        if (itemTitleNorm && exTitleNorm && itemTitleNorm === exTitleNorm) return true;
+        const exNormKey = getNormalizedKey(existing);
+        if (itemNormKey && exNormKey && itemNormKey.length >= 4 && itemNormKey === exNormKey) return true;
+        return false;
+      });
+
+      if (existingIdx === -1) {
+        result.push(item);
+      } else {
+        const existing = result[existingIdx];
+        const existingIsPending = existing.retailer === ('Scraping live prices...' as any) || Number(existing.currentPrice || 0) <= 0;
+        const itemIsPending = item.retailer === ('Scraping live prices...' as any) || Number(item.currentPrice || 0) <= 0;
+
+        const primary = (existingIsPending && !itemIsPending) ? item : existing;
+        const secondary = primary === existing ? item : existing;
+
+        const pSpecs = typeof primary.specs === 'string' ? JSON.parse(primary.specs || '{}') : (primary.specs || {});
+        const sSpecs = typeof secondary.specs === 'string' ? JSON.parse(secondary.specs || '{}') : (secondary.specs || {});
+        const mergedOffersMap = new Map<string, any>();
+
+        [...(Array.isArray(pSpecs.RetailerOffers) ? pSpecs.RetailerOffers : []), ...(Array.isArray(sSpecs.RetailerOffers) ? sSpecs.RetailerOffers : [])].forEach(off => {
+          if (off && off.retailer && Number(off.price) > 0) {
+            const rKey = off.retailer.toLowerCase().trim();
+            if (!mergedOffersMap.has(rKey)) {
+              mergedOffersMap.set(rKey, off);
+            }
+          }
+        });
+
+        const mergedDbIds = Array.from(new Set([
+          ...(Array.isArray(primary.dbRowIds) ? primary.dbRowIds : []),
+          ...(Array.isArray(secondary.dbRowIds) ? secondary.dbRowIds : []),
+          ...(primary.id && !primary.id.startsWith('w-') ? [primary.id] : []),
+          ...(secondary.id && !secondary.id.startsWith('w-') ? [secondary.id] : [])
+        ]));
+
+        // Prefer a real DB UUID id over a temporary pending id unless the pending item is still actively streaming
+        const resolvedId = (!primary.id.startsWith('w-') || secondary.id.startsWith('w-'))
+          ? primary.id
+          : secondary.id;
+
+        result[existingIdx] = {
+          ...secondary,
+          ...primary,
+          id: resolvedId,
+          dbRowIds: mergedDbIds,
+          category: primary.category || secondary.category,
+          retailerTargets: { ...(secondary.retailerTargets || {}), ...(primary.retailerTargets || {}) },
+          specs: {
+            ...sSpecs,
+            ...pSpecs,
+            RetailerOffers: Array.from(mergedOffersMap.values())
+          }
+        };
+      }
     }
 
-    // 4. RAM Pattern (e.g. Vengeance RGB, Trident Z5, Ripjaws)
-    const ramMatch = text.match(/\b(vengeance|trident\s*z\d?|ripjaws|dominator|fury\s+beast|t-force|g\.?skill)\b.*?\b(ddr[45])?\b/i);
-    if (ramMatch) {
-      return (ramMatch[1] + (ramMatch[2] ? ' ' + ramMatch[2] : '')).replace(/[^a-z0-9]+/g, ' ').trim();
-    }
-
-    // 5. Cooler / AIO / Cooling Pattern (e.g. Liquid Freezer III, Kraken, Peerless Assassin, NH-D15, NexXxoS)
-    const coolerMatch = text.match(/\b(liquid\s*freezer\s*(?:iii|ii|pro)?(?:\s*\d{3})?|kraken\s*(?:elite|\d{3})?|peerless\s*assassin|phantom\s*spirit|nh\s*[-_]?d15|nexxxos\s*[a-z0-9]*|masterliquid|icue\s*link|pure\s*loop|arctic\s*acfre[a-z0-9]*)\b/i);
-    if (coolerMatch) {
-      return coolerMatch[0].replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-
-    // 6. Fallback: Cleaned alphanumeric slug
-    const cleanId = compId.replace(/^(w-|comp-)/, '').replace(/-(amazon|best-buy|newegg|micro-center|b-h|ebay)$/i, '').replace(/[^a-z0-9]+/g, ' ').trim();
-    if (cleanId && cleanId.length > 3) return cleanId;
-
-    return text
-      .replace(/^(asus|msi|gigabyte|zotac|evga|sapphire|xfx|pny|powercolor|asrock|intel|amd|nvidia|corsair|g\.skill|samsung|crucial|western digital|wd|lian li|nzxt|noctua|be quiet|seasonic|thermaltake|lenovo|arch memory|arctic)\s+/i, '')
-      .replace(/\b(desktop processor|processor|graphics card|video card|cpu|gpu|ddr4|ddr5|ram|nvme|solid state drive|motherboard|power supply|psu|edition|oc|gaming|unlocked|socket|12-core|16-core|8-core|24-thread|32-thread|aio|cooler|cpu cooler|water cooling|radiator)\b/gi, ' ')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
+    return result;
   };
 
   // Helper to extract active retailer offer & price dynamically from specs.RetailerOffers or sibling model records (Immutable & Memory-Safe)
@@ -616,21 +686,7 @@ export function WatchlistManager({
         // Recover pending scrapes from sessionStorage if user is signed in
         let recoveredPending: WatchlistItem[] = [];
         const rawList = user?.id ? [...recoveredPending, ...formatted] : [];
-        const seenIds = new Set<string>();
-        const seenKeys = new Set<string>();
-        const dedupedList: WatchlistItem[] = [];
-
-        rawList.forEach((item) => {
-          const normKey = getNormalizedKey(item);
-          const rawId = item.id || `gen-${normKey}`;
-          if (normKey && !seenKeys.has(normKey) && !seenIds.has(rawId)) {
-            seenKeys.add(normKey);
-            seenIds.add(rawId);
-            dedupedList.push(item);
-          }
-        });
-
-        setWatchlist(dedupedList);
+        setWatchlist(deduplicateWatchlist(rawList));
 
         if (hwCatalog && hwCatalog.length > 0) {
           const formattedTrending = hwCatalog.map((item: any) => {
@@ -1256,8 +1312,8 @@ export function WatchlistManager({
       sessionStorage.setItem('pendingScrapes', JSON.stringify([...stored, pendingItem]));
     } catch (e) {}
 
-    // Update screen instantly & close modal
-    setWatchlist(prev => [pendingItem, ...prev]);
+    // Update screen instantly & close modal (deduplicate if already present)
+    setWatchlist(prev => deduplicateWatchlist([pendingItem, ...prev]));
     setShowAddModal(false);
     setLiveQuery('');
 
@@ -1304,8 +1360,8 @@ export function WatchlistManager({
           shouldPromote = true;
         }
 
-        // Accumulate ALL retailer offers so the dropdown shows every price
-        setWatchlist(prev => prev.map(item => {
+        // Accumulate ALL retailer offers and merge with any existing watchlist entry for the same component
+        setWatchlist(prev => deduplicateWatchlist(prev.map(item => {
           if (item.id !== pendingId) return item;
 
           const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
@@ -1331,7 +1387,7 @@ export function WatchlistManager({
             } : {}),
             specs: { ...currentSpecs, RetailerOffers: updatedOffers },
           };
-        }));
+        })));
       }
     });
 
@@ -1429,7 +1485,7 @@ export function WatchlistManager({
               };
             });
 
-            setWatchlist(prev => prev.map(item => {
+            setWatchlist(prev => deduplicateWatchlist(prev.map(item => {
               if (item.id !== pendingId) return item;
               const currentSpecs = typeof item.specs === 'string' ? JSON.parse(item.specs || '{}') : (item.specs || {});
               return {
@@ -1450,7 +1506,7 @@ export function WatchlistManager({
                   RetailerOffers: normalizedAllOffers
                 }
               };
-            }));
+            })));
           }
           if (watchdogTimer) clearTimeout(watchdogTimer);
           es.close();
