@@ -87,11 +87,13 @@ export async function PUT(req: NextRequest) {
     const nextFreq = summary_frequency || existingPref?.summary_frequency || 'daily';
 
     // Preserve last_sent_at and retailer_targets across preference updates.
-    // If switching to every_3_days or weekly and no last_sent_at exists yet, anchor the interval timer to now.
     const mergedChannels: Record<string, any> = {
       ...existingChannels,
       ...incomingChannels,
     };
+    if (existingChannels.last_sent_at && !incomingChannels.last_sent_at) {
+      mergedChannels.last_sent_at = existingChannels.last_sent_at;
+    }
 
     const nextIntervals = comparison_intervals
       ? (typeof comparison_intervals === 'string' ? comparison_intervals : JSON.stringify(comparison_intervals))

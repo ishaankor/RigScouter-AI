@@ -257,6 +257,9 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           } catch {}
         }
         const mergedChannels: Record<string, any> = { ...existingChannels, ...channels };
+        if (existingChannels.last_sent_at) {
+          mergedChannels.last_sent_at = existingChannels.last_sent_at;
+        }
         await supabase.from('user_preferences').upsert({
           user_id: user.id,
           summary_frequency: newFreq,
@@ -348,6 +351,9 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
           } catch {}
         }
         const mergedChannels: Record<string, any> = { ...existingChannels, ...channels };
+        if (existingChannels.last_sent_at) {
+          mergedChannels.last_sent_at = existingChannels.last_sent_at;
+        }
         const { error } = await supabase.from('user_preferences').upsert({
           user_id: user.id,
           summary_frequency: frequency,

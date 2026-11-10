@@ -919,7 +919,8 @@ export async function GET(req: NextRequest) {
             headline: report.headline,
             executive_summary: report.executiveSummary,
             report_data: report,
-            total_saved_opportunity: report.totalSavedOpportunity
+            total_saved_opportunity: report.totalSavedOpportunity,
+            generated_at: new Date().toISOString()
           });
           if (insertErr) {
             console.error(`[Digest DB Insert Error] User ${pref.user_id}:`, insertErr.message || insertErr);
