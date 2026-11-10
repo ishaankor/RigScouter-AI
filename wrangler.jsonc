@@ -20,7 +20,9 @@
 		"binding": "ASSETS"
 	},
 	"vars": {
-		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_NSsV5EqbGpcCVav71oRN8Q_lDnXq7sy"
+		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_NSsV5EqbGpcCVav71oRN8Q_lDnXq7sy",
+		"NEXT_PUBLIC_BACKEND_URL": "https://rigscouter-ai-database.onrender.com",
+		"BACKEND_URL": "https://rigscouter-ai-database.onrender.com"
 	},
 	"routes": [
 		{

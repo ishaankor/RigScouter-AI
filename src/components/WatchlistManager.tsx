@@ -36,6 +36,7 @@ import { WatchlistItem, HardwareComponent } from '@/lib/types/hardware';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthHeaders } from '@/lib/auth/client-auth';
 import { calculateMultiRetailerDealScore, getDealScoreTier } from '@/lib/scrapers/price-scraper';
+import { getBackendUrl } from '@/lib/config/backend';
 
 export interface TrendingRetailerOffer {
   id: string;
@@ -1282,7 +1283,7 @@ export function WatchlistManager({
     setIsScraping(true);
     setScrapeNotice(null);
 
-    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+    const BACKEND_URL = getBackendUrl();
     const userId = user.id;
     const pendingId = `w-${Date.now()}`;
 
@@ -1620,7 +1621,7 @@ export function WatchlistManager({
     }
 
     // 5. Backend proxy cleanup
-    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+    const BACKEND_URL = getBackendUrl();
     try {
       await fetch(`${BACKEND_URL}/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
     } catch (e) {}
@@ -1638,7 +1639,7 @@ export function WatchlistManager({
       }
     } catch (e) {}
 
-    const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+    const BACKEND_URL = getBackendUrl();
     for (const targetId of idsToDelete) {
       try {
         await fetch(`${BACKEND_URL}/api/components/${encodeURIComponent(targetId)}`, { method: 'DELETE' });
@@ -1838,7 +1839,7 @@ export function WatchlistManager({
       }
 
       // Backend Proxy PATCH
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      const BACKEND_URL = getBackendUrl();
       try {
         fetch(`${BACKEND_URL}/api/watchlist`, {
           method: 'PATCH',
@@ -1942,7 +1943,7 @@ export function WatchlistManager({
         console.warn('PATCH /api/watchlist notice:', patchErr);
       }
 
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      const BACKEND_URL = getBackendUrl();
       try {
         fetch(`${BACKEND_URL}/api/watchlist`, {
           method: 'PATCH',

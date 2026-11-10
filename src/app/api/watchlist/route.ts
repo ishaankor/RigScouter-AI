@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { supabaseAdmin } from '@/lib/db/supabase-admin';
+import { getBackendUrl } from '@/lib/config/backend';
 import { getVerifiedUser } from '@/lib/auth/server-auth';
 import { calculateMultiRetailerDealScore } from '@/lib/scrapers/price-scraper';
 
@@ -164,7 +165,7 @@ export async function GET(req: NextRequest) {
     if (rawWatchlist.length > 0) {
       const stripSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
       const catalogBaseIds = new Set((hwCatalog || []).map((h: any) => stripSuffix(h.id || '')));
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:10001';
+      const backendUrl = getBackendUrl();
       for (const w of rawWatchlist) {
         const wBaseId = stripSuffix(w.component_id || '');
         if (wBaseId && !catalogBaseIds.has(wBaseId)) {
@@ -665,7 +666,7 @@ export async function GET(req: NextRequest) {
     // silently notify the backend engine to refresh and acquire active in-stock listings.
     const hasOutdatedOrOutOfStock = formattedWatchlist.some(it => it.inStock === false || (it.specs as any)?.is_sold_out === true);
     if (hasOutdatedOrOutOfStock) {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+      const backendUrl = getBackendUrl();
       fetch(`${backendUrl.replace(/\/$/, '')}/api/cron/trigger-daily-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

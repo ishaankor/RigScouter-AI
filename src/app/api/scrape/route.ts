@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { scrapeTavilyAndSaveToDb } from '@/lib/scrapers/tavily-scraper';
+import { getBackendUrl } from '@/lib/config/backend';
 
 export const runtime = 'edge';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
-  || process.env.BACKEND_URL
-  || 'https://rigscouter-ai-database.onrender.com';
+const BACKEND_URL = getBackendUrl();
 
 export async function POST(req: NextRequest) {
   try {

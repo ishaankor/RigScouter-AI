@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { scrapeTavilyAndSaveToDb } from '@/lib/scrapers/tavily-scraper';
+import { getBackendUrl } from '@/lib/config/backend';
 
 export const runtime = 'edge';
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized cron execution request' }, { status: 401 });
   }
 
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+  const backendUrl = getBackendUrl();
 
   // 1. Delegate to the backend proxy service which uses the optimized two-tier 0-credit pipeline
   try {

@@ -1,9 +1,10 @@
 import { HardwareComponent, WatchlistItem } from '../types/hardware';
 import { supabase } from '../db/supabase';
+import { getBackendUrl } from '../config/backend';
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY || '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';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://rigscouter-ai-database.onrender.com';
+const BACKEND_URL = getBackendUrl();
 
 /**
  * Searches the internet for trending PC hardware news via Tavily AI,
