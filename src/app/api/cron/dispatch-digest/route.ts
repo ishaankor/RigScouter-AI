@@ -653,10 +653,21 @@ export async function GET(req: NextRequest) {
           console.warn(`Could not parse delivery channels for user ${pref.user_id}`);
         }
 
-        const targetEmail = deliveryChannels.emailAddress;
+        let targetEmail = deliveryChannels.emailAddress;
+        if (!targetEmail && deliveryChannels.email !== false) {
+          try {
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(pref.user_id);
+            if (authUser?.user?.email) {
+              targetEmail = authUser.user.email;
+            }
+          } catch (authErr) {
+            console.warn(`[Digest Auth Lookup] Could not retrieve auth email for ${pref.user_id}`);
+          }
+        }
+
         const discordWebhookUrl = deliveryChannels.discord_webhook || deliveryChannels.discordWebhook;
         const hasEmail = Boolean(targetEmail && deliveryChannels.email !== false);
-        const hasDiscord = Boolean(discordWebhookUrl && (deliveryChannels.discord === true || deliveryChannels.email === false || !targetEmail) && isValidDiscordWebhookUrl(discordWebhookUrl));
+        const hasDiscord = Boolean(discordWebhookUrl && (deliveryChannels.discord === true || !hasEmail) && isValidDiscordWebhookUrl(discordWebhookUrl));
 
         if (!hasEmail && !hasDiscord) {
           continue;
@@ -676,10 +687,7 @@ export async function GET(req: NextRequest) {
 
           const dbLastSentTime = lastDigest?.generated_at ? new Date(lastDigest.generated_at).getTime() : 0;
           const channelLastSentTime = (deliveryChannels as any)?.last_sent_at ? new Date((deliveryChannels as any).last_sent_at).getTime() : 0;
-          const prefUpdatedTime = (frequency === 'every_3_days' || frequency === 'weekly') && pref.updated_at
-            ? new Date(pref.updated_at).getTime()
-            : 0;
-          const lastSentTime = Math.max(dbLastSentTime, channelLastSentTime, prefUpdatedTime);
+          const lastSentTime = Math.max(dbLastSentTime, channelLastSentTime);
 
           const hoursSinceLast = lastSentTime > 0 ? (Date.now() - lastSentTime) / (1000 * 60 * 60) : Infinity;
 

@@ -29,3 +29,4 @@ export function getBackendUrl(): string {
     'https://rigscouter-ai-database.onrender.com'
   );
 }
+

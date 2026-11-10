@@ -92,9 +92,6 @@ export async function PUT(req: NextRequest) {
       ...existingChannels,
       ...incomingChannels,
     };
-    if (!mergedChannels.last_sent_at && (nextFreq === 'every_3_days' || nextFreq === 'weekly')) {
-      mergedChannels.last_sent_at = nowIso;
-    }
 
     const nextIntervals = comparison_intervals
       ? (typeof comparison_intervals === 'string' ? comparison_intervals : JSON.stringify(comparison_intervals))
