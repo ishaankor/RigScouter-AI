@@ -6,8 +6,11 @@ export function getSupabaseAdmin(): SupabaseClient {
   if (supabaseAdminInstance) return supabaseAdminInstance;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mfzokxffhmedvtuhykdw.supabase.co';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-                      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mem9reGZmaG1lZHZ0dWh5a2R3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTk2NjU2MiwiZXhwIjoyMTAxNTQyNTYyfQ.Mql6HmvstXQMIe7486WcLpV4tfjPznKuGJkjHdIOtI4';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+  if (!supabaseKey && typeof window === 'undefined') {
+    console.warn('[supabase-admin] SUPABASE_SERVICE_ROLE_KEY environment variable is not set. Service-role operations will fail.');
+  }
 
   supabaseAdminInstance = createClient(supabaseUrl, supabaseKey, {
     auth: {
