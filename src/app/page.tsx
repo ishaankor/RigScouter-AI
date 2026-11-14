@@ -33,40 +33,43 @@ export default function HomePage() {
   const [selectedRetailer, setSelectedRetailer] = useState<string>('eBay');
   const [digestChannel, setDigestChannel] = useState<'discord' | 'email'>('discord');
 
-  // Hardware Ticker Deals Data (dynamically hydrated from DB)
+  // Hardware Ticker Deals Data (hydrated from live database catalog)
   const [tickerDeals, setTickerDeals] = useState<any[]>([
-    { name: 'AMD Ryzen 7 5800XT 8-Core', price: '$220.00', save: '$29', retailer: 'Amazon', score: 95 },
-    { name: 'ASUS TUF RTX 3060 Ti V2 OC', price: '$314.99', save: '$45', retailer: 'Amazon', score: 99 },
-    { name: 'King 95 PRO Dual-Chamber Mid-Tower', price: '$100.00', save: '$60', retailer: 'eBay', score: 99 },
-    { name: 'NV3 1TB M.2 2280 NVMe SSD', price: '$74.99', save: '$87', retailer: 'eBay', score: 99 },
-    { name: 'B650M D3HP AX AM5 Motherboard', price: '$70.00', save: '$50', retailer: 'eBay', score: 99 },
-    { name: 'GeForce RTX 4080 Super 16G', price: '$1200.00', save: '$295', retailer: 'eBay', score: 90 },
+    { name: 'Ryzen 7 9800X3D 8-Core CPU', price: '$369.99', save: '$110', retailer: 'eBay', score: 98 },
+    { name: 'TUF Gaming X870-PLUS WiFi AM5', price: '$149.00', save: '$80', retailer: 'Amazon', score: 99 },
+    { name: 'Dual GeForce RTX 3060 V2 12GB', price: '$259.99', save: '$190', retailer: 'eBay', score: 95 },
+    { name: 'GIGABYTE B850M GAMING X WIFI6E', price: '$123.50', save: '$36', retailer: 'eBay', score: 94 },
+    { name: 'ASUS TUF GAMING B650E-PLUS WIFI', price: '$89.99', save: '$80', retailer: 'eBay', score: 99 },
+    { name: 'ROG Strix GeForce GTX 1080 Ti 11G', price: '$120.00', save: '$280', retailer: 'eBay', score: 92 },
+    { name: 'Sceptre 22" 144Hz FHD Monitor', price: '$62.97', save: '$27', retailer: 'Amazon', score: 95 },
+    { name: 'Asrock B650M Pro RS AM5 Board', price: '$109.94', save: '$35', retailer: 'Amazon', score: 93 },
+    { name: 'T-Force Vulcan Z 32GB DDR4 RAM', price: '$220.00', save: '$29', retailer: 'eBay', score: 88 }
   ]);
 
-  // Top Hardware Deals Data (dynamically hydrated from DB)
+  // Top Hardware Deals Data (hydrated from live database catalog)
   const [topDeals, setTopDeals] = useState<any[]>([
-    { id: '1', name: 'King 95 PRO Dual-Chamber ATX Mid-Tower Case', category: 'Case', price: 100.00, msrp: 159.88, retailer: 'eBay', score: 99, cut: '-37%' },
-    { id: '2', name: 'B650M D3HP AX AMD AM5 mATX Motherboard', category: 'Motherboard', price: 70.00, msrp: 119.99, retailer: 'eBay', score: 99, cut: '-42%' },
-    { id: '3', name: 'NV3 1TB M.2 2280 NVMe SSD PCIe 4.0', category: 'Storage', price: 74.99, msrp: 162.00, retailer: 'eBay', score: 99, cut: '-54%' },
-    { id: '4', name: 'Ryzen 5 8500G 6-Core Desktop Processor', category: 'CPU', price: 66.50, msrp: 146.99, retailer: 'eBay', score: 99, cut: '-55%' },
-    { id: '5', name: 'ASUS TUF Gaming GeForce RTX 3060 Ti V2', category: 'GPU', price: 314.99, msrp: 359.99, retailer: 'Amazon', score: 99, cut: '-13%' },
-    { id: '6', name: 'AMD Ryzen 7 5800XT 8-Core Processor', category: 'CPU', price: 220.00, msrp: 249.00, retailer: 'Amazon', score: 95, cut: '-12%' },
+    { id: '1', name: 'ASUS TUF Gaming X870-PLUS WiFi AM5 ATX Motherboard', category: 'Motherboard', price: 149.00, msrp: 229.99, retailer: 'Amazon', score: 99, cut: '-35%' },
+    { id: '2', name: 'AMD Ryzen 7 9800X3D 8-Core Desktop Processor', category: 'CPU', price: 369.99, msrp: 479.99, retailer: 'eBay', score: 98, cut: '-23%' },
+    { id: '3', name: 'ASUS Dual GeForce RTX 3060 V2 12GB GDDR6 OC Edition', category: 'GPU', price: 259.99, msrp: 449.99, retailer: 'eBay', score: 95, cut: '-42%' },
+    { id: '4', name: 'GIGABYTE B850M GAMING X WIFI6E AM5 DDR5 mATX Board', category: 'Motherboard', price: 123.50, msrp: 159.99, retailer: 'eBay', score: 94, cut: '-23%' },
+    { id: '5', name: 'Sceptre 22-Inch 1080p 144Hz Gaming Display Monitor', category: 'Monitor', price: 62.97, msrp: 89.99, retailer: 'Amazon', score: 95, cut: '-30%' },
+    { id: '6', name: 'ASUS ROG Strix GeForce GTX 1080 Ti 11GB OC Edition', category: 'GPU', price: 120.00, msrp: 399.00, retailer: 'eBay', score: 92, cut: '-70%' },
   ]);
 
-  // Featured Comparison Data (dynamically hydrated from DB)
+  // Featured Comparison Data (hydrated from live database catalog)
   const [featuredComparison, setFeaturedComparison] = useState<any>({
-    name: 'AMD Ryzen 7 5800XT 8-Core Desktop Processor',
+    name: 'AMD Ryzen 7 9800X3D 8-Core, 16-Thread Desktop Processor',
     category: 'CPU',
-    score: 95,
-    dealTag: 'Epic Deal',
-    lowestPrice: '$155.00',
-    msrp: '$249.00',
+    score: 98,
+    dealTag: 'All-Time Low',
+    lowestPrice: '$369.99',
+    msrp: '$479.00',
     retailers: [
-      { name: 'eBay', price: '$155.00', stock: 'In Stock', isLowest: true, active: true },
-      { name: 'Amazon', price: '$220.00', stock: 'In Stock', isLowest: false, active: true },
-      { name: 'Best Buy', price: '$239.00', stock: 'In Stock', isLowest: false, active: false, status: 'testing' },
-      { name: 'Micro Center', price: '$219.99', stock: 'In-Store', isLowest: false, active: false, status: 'soon' },
-      { name: 'Newegg', price: '$229.99', stock: 'In Stock', isLowest: false, active: false, status: 'soon' },
+      { name: 'eBay', price: '$369.99', stock: 'In Stock', isLowest: true, active: true },
+      { name: 'Amazon', price: '$398.05', stock: 'In Stock', isLowest: false, active: true },
+      { name: 'Best Buy', price: '$479.00', stock: 'In Stock', isLowest: false, active: false, status: 'testing' },
+      { name: 'Micro Center', price: '$479.99', stock: 'In-Store', isLowest: false, active: false, status: 'soon' },
+      { name: 'Newegg', price: '$489.99', stock: 'In Stock', isLowest: false, active: false, status: 'soon' },
     ]
   });
 
@@ -114,13 +117,13 @@ export default function HomePage() {
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-gradient-to-b from-cyan-500/10 via-blue-600/5 to-transparent rounded-full blur-[120px] pointer-events-none" />
 
       {/* ── Sleek Minimal Navbar ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-[#0b0f19]/80 border-b border-gray-800/80">
+      <header role="banner" className="sticky top-0 z-50 backdrop-blur-md bg-[#0b0f19]/80 border-b border-gray-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
           {/* Brand Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group" aria-label="RigScouter AI Home">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
-              <Cpu className="w-4 h-4 text-white" />
+              <Cpu className="w-4 h-4 text-white" aria-hidden="true" />
             </div>
             <span className="text-lg font-black font-heading tracking-tight text-white">
               RigScouter<span className="text-cyan-400">-AI</span>
@@ -128,7 +131,7 @@ export default function HomePage() {
           </Link>
 
           {/* Clean Nav Links */}
-          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold text-gray-400">
+          <nav aria-label="Primary Navigation" className="hidden md:flex items-center gap-8 text-xs font-semibold text-gray-400">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#demo" className="hover:text-white transition-colors">Live Preview</a>
             <a href="#deals" className="hover:text-white transition-colors">Top Deals</a>
@@ -146,14 +149,16 @@ export default function HomePage() {
                 <button
                   onClick={handleSignOut}
                   title="Sign Out"
-                  className="ml-1 text-gray-400 hover:text-red-400 transition-colors"
+                  aria-label="Sign out of account"
+                  className="ml-1 text-gray-400 hover:text-red-400 transition-colors cursor-pointer"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => setAuthModalOpen(true)}
+                aria-label="Sign in to your account"
                 className="hidden sm:inline-flex text-xs font-semibold text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-900 transition-colors cursor-pointer"
               >
                 Sign In
@@ -162,15 +167,19 @@ export default function HomePage() {
 
             <Link
               href="/dashboard"
+              aria-label="Launch RigScouter Live Application"
               className="btn-glow px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-cyan-500/20 cursor-pointer"
             >
               <span>Launch App</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </Link>
           </div>
 
         </div>
       </header>
+
+      {/* ── Main Content Landmark ───────────────────────────────────────── */}
+      <main id="main-content" role="main">
 
       {/* ── Hero Section ───────────────────────────────────────────────── */}
       <section className="relative pt-16 pb-16 md:pt-24 md:pb-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6 overflow-visible">
@@ -288,32 +297,66 @@ export default function HomePage() {
 
       </section>
 
-      {/* ── Live Ticker Strip ──────────────────────────────────────────── */}
-      <div className="border-y border-gray-800/80 bg-gray-950/50 py-2.5 overflow-hidden">
+      {/* ── Live Ticker Strip (Seamless Double-Track Infinite Marquee) ─── */}
+      <div className="border-y border-gray-800/80 bg-gray-950/70 py-2.5 overflow-hidden">
         <div className="flex items-center">
-          <div className="shrink-0 px-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-cyan-400 border-r border-gray-800 z-10 bg-gray-950 py-0.5">
-            <Flame className="w-3.5 h-3.5 text-orange-400" />
-            <span>Live Price Drops</span>
+          {/* Static Left Label with subtle elevation */}
+          <div className="shrink-0 px-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-cyan-400 border-r border-gray-800 z-20 bg-gray-950 py-1 shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+            <Flame className="w-3.5 h-3.5 text-orange-400" aria-hidden="true" />
+            <span className="whitespace-nowrap">Live Price Drops</span>
           </div>
           
-          <div className="overflow-hidden whitespace-nowrap w-full">
-            <div className="animate-ticker flex gap-3 pl-3">
-              {[...tickerDeals, ...tickerDeals].map((deal, idx) => (
-                <div
-                  key={idx}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-gray-900 border border-gray-800/80 text-xs font-medium shrink-0"
-                >
-                  <span className="text-gray-300 font-semibold">{deal.name}</span>
-                  <span className="text-cyan-400 font-bold">{deal.price}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
-                    Save {deal.save}
-                  </span>
-                  <span className="text-gray-500 text-[11px]">• {deal.retailer}</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-bold">
-                    {deal.score}/100
-                  </span>
-                </div>
-              ))}
+          {/* Marquee Viewport with Edge Gradient Masks */}
+          <div className="relative flex overflow-hidden w-full items-center">
+            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-gray-950 to-transparent z-10" />
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-950 to-transparent z-10" />
+
+            {/* Seamless Track 1 */}
+            <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3">
+              {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
+                .filter(deal => deal && deal.name && deal.price)
+                .map((deal, idx) => (
+                  <div
+                    key={`track1-${idx}-${deal.name.slice(0, 8)}`}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-gray-900 border border-gray-800/80 text-xs font-medium shrink-0 whitespace-nowrap hover:border-cyan-500/40 transition-colors"
+                  >
+                    <span className="text-gray-200 font-semibold">{deal.name}</span>
+                    <span className="text-cyan-400 font-bold">{deal.price}</span>
+                    {deal.save && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                        Save {deal.save}
+                      </span>
+                    )}
+                    <span className="text-gray-400 text-[11px]">• {deal.retailer || 'Retailer'}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-bold">
+                      {deal.score || 85}/100
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            {/* Seamless Track 2 (Cloned for 100% continuous infinite loop) */}
+            <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3" aria-hidden="true">
+              {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
+                .filter(deal => deal && deal.name && deal.price)
+                .map((deal, idx) => (
+                  <div
+                    key={`track2-${idx}-${deal.name.slice(0, 8)}`}
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-gray-900 border border-gray-800/80 text-xs font-medium shrink-0 whitespace-nowrap hover:border-cyan-500/40 transition-colors"
+                  >
+                    <span className="text-gray-200 font-semibold">{deal.name}</span>
+                    <span className="text-cyan-400 font-bold">{deal.price}</span>
+                    {deal.save && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                        Save {deal.save}
+                      </span>
+                    )}
+                    <span className="text-gray-400 text-[11px]">• {deal.retailer || 'Retailer'}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-bold">
+                      {deal.score || 85}/100
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -702,9 +745,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      </main>
 
       {/* ── Minimal Footer ─────────────────────────────────────────────── */}
-      <footer className="border-t border-gray-800/80 bg-gray-950/80 py-8">
+      <footer role="contentinfo" className="border-t border-gray-800/80 bg-gray-950/80 py-8">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-2 text-gray-300 font-bold">
             <Cpu className="w-4 h-4 text-cyan-400" />
@@ -715,7 +759,8 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <Link href="/features" className="hover:text-white transition-colors">Features</Link>
+            <Link href="/methodology" className="hover:text-white transition-colors">Methodology</Link>
             <a href="#retailers" className="hover:text-white transition-colors">Retailers</a>
           </div>
         </div>

@@ -4,16 +4,31 @@
 
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
+/* ── Custom Design Tokens & CSS Variables ───────────────────────────────── */
 :root {
   --bg-color: #0b0f19;
+  --bg-surface-elevated: #111827;
   --card-bg: rgba(17, 24, 39, 0.7);
   --card-border: rgba(255, 255, 255, 0.08);
+  --card-border-hover: rgba(79, 172, 254, 0.35);
+  
   --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
   --accent-cyan: #00f2fe;
   --accent-blue: #4facfe;
   --accent-purple: #7928ca;
   --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+  
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
@@ -27,6 +42,7 @@ body {
   min-height: 100vh;
 }
 
+/* ── Typography & Focus Rules ───────────────────────────────────────────── */
 h1, h2, h3, h4, .font-heading {
   font-family: 'Space Grotesk', sans-serif;
   letter-spacing: -0.025em;
@@ -36,7 +52,103 @@ code, pre, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Glassmorphism Card Utility (GPU & Memory Optimized) */
+:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+/* ── Reusable Component Design System ───────────────────────────────────── */
+@layer components {
+  /* Surface Cards */
+  .rs-card {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.35);
+    transition: all var(--transition-normal);
+  }
+
+  .rs-card-hover:hover {
+    border-color: var(--card-border-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px 0 rgba(79, 172, 254, 0.14);
+  }
+
+  /* Semantic Badges */
+  .rs-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 9999px;
+  }
+
+  .rs-badge-cyan {
+    background: rgba(8, 51, 68, 0.7);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 116, 144, 0.5);
+  }
+
+  .rs-badge-emerald {
+    background: rgba(6, 78, 59, 0.7);
+    color: #34d399;
+    border: 1px solid rgba(4, 120, 87, 0.5);
+  }
+
+  .rs-badge-purple {
+    background: rgba(88, 28, 135, 0.7);
+    color: #c084fc;
+    border: 1px solid rgba(126, 34, 206, 0.5);
+  }
+
+  .rs-badge-rose {
+    background: rgba(136, 19, 55, 0.7);
+    color: #fb7185;
+    border: 1px solid rgba(190, 18, 60, 0.5);
+  }
+
+  /* Interactive Buttons */
+  .rs-btn-primary {
+    background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+    color: #090d16;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    box-shadow: 0 0 20px rgba(79, 172, 254, 0.3);
+    cursor: pointer;
+  }
+
+  .rs-btn-primary:hover {
+    box-shadow: 0 0 30px rgba(79, 172, 254, 0.55);
+    transform: translateY(-1px);
+  }
+
+  .rs-btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f3f4f6;
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+  }
+
+  .rs-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(79, 172, 254, 0.4);
+    color: #ffffff;
+    transform: translateY(-1px);
+  }
+}
+
+/* Glassmorphism Card Utility */
 .glass-card {
   background: rgba(17, 24, 39, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -118,7 +230,27 @@ code, pre, .font-mono {
   transform: translateY(-1px);
 }
 
-/* Marquee / Live Ticker Animation */
+/* Seamless Double-Track Infinite Marquee */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 45s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Legacy single-track ticker fallback */
 @keyframes ticker-scroll {
   0% {
     transform: translateX(0);
@@ -154,3 +286,13 @@ code, pre, .font-mono {
   animation: pulse-glow 8s ease-in-out infinite;
 }
 
+/* Accessibility: Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ticker,
+  .glow-sphere {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
