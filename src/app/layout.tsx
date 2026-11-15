@@ -33,7 +33,6 @@ export const metadata: Metadata = {
   creator: 'RigScouter AI',
   publisher: 'RigScouter AI',
   applicationName: 'RigScouter AI',
-  generator: 'Next.js',
   manifest: '/manifest.json',
   alternates: {
     canonical: siteUrl,
@@ -116,17 +115,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark scroll-smooth">
+    <html lang="en" className="app-html">
       <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="antialiased min-h-screen bg-[#090d16] text-[#f3f4f6]">
+      <body className="app-body">
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-gray-950 focus:font-bold focus:rounded-lg focus:shadow-lg focus:outline-none"
+          className="skip-nav-link"
         >
           Skip to main content
         </a>

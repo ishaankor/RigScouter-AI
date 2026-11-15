@@ -8,21 +8,12 @@ import {
   Cpu,
   Bell,
   Sparkles,
-  ShieldCheck,
   LogOut,
   ArrowRight,
   Globe,
-  CheckCircle2,
-  Lock,
   Mail,
   Flame,
-  Search,
-  MessageSquare,
-  BarChart3,
-  Layers,
-  Server,
-  Zap,
-  ArrowUpRight
+  BarChart3
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -115,10 +106,10 @@ export default function HomePage() {
           
           <Link href="/" className="brand-link" aria-label="RigScouter AI Home">
             <div className="brand-icon">
-              <Cpu className="w-4 h-4 text-white" aria-hidden="true" />
+              <Cpu className="brand-icon-svg" aria-hidden="true" />
             </div>
-            <span className="brand-text">
-              RigScouter<span className="text-cyan-400">-AI</span>
+            <span className="brand-title">
+              RigScouter<span className="brand-accent">-AI</span>
             </span>
           </Link>
 
@@ -135,14 +126,14 @@ export default function HomePage() {
                 <div className="user-avatar">
                   {user.email?.[0].toUpperCase() || 'U'}
                 </div>
-                <span className="text-gray-300 font-medium max-w-xs truncate">{user.email}</span>
+                <span className="user-email">{user.email}</span>
                 <button
                   onClick={handleSignOut}
                   title="Sign Out"
                   aria-label="Sign out of account"
-                  className="text-gray-400 hover:text-red-400 transition-colors"
+                  className="sign-out-btn"
                 >
-                  <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+                  <LogOut className="sign-out-icon" aria-hidden="true" />
                 </button>
               </div>
             ) : (
@@ -158,10 +149,10 @@ export default function HomePage() {
             <Link
               href="/dashboard"
               aria-label="Launch RigScouter Live Application"
-              className="rs-btn-primary"
+              className="launch-btn"
             >
               <span>Launch App</span>
-              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              <ArrowRight className="launch-btn-icon" aria-hidden="true" />
             </Link>
           </div>
 
@@ -172,7 +163,7 @@ export default function HomePage() {
       <main id="main-content" role="main">
 
       {/* ── Hero Section ───────────────────────────────────────────────── */}
-      <section aria-labelledby="hero-heading" className="hero-section">
+      <section id="overview" aria-labelledby="hero-heading" className="hero-section">
         
         <div className="hero-badge-pill">
           <span className="status-dot-live" aria-hidden="true" />
@@ -181,7 +172,7 @@ export default function HomePage() {
 
         <h1 id="hero-heading" className="hero-title">
           Autonomous PC Hardware
-          <span className="block mt-2 sm:mt-3 text-cyan-400">
+          <span className="hero-title-accent">
             Market Intelligence
           </span>
         </h1>
@@ -193,18 +184,18 @@ export default function HomePage() {
         <div className="hero-cta-group">
           <Link
             href="/dashboard"
-            className="rs-btn-primary px-6 py-2.5"
+            className="hero-primary-btn"
           >
-            <Bell className="w-4 h-4" aria-hidden="true" />
+            <Bell className="btn-icon" aria-hidden="true" />
             <span>Launch Watchlist Tracker</span>
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            <ArrowRight className="btn-icon" aria-hidden="true" />
           </Link>
 
           <a
             href="#workbench"
-            className="rs-btn-secondary px-5 py-2.5"
+            className="hero-secondary-btn"
           >
-            <Sparkles className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+            <Sparkles className="btn-icon-cyan" aria-hidden="true" />
             <span>Interactive Demo</span>
           </a>
         </div>
@@ -215,15 +206,15 @@ export default function HomePage() {
             <dd className="stats-dd">Amazon, eBay (Live) + More</dd>
           </div>
           <div className="stats-item">
-            <dt className="stats-dt text-cyan-400">&lt; 20ms</dt>
+            <dt className="stats-dt stats-dt-accent">&lt; 20ms</dt>
             <dd className="stats-dd">Instant Supabase RLS load</dd>
           </div>
           <div className="stats-item">
-            <dt className="stats-dt text-emerald-400">0–100</dt>
+            <dt className="stats-dt stats-dt-emerald">0–100</dt>
             <dd className="stats-dd">AI Deal Score algorithm</dd>
           </div>
           <div className="stats-item">
-            <dt className="stats-dt text-purple-400">08:00 UTC</dt>
+            <dt className="stats-dt stats-dt-purple">08:00 UTC</dt>
             <dd className="stats-dd">Automated Daily Digest</dd>
           </div>
         </dl>
@@ -234,7 +225,7 @@ export default function HomePage() {
       <section aria-label="Live Market Price Drops" className="marquee-bar">
         <div className="marquee-wrapper">
           <div className="marquee-label">
-            <Flame className="w-3.5 h-3.5 text-orange-400" aria-hidden="true" />
+            <Flame className="marquee-label-icon" aria-hidden="true" />
             <span>Market Feed</span>
           </div>
           
@@ -247,18 +238,18 @@ export default function HomePage() {
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
                   <div key={`track1-${idx}`} className="marquee-pill">
-                    <span className="text-gray-200">{deal.name}</span>
-                    <span className="text-cyan-400 font-bold">{deal.price}</span>
+                    <span className="pill-name">{deal.name}</span>
+                    <span className="pill-price">{deal.price}</span>
                     {deal.save && (
-                      <span className="chip chip-cut">
+                      <span className="pill-chip-cut">
                         Save {deal.save}
                       </span>
                     )}
-                    <span className="chip chip-retailer">
+                    <span className="pill-chip-retailer">
                       {deal.retailer}
                     </span>
                     {deal.score && (
-                      <span className="chip chip-save">
+                      <span className="pill-chip-score">
                         Score {deal.score}
                       </span>
                     )}
@@ -271,18 +262,18 @@ export default function HomePage() {
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
                   <div key={`track2-${idx}`} className="marquee-pill">
-                    <span className="text-gray-200">{deal.name}</span>
-                    <span className="text-cyan-400 font-bold">{deal.price}</span>
+                    <span className="pill-name">{deal.name}</span>
+                    <span className="pill-price">{deal.price}</span>
                     {deal.save && (
-                      <span className="chip chip-cut">
+                      <span className="pill-chip-cut">
                         Save {deal.save}
                       </span>
                     )}
-                    <span className="chip chip-retailer">
+                    <span className="pill-chip-retailer">
                       {deal.retailer}
                     </span>
                     {deal.score && (
-                      <span className="chip chip-save">
+                      <span className="pill-chip-score">
                         Score {deal.score}
                       </span>
                     )}
@@ -295,22 +286,22 @@ export default function HomePage() {
       </section>
 
       {/* ── Interactive Workbench Section ─────────────────────────────── */}
-      <section id="workbench" aria-labelledby="workbench-heading" className="section-container">
+      <section id="workbench" aria-labelledby="workbench-heading" className="workbench-section">
         
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-          <div>
-            <span className="section-kicker">Component Workbench</span>
-            <h2 id="workbench-heading" className="section-title">
+        <div className="workbench-header-row">
+          <div className="workbench-title-col">
+            <span className="workbench-kicker">Component Workbench</span>
+            <h2 id="workbench-heading" className="workbench-title">
               Live Multi-Retailer Pricing Engine
             </h2>
           </div>
           
-          <div role="tablist" aria-label="Demo Views" className="demo-tab-list">
+          <div role="tablist" aria-label="Demo Views" className="workbench-tabs">
             <button
               role="tab"
               aria-selected={demoTab === 'comparison'}
               onClick={() => setDemoTab('comparison')}
-              className={`demo-tab-btn ${demoTab === 'comparison' ? 'demo-tab-btn-active' : ''}`}
+              className={`tab-btn ${demoTab === 'comparison' ? 'tab-btn-active' : ''}`}
             >
               Spread Comparison
             </button>
@@ -318,7 +309,7 @@ export default function HomePage() {
               role="tab"
               aria-selected={demoTab === 'digest'}
               onClick={() => setDemoTab('digest')}
-              className={`demo-tab-btn ${demoTab === 'digest' ? 'demo-tab-btn-active' : ''}`}
+              className={`tab-btn ${demoTab === 'digest' ? 'tab-btn-active' : ''}`}
             >
               Scheduled Briefing
             </button>
@@ -326,110 +317,110 @@ export default function HomePage() {
         </div>
 
         {demoTab === 'comparison' ? (
-          <div className="demo-box">
+          <div className="workbench-box">
             
-            <div className="demo-header">
+            <div className="workbench-item-header">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="demo-title">{featuredComparison.name}</span>
-                  <span className="demo-category-pill">{featuredComparison.category}</span>
+                <div className="item-title-row">
+                  <span className="item-title">{featuredComparison.name}</span>
+                  <span className="category-pill">{featuredComparison.category}</span>
                 </div>
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="item-score-info">
                   AI Deal Score:{' '}
-                  <span className="text-emerald-400 font-bold">{featuredComparison.score}/100</span>
+                  <span className="score-val">{featuredComparison.score}/100</span>
                   {' '}• {featuredComparison.dealTag}
                 </div>
               </div>
 
-              <div className="text-right">
-                <div className="text-xs text-gray-400">Lowest Monitored Price</div>
-                <div className="text-xl font-bold text-cyan-400">{featuredComparison.lowestPrice}</div>
-                <div className="text-xs text-gray-500 line-through">MSRP: {featuredComparison.msrp}</div>
+              <div className="price-summary-col">
+                <div className="price-summary-label">Lowest Monitored Price</div>
+                <div className="price-summary-value">{featuredComparison.lowestPrice}</div>
+                <div className="price-summary-msrp">MSRP: {featuredComparison.msrp}</div>
               </div>
             </div>
 
-            <div className="demo-retailers-grid">
+            <div className="retailers-grid">
               {featuredComparison.retailers.map((r: any) => (
                 <button
                   key={r.name}
                   onClick={() => setSelectedRetailer(r.name)}
-                  className={`retailer-card-btn ${selectedRetailer === r.name ? 'retailer-card-btn-active' : ''}`}
+                  className={`retailer-tile ${selectedRetailer === r.name ? 'retailer-tile-active' : ''}`}
                 >
-                  <div className="flex items-center justify-between gap-1 w-full">
-                    <span className="text-xs font-semibold text-white truncate">{r.name}</span>
+                  <div className="retailer-tile-header">
+                    <span className="retailer-tile-name">{r.name}</span>
                     {r.isLowest && (
-                      <span className="chip chip-cut">LOWEST</span>
+                      <span className="tile-tag-lowest">LOWEST</span>
                     )}
                     {r.status === 'testing' && (
-                      <span className="chip chip-cut text-cyan-300">TESTING</span>
+                      <span className="tile-tag-testing">TESTING</span>
                     )}
                     {r.status === 'soon' && (
-                      <span className="chip chip-save">SOON</span>
+                      <span className="tile-tag-soon">SOON</span>
                     )}
                   </div>
-                  <div className="text-sm font-bold text-cyan-400 mt-1">{r.price}</div>
-                  <div className="text-xs text-gray-400">{r.stock}</div>
+                  <div className="retailer-tile-price">{r.price}</div>
+                  <div className="retailer-tile-stock">{r.stock}</div>
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center justify-between pt-4 text-xs text-gray-400 border-t border-gray-800 mt-4">
-              <span>Selected Retailer: <strong className="text-white">{selectedRetailer}</strong></span>
-              <Link href="/dashboard" className="rs-btn-secondary">
+            <div className="workbench-footer">
+              <span className="selected-retailer-info">Selected Retailer: <strong>{selectedRetailer}</strong></span>
+              <Link href="/dashboard" className="track-btn">
                 <span>Track in Dashboard</span>
-                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                <ArrowRight className="track-btn-icon" aria-hidden="true" />
               </Link>
             </div>
 
           </div>
         ) : (
-          <div className="demo-box">
+          <div className="workbench-box">
             
-            <div className="demo-header">
+            <div className="digest-preview-header">
               <div>
-                <span className="demo-title">Automated Morning Briefing Preview (08:00 UTC)</span>
-                <div className="text-xs text-gray-400 mt-1">
+                <span className="item-title">Automated Morning Briefing Preview (08:00 UTC)</span>
+                <div className="item-score-info">
                   Delivered automatically when tracked items drop below target thresholds.
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="digest-channel-toggle">
                 <button
                   onClick={() => setDigestChannel('discord')}
-                  className={`demo-tab-btn ${digestChannel === 'discord' ? 'demo-tab-btn-active' : ''}`}
+                  className={`tab-btn ${digestChannel === 'discord' ? 'tab-btn-active' : ''}`}
                 >
                   Discord Embed
                 </button>
                 <button
                   onClick={() => setDigestChannel('email')}
-                  className={`demo-tab-btn ${digestChannel === 'email' ? 'demo-tab-btn-active' : ''}`}
+                  className={`tab-btn ${digestChannel === 'email' ? 'tab-btn-active' : ''}`}
                 >
                   Email Briefing
                 </button>
               </div>
             </div>
 
-            <div className="digest-preview-box mt-4">
-              <div className="text-cyan-400 font-bold">
+            <div className="digest-console">
+              <div className="console-header">
                 [RIGSCOUTER-DISPATCH] Daily Price Drop Digest • 2 Deals Triggered
               </div>
-              <div className="text-gray-400 text-xs">
+              <div className="console-channel">
                 Channel: {digestChannel === 'discord' ? 'Discord Webhook (#rig-alerts)' : 'Verified Email Delivery'}
               </div>
-              <div className="border-t border-gray-800 pt-2 space-y-1 text-xs">
-                <div>
-                  • <span className="text-white font-bold">ASUS TUF Gaming X870-PLUS WiFi AM5</span>: <span className="text-emerald-400 font-bold">$149.00</span> on Amazon (35% under MSRP, Score: 99/100)
+              <div className="console-items-list">
+                <div className="console-item">
+                  • <span className="item-name-bold">ASUS TUF Gaming X870-PLUS WiFi AM5</span>: <span className="item-price-emerald">$149.00</span> on Amazon (35% under MSRP, Score: 99/100)
                 </div>
-                <div>
-                  • <span className="text-white font-bold">Ryzen 7 9800X3D Desktop Processor</span>: <span className="text-emerald-400 font-bold">$369.99</span> on eBay (Save $110, Score: 98/100)
+                <div className="console-item">
+                  • <span className="item-name-bold">Ryzen 7 9800X3D Desktop Processor</span>: <span className="item-price-emerald">$369.99</span> on eBay (Save $110, Score: 98/100)
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-4 mt-2">
-              <Link href="/dashboard" className="rs-btn-primary">
+            <div className="digest-footer-action">
+              <Link href="/dashboard" className="hero-primary-btn">
                 <span>Configure Alert Preferences</span>
-                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                <ArrowRight className="btn-icon" aria-hidden="true" />
               </Link>
             </div>
 
@@ -439,22 +430,22 @@ export default function HomePage() {
       </section>
 
       {/* ── System Architecture & Ingestion Pipeline ──────────────────── */}
-      <section id="architecture" aria-labelledby="arch-heading" className="section-container">
-        <div className="mb-8">
-          <span className="section-kicker">Under the Hood</span>
-          <h2 id="arch-heading" className="section-title">
+      <section id="architecture" aria-labelledby="arch-heading" className="architecture-section">
+        <div className="architecture-header">
+          <span className="workbench-kicker">Under the Hood</span>
+          <h2 id="arch-heading" className="workbench-title">
             Architecture &amp; Reliability Pipeline
           </h2>
-          <p className="text-gray-400 text-sm mt-1 max-w-2xl">
+          <p className="architecture-lead">
             Continuous ingestion, statistical deal classification, and multi-tier scraping resilience designed to handle real-world inventory swings.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="features-grid">
           
           <article className="feature-card">
-            <div className="feature-icon-box bg-cyan-950 border border-cyan-800 text-cyan-400">
-              <Globe className="w-5 h-5" aria-hidden="true" />
+            <div className="feature-icon-box feature-icon-cyan">
+              <Globe className="feature-icon-svg" aria-hidden="true" />
             </div>
             <h3 className="feature-title">Multi-Retailer Scraping</h3>
             <p className="feature-text">
@@ -463,8 +454,8 @@ export default function HomePage() {
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon-box bg-purple-950 border border-purple-800 text-purple-400">
-              <BarChart3 className="w-5 h-5" aria-hidden="true" />
+            <div className="feature-icon-box feature-icon-purple">
+              <BarChart3 className="feature-icon-svg" aria-hidden="true" />
             </div>
             <h3 className="feature-title">AI Deal Scoring (0–100)</h3>
             <p className="feature-text">
@@ -473,8 +464,8 @@ export default function HomePage() {
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon-box bg-emerald-950 border border-emerald-800 text-emerald-400">
-              <Mail className="w-5 h-5" aria-hidden="true" />
+            <div className="feature-icon-box feature-icon-emerald">
+              <Mail className="feature-icon-svg" aria-hidden="true" />
             </div>
             <h3 className="feature-title">Automated Daily Digest</h3>
             <p className="feature-text">
@@ -485,50 +476,48 @@ export default function HomePage() {
         </div>
 
         {/* Multi-Tier Execution Pipeline */}
-        <div className="mt-8 pt-8 border-t border-gray-800/80">
-          <div className="mb-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-cyan-400 font-mono">
-              Failover Ingestion Pipeline
-            </h3>
+        <div className="pipeline-block">
+          <div className="pipeline-subheading">
+            Failover Ingestion Pipeline
           </div>
 
           <div className="pipeline-grid">
             <div className="pipeline-card">
-              <div className="pipeline-header-row">
-                <span className="pipeline-step-badge bg-cyan-950 text-cyan-300 border border-cyan-800">TIER 1</span>
+              <div className="pipeline-card-header">
+                <span className="pipeline-badge-tier1">TIER 1</span>
                 <span className="pipeline-card-title">Direct OAuth 2.0 REST API</span>
               </div>
-              <p className="pipeline-card-text">
+              <p className="pipeline-card-desc">
                 Official eBay Browse API integration utilizing client credentials for real-time inventory queries and verified condition parsing.
               </p>
             </div>
 
             <div className="pipeline-card">
-              <div className="pipeline-header-row">
-                <span className="pipeline-step-badge bg-blue-950 text-blue-300 border border-blue-800">TIER 2</span>
+              <div className="pipeline-card-header">
+                <span className="pipeline-badge-tier2">TIER 2</span>
                 <span className="pipeline-card-title">TLS Fingerprint Impersonation</span>
               </div>
-              <p className="pipeline-card-text">
+              <p className="pipeline-card-desc">
                 Automated curl-impersonate client matching browser JA3/JA4 TLS signatures and HTTP/2 framing to bypass bot mitigations.
               </p>
             </div>
 
             <div className="pipeline-card">
-              <div className="pipeline-header-row">
-                <span className="pipeline-step-badge bg-purple-950 text-purple-300 border border-purple-800">TIER 3</span>
+              <div className="pipeline-card-header">
+                <span className="pipeline-badge-tier3">TIER 3</span>
                 <span className="pipeline-card-title">All Offers Display (AOD) Extraction</span>
               </div>
-              <p className="pipeline-card-text">
+              <p className="pipeline-card-desc">
                 Specialized extraction verifying Brand New Buy Box pricing over open-box, renewed, or third-party seller variations.
               </p>
             </div>
 
             <div className="pipeline-card">
-              <div className="pipeline-header-row">
-                <span className="pipeline-step-badge bg-emerald-950 text-emerald-300 border border-emerald-800">TIER 4</span>
+              <div className="pipeline-card-header">
+                <span className="pipeline-badge-tier4">TIER 4</span>
                 <span className="pipeline-card-title">Real-Time Search AI Fallback</span>
               </div>
-              <p className="pipeline-card-text">
+              <p className="pipeline-card-desc">
                 Fallback scraper with exact-match model verification ensuring alerts only trigger on authentic product listings.
               </p>
             </div>
@@ -536,61 +525,121 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Deal Scoring Mechanics & Algorithmic Indexing ──────────────── */}
+      <section id="methodology" aria-labelledby="methodology-heading" className="methodology-section">
+        <div className="architecture-header">
+          <span className="workbench-kicker">Mathematical Formulation</span>
+          <h2 id="methodology-heading" className="workbench-title">
+            Deal Scoring Mechanics &amp; Multi-Factor Weights
+          </h2>
+          <p className="architecture-lead">
+            Every tracked hardware SKU receives an automated composite Deal Score (0–100) calibrated against historical median trajectories, manufacturer baselines, and seller fulfillment tier.
+          </p>
+        </div>
+
+        <div className="methodology-grid">
+          <article className="methodology-card">
+            <span className="methodology-card-weight">40% Weight</span>
+            <h3 className="methodology-card-title">Historical Baseline Delta</h3>
+            <p className="methodology-card-desc">
+              Measures the instantaneous drop relative to the rolling 90-day moving median price. Rewards authentic all-time lows while filtering out fake markdowns.
+            </p>
+            <div className="formula-box">
+              ΔHist = (P90d - Pcurr) / P90d
+            </div>
+          </article>
+
+          <article className="methodology-card">
+            <span className="methodology-card-weight">35% Weight</span>
+            <h3 className="methodology-card-title">MSRP Baseline Delta</h3>
+            <p className="methodology-card-desc">
+              Compares current offer against official manufacturer suggested retail prices from AMD, Intel, NVIDIA, and board partners to catch true generational liquidations.
+            </p>
+            <div className="formula-box">
+              ΔMSRP = (Pmsrp - Pcurr) / Pmsrp
+            </div>
+          </article>
+
+          <article className="methodology-card">
+            <span className="methodology-card-weight">15% Weight</span>
+            <h3 className="methodology-card-title">Cross-Retailer Spread</h3>
+            <p className="methodology-card-desc">
+              Calculates the divergence between the lowest active listing and concurrent competitor offers across Amazon, eBay, Best Buy, and Micro Center.
+            </p>
+            <div className="formula-box">
+              ΔSpread = (Pcomp - Pcurr) / Pcomp
+            </div>
+          </article>
+
+          <article className="methodology-card">
+            <span className="methodology-card-weight">10% Weight</span>
+            <h3 className="methodology-card-title">Merchant Credibility</h3>
+            <p className="methodology-card-desc">
+              Scores seller authenticity: direct factory fulfillment (Amazon Ships/Sells, eBay Top Rated Plus) earns full weight; unknown marketplace merchants receive strict damping.
+            </p>
+            <div className="formula-box">
+              Sauth ∈ [0.4, 1.0] Multiplier
+            </div>
+          </article>
+        </div>
+      </section>
+
       {/* ── Top Deals Data Table ───────────────────────────────────────── */}
-      <section id="deals" aria-labelledby="deals-heading" className="section-container">
+      <section id="deals" aria-labelledby="deals-heading" className="deals-section">
         
         <div className="deals-header-row">
           <div>
-            <span className="section-kicker">Live Database Feed</span>
-            <h2 id="deals-heading" className="section-title">
+            <span className="deals-kicker">Live Database Feed</span>
+            <h2 id="deals-heading" className="deals-title">
               Top Hardware Deals
             </h2>
           </div>
-          <Link href="/dashboard" className="deals-link-more">
+          <Link href="/dashboard" className="deals-more-link">
             <span>Explore All Watchlist Items</span>
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            <ArrowRight className="deals-more-icon" aria-hidden="true" />
           </Link>
         </div>
 
-        <div className="deals-table-container">
+        <div className="deals-table-wrapper">
           <table className="deals-table">
-            <thead>
-              <tr>
+            <caption className="sr-only">Curated Top Real-Time Desktop PC Component Deals across Monitored Retailers</caption>
+            <thead className="deals-thead">
+              <tr className="deals-tr">
                 <th scope="col" className="deals-th">Hardware Component</th>
                 <th scope="col" className="deals-th">Category</th>
                 <th scope="col" className="deals-th">Best Price</th>
                 <th scope="col" className="deals-th">Retailer</th>
                 <th scope="col" className="deals-th">AI Score</th>
-                <th scope="col" className="deals-th text-right">Action</th>
+                <th scope="col" className="deals-th deals-th-action">Action</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="deals-tbody">
               {topDeals.map((deal) => (
-                <tr key={deal.id}>
-                  <td className="deals-td font-semibold text-white">
+                <tr key={deal.id} className="deals-tr">
+                  <td className="deals-td deals-td-name">
                     {deal.name}
                   </td>
-                  <td className="deals-td">
-                    <span className="demo-category-pill">{deal.category}</span>
+                  <td className="deals-td deals-td-category">
+                    <span className="category-pill">{deal.category}</span>
                   </td>
-                  <td className="deals-td font-mono font-bold text-cyan-400">
+                  <td className="deals-td deals-td-price">
                     ${typeof deal.price === 'number' ? deal.price.toFixed(2) : deal.price}
                     {deal.cut && (
-                      <span className="ml-1 text-emerald-400 font-semibold">{deal.cut}</span>
+                      <span className="price-cut-tag">{deal.cut}</span>
                     )}
                   </td>
-                  <td className="deals-td text-gray-300">
+                  <td className="deals-td deals-td-retailer">
                     {deal.retailer}
                   </td>
-                  <td className="deals-td">
-                    <span className="chip chip-save">
+                  <td className="deals-td deals-td-score">
+                    <span className="pill-chip-score">
                       {deal.score}/100
                     </span>
                   </td>
-                  <td className="deals-td text-right">
+                  <td className="deals-td deals-td-action">
                     <Link
                       href="/dashboard"
-                      className="rs-btn-secondary py-1 px-2.5 text-xs"
+                      className="deal-track-btn"
                     >
                       Track
                     </Link>
@@ -603,58 +652,128 @@ export default function HomePage() {
 
       </section>
 
-      {/* ── Ecosystem Status Strip ────────────────────────────────────── */}
-      <section id="ecosystem" aria-label="Supported Retailer Ecosystem" className="section-container border-t border-gray-800/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-              Retailer Endpoint Status
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Current operational state across monitored hardware vendors.
-            </p>
-          </div>
+      {/* ── Multi-Retailer Ingestion Specifications Matrix ─────────────── */}
+      <section id="ingestion-specs" aria-labelledby="specs-heading" className="specs-section">
+        <div className="architecture-header">
+          <span className="workbench-kicker">Data Pipeline Standards</span>
+          <h2 id="specs-heading" className="workbench-title">
+            Retailer Ingestion Matrix &amp; Synchronization Cadence
+          </h2>
+          <p className="architecture-lead">
+            Transparent breakdown of our multi-retailer crawler protocols, refresh intervals, rate-limit resilience strategies, and stock verification standards.
+          </p>
         </div>
 
-        <ul role="list" className="retailer-grid">
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">Amazon</span>
-            <span className="retailer-status-badge text-emerald-400">
+        <div className="specs-table-wrapper">
+          <table className="specs-table">
+            <caption className="sr-only">Detailed Retailer Polling Cadence and API Protocols</caption>
+            <thead className="specs-thead">
+              <tr className="specs-tr">
+                <th scope="col" className="specs-th">Retailer Endpoint</th>
+                <th scope="col" className="specs-th">Polling Cadence</th>
+                <th scope="col" className="specs-th">Integration Tier</th>
+                <th scope="col" className="specs-th">Stock Validation Protocol</th>
+                <th scope="col" className="specs-th">Status</th>
+              </tr>
+            </thead>
+            <tbody className="specs-tbody">
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">Amazon US</td>
+                <td className="specs-td">Every 15 Minutes</td>
+                <td className="specs-td">AOD + Headless TLS Parsing</td>
+                <td className="specs-td">Buy-Box Verification &amp; Prime Stock Check</td>
+                <td className="specs-td"><span className="specs-badge-live">ACTIVE</span></td>
+              </tr>
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">eBay Electronics</td>
+                <td className="specs-td">Every 15 Minutes</td>
+                <td className="specs-td">OAuth 2.0 Browse REST API</td>
+                <td className="specs-td">Condition Enum 1000 (Brand New Sealed Only)</td>
+                <td className="specs-td"><span className="specs-badge-live">ACTIVE</span></td>
+              </tr>
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">Best Buy</td>
+                <td className="specs-td">Every 30 Minutes</td>
+                <td className="specs-td">Store Pickup &amp; Online API</td>
+                <td className="specs-td">SKU Status &amp; Regional Distribution Validation</td>
+                <td className="specs-td"><span className="specs-badge-queue">VALIDATING</span></td>
+              </tr>
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">Micro Center</td>
+                <td className="specs-td">Every 60 Minutes</td>
+                <td className="specs-td">In-Store Inventory Feed</td>
+                <td className="specs-td">Local Store Stock Allocation Counter</td>
+                <td className="specs-td"><span className="specs-badge-queue">PIPELINE</span></td>
+              </tr>
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">Newegg US</td>
+                <td className="specs-td">Every 30 Minutes</td>
+                <td className="specs-td">Direct Merchant Feed</td>
+                <td className="specs-td">Shipped by Newegg Verification</td>
+                <td className="specs-td"><span className="specs-badge-queue">PIPELINE</span></td>
+              </tr>
+              <tr className="specs-tr">
+                <td className="specs-td specs-td-strong">B&amp;H Photo Video</td>
+                <td className="specs-td">Every 60 Minutes</td>
+                <td className="specs-td">Catalog Availability API</td>
+                <td className="specs-td">Direct Authorized Dealer Warehouse Stock</td>
+                <td className="specs-td"><span className="specs-badge-queue">PIPELINE</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ── Ecosystem Status Strip ────────────────────────────────────── */}
+      <section id="ecosystem" aria-labelledby="ecosystem-heading" className="ecosystem-section">
+        <div className="ecosystem-header-row">
+          <h2 id="ecosystem-heading" className="ecosystem-title">
+            Retailer Endpoint Status
+          </h2>
+          <p className="ecosystem-lead">
+            Current operational state across monitored hardware vendors.
+          </p>
+        </div>
+
+        <ul role="list" className="ecosystem-grid">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">Amazon</span>
+            <span className="ecosystem-status-active">
               <span className="status-dot-active" aria-hidden="true" />
               <span>LIVE</span>
             </span>
           </li>
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">eBay</span>
-            <span className="retailer-status-badge text-emerald-400">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">eBay</span>
+            <span className="ecosystem-status-active">
               <span className="status-dot-active" aria-hidden="true" />
               <span>LIVE</span>
             </span>
           </li>
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">Best Buy</span>
-            <span className="retailer-status-badge text-cyan-400">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">Best Buy</span>
+            <span className="ecosystem-status-testing">
               <span className="status-dot-testing" aria-hidden="true" />
               <span>TESTING</span>
             </span>
           </li>
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">Micro Center</span>
-            <span className="retailer-status-badge text-amber-400">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">Micro Center</span>
+            <span className="ecosystem-status-soon">
               <span className="status-dot-soon" aria-hidden="true" />
               <span>SOON</span>
             </span>
           </li>
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">Newegg</span>
-            <span className="retailer-status-badge text-amber-400">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">Newegg</span>
+            <span className="ecosystem-status-soon">
               <span className="status-dot-soon" aria-hidden="true" />
               <span>SOON</span>
             </span>
           </li>
-          <li role="listitem" className="retailer-card">
-            <span className="retailer-name-text">B&amp;H Photo</span>
-            <span className="retailer-status-badge text-amber-400">
+          <li role="listitem" className="ecosystem-card">
+            <span className="ecosystem-vendor">B&amp;H Photo</span>
+            <span className="ecosystem-status-soon">
               <span className="status-dot-soon" aria-hidden="true" />
               <span>SOON</span>
             </span>
@@ -662,21 +781,92 @@ export default function HomePage() {
         </ul>
       </section>
 
+      {/* ── Hardware Market Intelligence Glossary ──────────────────────── */}
+      <section id="hardware-glossary" aria-labelledby="glossary-heading" className="glossary-section">
+        <div className="architecture-header">
+          <span className="workbench-kicker">Reference Guide</span>
+          <h2 id="glossary-heading" className="workbench-title">
+            Hardware Price Intelligence Glossary
+          </h2>
+          <p className="architecture-lead">
+            Standardized technical terminology utilized in RigScouter deal evaluations, statistical calibrations, and daily dispatch briefings.
+          </p>
+        </div>
+
+        <dl className="glossary-dl">
+          <div className="glossary-item">
+            <dt className="glossary-dt">All-Time Low (ATL)</dt>
+            <dd className="glossary-dd">
+              The absolute lowest verified price recorded across authorized retailers within our continuous 90-day tracking window, strictly filtering out unverified marketplace third-party outliers and refurbished variants.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Manufacturer's Suggested Retail Price (MSRP)</dt>
+            <dd className="glossary-dd">
+              The benchmark baseline list price established by the hardware manufacturer (AMD, Intel, NVIDIA, ASUS, GIGABYTE, MSI) upon product launch, utilized as a defensive ceiling against artificially inflated discounts.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Minimum Advertised Price (MAP)</dt>
+            <dd className="glossary-dd">
+              Contractual baseline agreements enforced by hardware manufacturers forbidding retailers from advertising products below specified price points, often discovered exclusively via in-cart or direct checkout scraping.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Retailer Spread Variance (RSV)</dt>
+            <dd className="glossary-dd">
+              The percentage divergence between the minimum and maximum in-stock retail prices currently available for the identical SKU across Amazon, eBay, Best Buy, and Micro Center.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Buy-Box Verification</dt>
+            <dd className="glossary-dd">
+              An extraction validation protocol that checks the primary featured seller on marketplace platforms (Amazon Ships from/Sold by Amazon or eBay Top-Rated Plus) to protect users from secondary grey-market listings.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Rolling 90-Day Moving Median</dt>
+            <dd className="glossary-dd">
+              A robust non-parametric statistical measure that calculates true market price trends without skew from brief flash sales or sudden single-day artificial markups preceding promotional events.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Grace-Period Stock Failover</dt>
+            <dd className="glossary-dd">
+              A 2-cycle validation system that retains historical price tracking records during transient retailer 429 rate-limiting or brief 5-minute stock inventory fluctuations before declaring a component out-of-stock.
+            </dd>
+          </div>
+
+          <div className="glossary-item">
+            <dt className="glossary-dt">Automated Morning Dispatch</dt>
+            <dd className="glossary-dd">
+              A daily background batch execution running at 08:00 UTC that aggregates all active watchlist price drops satisfying user alert thresholds and delivers structured embeds to Discord webhooks and verified emails.
+            </dd>
+          </div>
+        </dl>
+      </section>
+
       {/* ── Bottom CTA Banner ──────────────────────────────────────────── */}
-      <section aria-labelledby="cta-heading" className="section-container">
+      <section id="cta" aria-labelledby="cta-heading" className="cta-section">
         <div className="cta-box">
           <h2 id="cta-heading" className="cta-title">
             Automate Your Hardware Price Tracking
           </h2>
-          <p className="section-lead">
+          <p className="cta-lead">
             Launch the live dashboard to search desktop components, set target price alert thresholds, and receive automated briefings.
           </p>
-          <div className="pt-2">
+          <div className="cta-btn-wrap">
             <Link
               href="/dashboard"
-              className="rs-btn-primary px-6 py-2.5"
+              className="cta-launch-btn"
             >
-              <Bell className="w-4 h-4" aria-hidden="true" />
+              <Bell className="cta-btn-icon" aria-hidden="true" />
               <span>Launch Live Dashboard</span>
             </Link>
           </div>
@@ -689,19 +879,19 @@ export default function HomePage() {
         <div className="footer-inner">
           <div className="footer-row">
             <div className="footer-brand">
-              <Cpu className="w-4 h-4 text-cyan-400" aria-hidden="true" />
-              <span>RigScouter-AI</span>
+              <Cpu className="footer-brand-icon" aria-hidden="true" />
+              <span className="footer-brand-name">RigScouter-AI</span>
             </div>
-            <div className="footer-copyright">
+            <div className="footer-copy">
               © 2026 RigScouter-AI • Autonomous PC Hardware Intelligence
             </div>
             <nav aria-label="Footer Navigation" className="footer-nav">
-              <Link href="/dashboard" className="footer-link">Dashboard</Link>
-              <Link href="/features" className="footer-link">Features</Link>
-              <Link href="/deal-scoring" className="footer-link">Deal Scoring</Link>
-              <Link href="/methodology" className="footer-link">Methodology</Link>
-              <Link href="/privacy" className="footer-link">Privacy</Link>
-              <Link href="/terms" className="footer-link">Terms</Link>
+              <Link href="/dashboard" className="footer-nav-link">Dashboard</Link>
+              <Link href="/features" className="footer-nav-link">Features</Link>
+              <Link href="/deal-scoring" className="footer-nav-link">Deal Scoring</Link>
+              <Link href="/methodology" className="footer-nav-link">Methodology</Link>
+              <Link href="/privacy" className="footer-nav-link">Privacy</Link>
+              <Link href="/terms" className="footer-nav-link">Terms</Link>
             </nav>
           </div>
           <p className="footer-disclaimer">
