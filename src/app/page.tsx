@@ -126,7 +126,7 @@ export default function HomePage() {
             <Link href="/features" className="site-nav-link">Features</Link>
             <Link href="/deal-scoring" className="site-nav-link">Deal Scoring</Link>
             <Link href="/methodology" className="site-nav-link">Methodology</Link>
-            <a href="#pipeline" className="site-nav-link">Architecture</a>
+            <a href="#architecture" className="site-nav-link">Architecture</a>
           </nav>
 
           <div className="header-actions">
@@ -201,11 +201,11 @@ export default function HomePage() {
           </Link>
 
           <a
-            href="#demo"
+            href="#workbench"
             className="rs-btn-secondary px-5 py-2.5"
           >
             <Sparkles className="w-4 h-4 text-cyan-400" aria-hidden="true" />
-            <span>View Live Engine</span>
+            <span>Interactive Demo</span>
           </a>
         </div>
 
@@ -294,20 +294,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Interactive Demo Preview Section ──────────────────────────── */}
-      <section id="demo" aria-labelledby="demo-heading" className="section-container">
+      {/* ── Interactive Workbench Section ─────────────────────────────── */}
+      <section id="workbench" aria-labelledby="workbench-heading" className="section-container">
         
-        <header className="section-header">
-          <span className="section-kicker">Interactive Product Preview</span>
-          <h2 id="demo-heading" className="section-title">
-            Component Price Engine Architecture
-          </h2>
-          <p className="section-lead">
-            Explore live multi-retailer price comparisons and preview morning automated alert digests.
-          </p>
-        </header>
-
-        <div className="demo-tabs-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+          <div>
+            <span className="section-kicker">Component Workbench</span>
+            <h2 id="workbench-heading" className="section-title">
+              Live Multi-Retailer Pricing Engine
+            </h2>
+          </div>
+          
           <div role="tablist" aria-label="Demo Views" className="demo-tab-list">
             <button
               role="tab"
@@ -315,7 +312,7 @@ export default function HomePage() {
               onClick={() => setDemoTab('comparison')}
               className={`demo-tab-btn ${demoTab === 'comparison' ? 'demo-tab-btn-active' : ''}`}
             >
-              Multi-Retailer Price Comparison
+              Spread Comparison
             </button>
             <button
               role="tab"
@@ -323,7 +320,7 @@ export default function HomePage() {
               onClick={() => setDemoTab('digest')}
               className={`demo-tab-btn ${demoTab === 'digest' ? 'demo-tab-btn-active' : ''}`}
             >
-              Daily Alert Digest Preview
+              Scheduled Briefing
             </button>
           </div>
         </div>
@@ -441,19 +438,19 @@ export default function HomePage() {
 
       </section>
 
-      {/* ── Key Features ──────────────────────────────────────────────── */}
-      <section id="features" aria-labelledby="features-heading" className="section-container">
-        <header className="section-header">
-          <span className="section-kicker">Core System Architecture</span>
-          <h2 id="features-heading" className="section-title">
-            Deal Evaluation &amp; Alert Engine
+      {/* ── System Architecture & Ingestion Pipeline ──────────────────── */}
+      <section id="architecture" aria-labelledby="arch-heading" className="section-container">
+        <div className="mb-8">
+          <span className="section-kicker">Under the Hood</span>
+          <h2 id="arch-heading" className="section-title">
+            Architecture &amp; Reliability Pipeline
           </h2>
-          <p className="section-lead">
-            Three independent layers handle extraction, statistical scoring, and notification dispatch without human intervention.
+          <p className="text-gray-400 text-sm mt-1 max-w-2xl">
+            Continuous ingestion, statistical deal classification, and multi-tier scraping resilience designed to handle real-world inventory swings.
           </p>
-        </header>
+        </div>
 
-        <div className="feature-grid">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           <article className="feature-card">
             <div className="feature-icon-box bg-cyan-950 border border-cyan-800 text-cyan-400">
@@ -486,64 +483,60 @@ export default function HomePage() {
           </article>
 
         </div>
-      </section>
 
-      {/* ── Architecture Pipeline ────────────────────────────────────── */}
-      <section id="pipeline" aria-labelledby="pipeline-heading" className="section-container">
-        <header className="section-header">
-          <span className="section-kicker">Reliability Engineering</span>
-          <h2 id="pipeline-heading" className="section-title">
-            Data Ingestion &amp; Verification Pipeline
-          </h2>
-          <p className="section-lead">
-            When hardware retail APIs enforce anti-bot restrictions, our multi-tiered failover pipeline guarantees continuous price accuracy.
-          </p>
-        </header>
-
-        <div className="pipeline-grid">
-          <div className="pipeline-card">
-            <div className="pipeline-header-row">
-              <span className="pipeline-step-badge bg-cyan-950 text-cyan-300 border border-cyan-800">TIER 1</span>
-              <h3 className="pipeline-card-title">Direct OAuth 2.0 REST API</h3>
-            </div>
-            <p className="pipeline-card-text">
-              Official eBay Browse API integration utilizing client credentials for real-time inventory queries and verified condition parsing.
-            </p>
+        {/* Multi-Tier Execution Pipeline */}
+        <div className="mt-8 pt-8 border-t border-gray-800/80">
+          <div className="mb-4">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-cyan-400 font-mono">
+              Failover Ingestion Pipeline
+            </h3>
           </div>
 
-          <div className="pipeline-card">
-            <div className="pipeline-header-row">
-              <span className="pipeline-step-badge bg-blue-950 text-blue-300 border border-blue-800">TIER 2</span>
-              <h3 className="pipeline-card-title">TLS Fingerprint Impersonation</h3>
+          <div className="pipeline-grid">
+            <div className="pipeline-card">
+              <div className="pipeline-header-row">
+                <span className="pipeline-step-badge bg-cyan-950 text-cyan-300 border border-cyan-800">TIER 1</span>
+                <span className="pipeline-card-title">Direct OAuth 2.0 REST API</span>
+              </div>
+              <p className="pipeline-card-text">
+                Official eBay Browse API integration utilizing client credentials for real-time inventory queries and verified condition parsing.
+              </p>
             </div>
-            <p className="pipeline-card-text">
-              Automated curl-impersonate client matching browser JA3/JA4 TLS signatures and HTTP/2 framing to bypass bot mitigations.
-            </p>
-          </div>
 
-          <div className="pipeline-card">
-            <div className="pipeline-header-row">
-              <span className="pipeline-step-badge bg-purple-950 text-purple-300 border border-purple-800">TIER 3</span>
-              <h3 className="pipeline-card-title">All Offers Display (AOD) Extraction</h3>
+            <div className="pipeline-card">
+              <div className="pipeline-header-row">
+                <span className="pipeline-step-badge bg-blue-950 text-blue-300 border border-blue-800">TIER 2</span>
+                <span className="pipeline-card-title">TLS Fingerprint Impersonation</span>
+              </div>
+              <p className="pipeline-card-text">
+                Automated curl-impersonate client matching browser JA3/JA4 TLS signatures and HTTP/2 framing to bypass bot mitigations.
+              </p>
             </div>
-            <p className="pipeline-card-text">
-              Specialized extraction verifying Brand New Buy Box pricing over open-box, renewed, or third-party seller variations.
-            </p>
-          </div>
 
-          <div className="pipeline-card">
-            <div className="pipeline-header-row">
-              <span className="pipeline-step-badge bg-emerald-950 text-emerald-300 border border-emerald-800">TIER 4</span>
-              <h3 className="pipeline-card-title">Real-Time Search AI Fallback</h3>
+            <div className="pipeline-card">
+              <div className="pipeline-header-row">
+                <span className="pipeline-step-badge bg-purple-950 text-purple-300 border border-purple-800">TIER 3</span>
+                <span className="pipeline-card-title">All Offers Display (AOD) Extraction</span>
+              </div>
+              <p className="pipeline-card-text">
+                Specialized extraction verifying Brand New Buy Box pricing over open-box, renewed, or third-party seller variations.
+              </p>
             </div>
-            <p className="pipeline-card-text">
-              Fallback scraper with exact-match model verification ensuring alerts only trigger on authentic product listings.
-            </p>
+
+            <div className="pipeline-card">
+              <div className="pipeline-header-row">
+                <span className="pipeline-step-badge bg-emerald-950 text-emerald-300 border border-emerald-800">TIER 4</span>
+                <span className="pipeline-card-title">Real-Time Search AI Fallback</span>
+              </div>
+              <p className="pipeline-card-text">
+                Fallback scraper with exact-match model verification ensuring alerts only trigger on authentic product listings.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Top Deals Table ───────────────────────────────────────────── */}
+      {/* ── Top Deals Data Table ───────────────────────────────────────── */}
       <section id="deals" aria-labelledby="deals-heading" className="section-container">
         
         <div className="deals-header-row">
@@ -610,17 +603,18 @@ export default function HomePage() {
 
       </section>
 
-      {/* ── Monitored Retailers Grid ──────────────────────────────────── */}
-      <section id="retailers" aria-labelledby="retailers-heading" className="section-container">
-        <header className="section-header">
-          <span className="section-kicker">Supported Ecosystem</span>
-          <h2 id="retailers-heading" className="section-title">
-            Multi-Retailer Pricing Matrix
-          </h2>
-          <p className="section-lead">
-            Live retail endpoints, testing validation status, and planned roadmap integrations.
-          </p>
-        </header>
+      {/* ── Ecosystem Status Strip ────────────────────────────────────── */}
+      <section id="ecosystem" aria-label="Supported Retailer Ecosystem" className="section-container border-t border-gray-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+              Retailer Endpoint Status
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Current operational state across monitored hardware vendors.
+            </p>
+          </div>
+        </div>
 
         <ul role="list" className="retailer-grid">
           <li role="listitem" className="retailer-card">
