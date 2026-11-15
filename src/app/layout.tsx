@@ -85,28 +85,60 @@ export const metadata: Metadata = {
   },
 };
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'WebApplication',
-  name: 'RigScouter AI',
-  url: siteUrl,
-  description:
-    'Autonomous PC hardware market intelligence pipeline tracking components across major retailers with live stock checks and automated deal scoring.',
-  applicationCategory: 'ShoppingApplication',
-  operatingSystem: 'Any',
-  browserRequirements: 'Requires JavaScript. Requires HTML5.',
-  offers: {
-    '@type': 'Offer',
-    price: '0.00',
-    priceCurrency: 'USD',
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'RigScouter AI',
+    url: siteUrl,
+    description:
+      'Autonomous PC hardware market intelligence pipeline tracking components across major retailers with live stock checks and automated deal scoring.',
+    applicationCategory: 'ShoppingApplication',
+    operatingSystem: 'Any',
+    browserRequirements: 'Requires JavaScript. Requires HTML5.',
+    offers: {
+      '@type': 'Offer',
+      price: '0.00',
+      priceCurrency: 'USD',
+    },
+    featureList: [
+      'Autonomous Multi-Retailer Scraping',
+      'Real-Time Deal Scoring Algorithm',
+      'All-Time Low Price Trend Analytics',
+      'Automated Multi-Channel Briefings',
+    ],
   },
-  featureList: [
-    'Autonomous Multi-Retailer Scraping',
-    'Real-Time Deal Scoring Algorithm',
-    'All-Time Low Price Trend Analytics',
-    'Automated Multi-Channel Briefings',
-  ],
-};
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'How does the 0–100 AI Deal Score distinguish real deals from fake sales?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'RigScouter evaluates MSRP variance (35%), rolling 90-day all-time lows (45%), and cross-retailer competition (20%) to expose fake discount markups.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'What happens when an item in my watchlist sells out or gets restocked?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'The self-healing crawler employs a 2-cycle grace period. If confirmed out of stock, deal score is zeroed. Once restocked, the system automatically hot-swaps to the active retailer.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'How often are hardware prices refreshed?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'The catalog runs automated refresh cycles twice daily at 00:00 UTC and 08:00 UTC, calculating rolling 24h, 7d, and 30d interval deltas.',
+        },
+      },
+    ],
+  },
+];
 
 export default function RootLayout({
   children,

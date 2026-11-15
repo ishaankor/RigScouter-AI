@@ -534,6 +534,23 @@ export async function GET(req: NextRequest) {
         ? (bestSpecs.in_stock !== false && bestSpecs.inStock !== false && bestSpecs.is_sold_out !== true) 
         : (item.in_stock ?? true);
 
+      let activeStockStatus = matchingRetailerOffer 
+        ? Boolean(matchingRetailerOffer.inStock) 
+        : isMatchInStock;
+
+      // Auto-fallback to active in-stock retailer (e.g. Amazon) if current retailer listing is sold out
+      if (!activeStockStatus) {
+        const inStockAlt = retailerOffers.find(ro => ro.inStock === true && Number(ro.price) > 0);
+        if (inStockAlt) {
+          finalPrice = inStockAlt.price;
+          finalRetailer = inStockAlt.retailer;
+          if (inStockAlt.url && inStockAlt.url.startsWith('http')) {
+            validatedProductUrl = inStockAlt.url;
+          }
+          activeStockStatus = true;
+        }
+      }
+
       return {
           id: item.id,
           dbRowIds: item.dbRowIds || (item.id ? [item.id] : []),
@@ -549,9 +566,7 @@ export async function GET(req: NextRequest) {
           retailer: finalRetailer,
           productUrl: validatedProductUrl,
           imageUrl: finalImageUrl,
-          inStock: matchingRetailerOffer 
-            ? Boolean(matchingRetailerOffer.inStock) 
-            : isMatchInStock,
+          inStock: activeStockStatus,
           notifyOnFlashDrop: item.notify_on_flash_drop ?? true,
           addedAt: item.added_at,
           earliestTrackedAt,
@@ -559,9 +574,7 @@ export async function GET(req: NextRequest) {
           specs: {
             RetailerOffers: retailerOffers,
             price_history: combinedHistory,
-            in_stock: matchingRetailerOffer 
-              ? Boolean(matchingRetailerOffer.inStock) 
-              : isMatchInStock
+            in_stock: activeStockStatus
           }
         };
     });
@@ -901,6 +914,11 @@ export async function POST(req: NextRequest) {
       component_name: componentName,
       category: matchedHw?.category || category,
       target_price: target,
+      current_price: price,
+      retailer: retailer || matchedHw?.retailer || 'Amazon',
+      product_url: productUrl && productUrl !== '#' ? productUrl : (matchedHw?.product_url || '#'),
+      image_url: imageUrl || matchedHw?.image_url || null,
+      in_stock: true,
       previous_price_24h: finalP24,
       previous_price_7d: finalP7d,
       previous_price_30d: finalP30d,

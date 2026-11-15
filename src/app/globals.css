@@ -74,6 +74,216 @@ code, pre, .font-mono {
     box-shadow: 0 12px 40px 0 rgba(79, 172, 254, 0.14);
   }
 
+  /* Structural Layout Design System */
+  .section-container {
+    max-width: 68rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 4rem;
+    padding-bottom: 4rem;
+  }
+  @media (min-width: 640px) {
+    .section-container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .section-container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  .section-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .section-kicker {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-cyan);
+    margin-bottom: 0.5rem;
+  }
+
+  .section-title {
+    font-size: 1.75rem;
+    line-height: 2.25rem;
+    font-weight: 900;
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.025em;
+    color: #ffffff;
+  }
+  @media (min-width: 640px) {
+    .section-title {
+      font-size: 2.25rem;
+      line-height: 2.5rem;
+    }
+  }
+
+  .section-lead {
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+    color: var(--text-secondary);
+    max-width: 38rem;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 0.5rem;
+  }
+
+  /* Semantic Architecture & Feature Cards */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    .feature-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .feature-card {
+    background: rgba(17, 24, 39, 0.88);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: all var(--transition-normal);
+  }
+  .feature-card:hover {
+    border-color: var(--card-border-hover);
+    transform: translateY(-2px);
+  }
+
+  .feature-icon-box {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Hero Metric Description List */
+  .stats-dl {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    max-width: 48rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-top: 2rem;
+    text-align: center;
+  }
+  @media (min-width: 640px) {
+    .stats-dl {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .stats-item {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 0.875rem 0.75rem;
+  }
+
+  .stats-dt {
+    font-size: 1.25rem;
+    font-weight: 900;
+    font-family: 'Space Grotesk', sans-serif;
+    color: #ffffff;
+  }
+
+  .stats-dd {
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+  }
+
+  /* Retailer Chips List */
+  .retailer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .retailer-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+  @media (min-width: 768px) {
+    .retailer-grid {
+      grid-template-columns: repeat(6, 1fr);
+    }
+  }
+
+  .retailer-card {
+    background: rgba(17, 24, 39, 0.75);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md);
+    padding: 1rem 0.75rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all var(--transition-fast);
+  }
+
+  /* FAQ Accordion Design System */
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    max-width: 52rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .faq-item {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+  }
+  .faq-item:hover, .faq-item[open] {
+    border-color: rgba(79, 172, 254, 0.35);
+  }
+
+  .faq-summary {
+    padding: 1.125rem 1.25rem;
+    font-weight: 700;
+    font-size: 0.9375rem;
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    list-style: none;
+    user-select: none;
+  }
+  .faq-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq-content {
+    padding: 0 1.25rem 1.25rem 1.25rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
   /* Semantic Badges */
   .rs-badge {
     display: inline-flex;
