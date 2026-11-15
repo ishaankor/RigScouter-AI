@@ -57,6 +57,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
   let bestUrl = isUrl ? cleanQuery : '';
   let bestRetailer: RetailerName = detectRetailer(cleanQuery);
   let bestImageUrl: string | null = null;
+  const collectedOffers: Array<{ retailer: string; price: number; url: string; inStock: boolean; title?: string; imageUrl?: string }> = [];
 
   if (isUrl) {
     // 1. Direct Diffbot Extraction for URLs
@@ -66,6 +67,14 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
       if (diffData.title) bestTitle = diffData.title;
       bestRetailer = detectRetailer(cleanQuery);
       bestImageUrl = diffData.imageUrl || null;
+      collectedOffers.push({
+        retailer: bestRetailer,
+        price: diffData.price,
+        url: cleanQuery,
+        inStock: true,
+        title: bestTitle,
+        imageUrl: bestImageUrl || undefined
+      });
     }
   } else {
     // 2. Hybrid: Tavily Search -> DiffBot Extraction
@@ -74,7 +83,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
     const domainList = isLegacy
       ? ['amazon.com', 'newegg.com', 'bhphotovideo.com', 'ebay.com']
       : ['amazon.com', 'microcenter.com', 'newegg.com', 'bestbuy.com', 'bhphotovideo.com', 'ebay.com'];
-    const searchRetailers = isLegacy ? 'amazon OR newegg OR ebay' : 'amazon OR newegg OR bestbuy OR microcenter';
+    const searchRetailers = isLegacy ? 'amazon OR newegg OR ebay' : 'amazon OR ebay OR newegg OR bestbuy OR microcenter';
     
     // Step A: Find Product URLs
     for (const activeKey of TAVILY_API_KEYS) {
@@ -88,7 +97,7 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
             api_key: activeKey,
             query: searchQuery,
             search_depth: 'basic',
-            max_results: 1,
+            max_results: 3,
             include_domains: domainList
           })
         });
@@ -133,12 +142,22 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
           continue;
         }
 
+        const offerRetailer = detectRetailer(url);
+        collectedOffers.push({
+          retailer: offerRetailer,
+          price: diffData.price,
+          url,
+          inStock: true,
+          title: itemTitle,
+          imageUrl: diffData.imageUrl || undefined
+        });
+
         // Pick the lowest price we can find across the top valid results
         if (!bestPrice || diffData.price < bestPrice) {
           bestPrice = diffData.price;
           bestTitle = itemTitle || bestTitle;
           bestUrl = url;
-          bestRetailer = detectRetailer(url);
+          bestRetailer = offerRetailer;
           bestImageUrl = diffData.imageUrl || bestImageUrl;
         }
       }
@@ -166,7 +185,11 @@ export async function scrapeTavilyAndSaveToDb(queryOrUrl: string): Promise<Tavil
     category,
     brand: extractBrand(bestTitle),
     model: cleanQuery,
-    specs: { ScrapedVia: isUrl ? 'DiffBot' : 'Tavily + DiffBot', ScrapedAt: new Date().toISOString() },
+    specs: {
+      ScrapedVia: isUrl ? 'DiffBot' : 'Tavily + DiffBot',
+      ScrapedAt: new Date().toISOString(),
+      RetailerOffers: collectedOffers.length > 0 ? collectedOffers : undefined
+    },
     msrp,
     currentPrice: finalPrice,
     lowestPrice90d: lowest90d,

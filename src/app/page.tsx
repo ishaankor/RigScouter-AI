@@ -9,7 +9,6 @@ import {
   Bell,
   Sparkles,
   ShieldCheck,
-  LogIn,
   LogOut,
   ArrowRight,
   Globe,
@@ -21,7 +20,6 @@ import {
   MessageSquare,
   BarChart3,
   Layers,
-  HelpCircle,
   Server,
   Zap,
   ArrowUpRight
@@ -129,21 +127,20 @@ export default function HomePage() {
             <Link href="/deal-scoring" className="site-nav-link">Deal Scoring</Link>
             <Link href="/methodology" className="site-nav-link">Methodology</Link>
             <a href="#pipeline" className="site-nav-link">Architecture</a>
-            <a href="#faq" className="site-nav-link">FAQ</a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="header-actions">
             {user ? (
               <div className="user-badge">
                 <div className="user-avatar">
                   {user.email?.[0].toUpperCase() || 'U'}
                 </div>
-                <span className="text-gray-300 font-medium max-w-[110px] truncate">{user.email}</span>
+                <span className="text-gray-300 font-medium max-w-xs truncate">{user.email}</span>
                 <button
                   onClick={handleSignOut}
                   title="Sign Out"
                   aria-label="Sign out of account"
-                  className="ml-1 text-gray-400 hover:text-red-400 transition-colors cursor-pointer"
+                  className="text-gray-400 hover:text-red-400 transition-colors"
                 >
                   <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
@@ -152,7 +149,7 @@ export default function HomePage() {
               <button
                 onClick={() => setAuthModalOpen(true)}
                 aria-label="Sign in to your account"
-                className="hidden sm:inline-flex text-xs font-semibold text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-900 transition-colors cursor-pointer"
+                className="sign-in-btn"
               >
                 Sign In
               </button>
@@ -161,7 +158,7 @@ export default function HomePage() {
             <Link
               href="/dashboard"
               aria-label="Launch RigScouter Live Application"
-              className="rs-btn-primary flex items-center gap-1.5"
+              className="rs-btn-primary"
             >
               <span>Launch App</span>
               <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -178,25 +175,25 @@ export default function HomePage() {
       <section aria-labelledby="hero-heading" className="hero-section">
         
         <div className="hero-badge-pill">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" aria-hidden="true" />
-          <span>Autonomous PC Hardware Market Intelligence</span>
+          <span className="status-dot-live" aria-hidden="true" />
+          <span>Real-Time PC Hardware Market Intelligence</span>
         </div>
 
         <h1 id="hero-heading" className="hero-title">
-          Scout PC Hardware Deals.
-          <span className="block mt-2 sm:mt-3 gradient-text-blue">
-            Never Overpay.
+          Autonomous PC Hardware
+          <span className="block mt-2 sm:mt-3 text-cyan-400">
+            Market Intelligence
           </span>
         </h1>
 
         <p className="hero-subtitle">
-          RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in active testing and Micro Center, Newegg, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord webhook.
+          RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in active validation and Micro Center, Newegg, and B&amp;H Photo coming online. We compute deep algorithmic deal scores (0–100) and dispatch automated price briefings directly to your Email and Discord webhook.
         </p>
 
         <div className="hero-cta-group">
           <Link
             href="/dashboard"
-            className="w-full sm:w-auto rs-btn-primary px-7 py-3 text-sm flex items-center justify-center gap-2"
+            className="rs-btn-primary px-6 py-2.5"
           >
             <Bell className="w-4 h-4" aria-hidden="true" />
             <span>Launch Watchlist Tracker</span>
@@ -205,10 +202,10 @@ export default function HomePage() {
 
           <a
             href="#demo"
-            className="w-full sm:w-auto rs-btn-secondary px-6 py-3 text-sm flex items-center justify-center gap-2"
+            className="rs-btn-secondary px-5 py-2.5"
           >
             <Sparkles className="w-4 h-4 text-cyan-400" aria-hidden="true" />
-            <span>View Live Demo</span>
+            <span>View Live Engine</span>
           </a>
         </div>
 
@@ -235,84 +232,86 @@ export default function HomePage() {
 
       {/* ── Live Ticker Strip ─────────────────────────────────────────── */}
       <section aria-label="Live Market Price Drops" className="marquee-bar">
-        <div className="flex items-center">
+        <div className="marquee-wrapper">
           <div className="marquee-label">
             <Flame className="w-3.5 h-3.5 text-orange-400" aria-hidden="true" />
-            <span className="whitespace-nowrap">Live Price Drops</span>
+            <span>Market Feed</span>
           </div>
           
-          <div className="relative flex overflow-hidden w-full items-center">
-            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-gray-950 to-transparent z-10" />
-            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-950 to-transparent z-10" />
+          <div className="marquee-viewport">
+            <div className="marquee-fade-left" />
+            <div className="marquee-fade-right" />
 
-            <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3">
+            <div className="marquee-track animate-marquee">
               {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
-                  <div
-                    key={`track1-${idx}-${deal.name.slice(0, 8)}`}
-                    className="marquee-pill"
-                  >
-                    <span className="text-gray-200 font-semibold">{deal.name}</span>
+                  <div key={`track1-${idx}`} className="marquee-pill">
+                    <span className="text-gray-200">{deal.name}</span>
                     <span className="text-cyan-400 font-bold">{deal.price}</span>
                     {deal.save && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                      <span className="chip chip-cut">
                         Save {deal.save}
                       </span>
                     )}
-                    <span className="text-gray-400 text-[11px]">• {deal.retailer || 'Retailer'}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-bold">
-                      {deal.score || 85}/100
+                    <span className="chip chip-retailer">
+                      {deal.retailer}
                     </span>
+                    {deal.score && (
+                      <span className="chip chip-save">
+                        Score {deal.score}
+                      </span>
+                    )}
                   </div>
                 ))}
             </div>
 
-            <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3" aria-hidden="true">
+            <div aria-hidden="true" className="marquee-track animate-marquee">
               {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
-                  <div
-                    key={`track2-${idx}-${deal.name.slice(0, 8)}`}
-                    className="marquee-pill"
-                  >
-                    <span className="text-gray-200 font-semibold">{deal.name}</span>
+                  <div key={`track2-${idx}`} className="marquee-pill">
+                    <span className="text-gray-200">{deal.name}</span>
                     <span className="text-cyan-400 font-bold">{deal.price}</span>
                     {deal.save && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                      <span className="chip chip-cut">
                         Save {deal.save}
                       </span>
                     )}
-                    <span className="text-gray-400 text-[11px]">• {deal.retailer || 'Retailer'}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-bold">
-                      {deal.score || 85}/100
+                    <span className="chip chip-retailer">
+                      {deal.retailer}
                     </span>
+                    {deal.score && (
+                      <span className="chip chip-save">
+                        Score {deal.score}
+                      </span>
+                    )}
                   </div>
                 ))}
             </div>
+
           </div>
         </div>
       </section>
 
-      {/* ── Interactive Sandbox Preview ─────────────────────────────────── */}
+      {/* ── Interactive Demo Preview Section ──────────────────────────── */}
       <section id="demo" aria-labelledby="demo-heading" className="section-container">
+        
         <header className="section-header">
-          <span className="section-kicker">Interactive Preview</span>
+          <span className="section-kicker">Interactive Product Preview</span>
           <h2 id="demo-heading" className="section-title">
-            See How RigScouter Works
+            Component Price Engine Architecture
           </h2>
           <p className="section-lead">
-            Explore live price unification across stores and view preview snapshots of automated morning digests.
+            Explore live multi-retailer price comparisons and preview morning automated alert digests.
           </p>
         </header>
 
-        <div className="flex justify-center mb-6">
-          <div role="tablist" aria-label="Interactive Demo Modes" className="demo-tab-list">
+        <div className="demo-tabs-wrap">
+          <div role="tablist" aria-label="Demo Views" className="demo-tab-list">
             <button
               role="tab"
-              id="tab-comparison"
               aria-selected={demoTab === 'comparison'}
-              aria-controls="panel-comparison"
               onClick={() => setDemoTab('comparison')}
               className={`demo-tab-btn ${demoTab === 'comparison' ? 'demo-tab-btn-active' : ''}`}
             >
@@ -320,478 +319,368 @@ export default function HomePage() {
             </button>
             <button
               role="tab"
-              id="tab-digest"
               aria-selected={demoTab === 'digest'}
-              aria-controls="panel-digest"
               onClick={() => setDemoTab('digest')}
               className={`demo-tab-btn ${demoTab === 'digest' ? 'demo-tab-btn-active' : ''}`}
             >
-              Automated Daily Digest
+              Daily Alert Digest Preview
             </button>
           </div>
         </div>
 
-        <div className="rs-card p-6 sm:p-8">
-          {demoTab === 'comparison' ? (
-            <div role="tabpanel" id="panel-comparison" aria-labelledby="tab-comparison" className="space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-white font-heading">
-                      {featuredComparison.name}
-                    </h3>
-                    <span className="rs-badge rs-badge-emerald">
-                      Score: {featuredComparison.score}/100 ({featuredComparison.dealTag})
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Live pricing unified across 5 retailers on a single canonical card:
-                  </p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <div className="text-[11px] text-gray-400">Lowest Price</div>
-                  <div className="text-xl font-black text-cyan-400 font-heading">
-                    {featuredComparison.lowestPrice}{' '}
-                    <span className="text-xs text-gray-500 line-through">{featuredComparison.msrp} MSRP</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                {featuredComparison.retailers.map((ret: any) => (
-                  <button
-                    key={ret.name}
-                    onClick={() => setSelectedRetailer(ret.name)}
-                    className={`p-3 rounded-xl text-left border transition-all cursor-pointer ${
-                      selectedRetailer === ret.name
-                        ? 'bg-cyan-500/10 border-cyan-500/40'
-                        : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-semibold text-white truncate">{ret.name}</span>
-                      {ret.isLowest ? (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold shrink-0">
-                          Lowest
-                        </span>
-                      ) : ret.name === 'Best Buy' || ret.status === 'testing' ? (
-                        <span className="text-[8px] px-1.5 py-0.2 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold shrink-0 flex items-center gap-0.5">
-                          <span className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse"></span>
-                          Testing
-                        </span>
-                      ) : !ret.active || ret.status === 'soon' ? (
-                        <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
-                          Soon
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="text-base font-bold text-cyan-400 font-heading mt-1">{ret.price}</div>
-                    <div className="text-[10px] text-gray-400">{ret.stock}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-gray-400">
-                <span>Active Retailer: <strong className="text-white">{selectedRetailer}</strong></span>
-                <Link
-                  href={`/dashboard?search=${encodeURIComponent(featuredComparison.name)}`}
-                  className="rs-btn-secondary flex items-center gap-1.5"
-                >
-                  <Search className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Search in Dashboard</span>
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div role="tabpanel" id="panel-digest" aria-labelledby="tab-digest" className="space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-white font-heading">
-                    Automated Morning Briefing Preview (08:00 UTC)
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    Dispatched daily to your active notification channels.
-                  </p>
-                </div>
+        {demoTab === 'comparison' ? (
+          <div className="demo-box">
+            
+            <div className="demo-header">
+              <div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setDigestChannel('discord')}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold cursor-pointer ${
-                      digestChannel === 'discord' ? 'bg-[#5865F2] text-white' : 'bg-gray-800 text-gray-400'
-                    }`}
-                  >
-                    Discord
-                  </button>
-                  <button
-                    onClick={() => setDigestChannel('email')}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold cursor-pointer ${
-                      digestChannel === 'email' ? 'bg-cyan-600 text-white' : 'bg-gray-800 text-gray-400'
-                    }`}
-                  >
-                    Email
-                  </button>
+                  <span className="demo-title">{featuredComparison.name}</span>
+                  <span className="demo-category-pill">{featuredComparison.category}</span>
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  AI Deal Score:{' '}
+                  <span className="text-emerald-400 font-bold">{featuredComparison.score}/100</span>
+                  {' '}• {featuredComparison.dealTag}
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-gray-950/70 border border-gray-800/80 font-mono text-xs text-gray-300 space-y-2">
-                <div className="text-cyan-400 font-bold">🔔 RigScouter Morning Intelligence Briefing</div>
-                <div className="text-gray-400 text-[11px]">Today's Top Hardware Movers across 5 Monitored Retailers:</div>
-                <ul role="list" className="space-y-1.5 pt-1 text-[11px]">
-                  <li className="text-emerald-400">
-                    • Ryzen 7 9800X3D: $369.99 (ATL Hit on eBay) — Save $110 (Score: 98/100)
-                  </li>
-                  <li className="text-emerald-400">
-                    • ASUS TUF X870-PLUS WiFi: $149.00 on Amazon — Save $80 (Score: 99/100)
-                  </li>
-                  <li className="text-cyan-400">
-                    • Dual RTX 3060 12GB: $259.99 on eBay — 42% Under Historical High (Score: 95/100)
-                  </li>
-                </ul>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <Link
-                  href="/dashboard"
-                  className="rs-btn-primary flex items-center gap-1.5"
-                >
-                  <Bell className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Configure Notifications</span>
-                </Link>
+              <div className="text-right">
+                <div className="text-xs text-gray-400">Lowest Monitored Price</div>
+                <div className="text-xl font-bold text-cyan-400">{featuredComparison.lowestPrice}</div>
+                <div className="text-xs text-gray-500 line-through">MSRP: {featuredComparison.msrp}</div>
               </div>
             </div>
-          )}
+
+            <div className="demo-retailers-grid">
+              {featuredComparison.retailers.map((r: any) => (
+                <button
+                  key={r.name}
+                  onClick={() => setSelectedRetailer(r.name)}
+                  className={`retailer-card-btn ${selectedRetailer === r.name ? 'retailer-card-btn-active' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-1 w-full">
+                    <span className="text-xs font-semibold text-white truncate">{r.name}</span>
+                    {r.isLowest && (
+                      <span className="chip chip-cut">LOWEST</span>
+                    )}
+                    {r.status === 'testing' && (
+                      <span className="chip chip-cut text-cyan-300">TESTING</span>
+                    )}
+                    {r.status === 'soon' && (
+                      <span className="chip chip-save">SOON</span>
+                    )}
+                  </div>
+                  <div className="text-sm font-bold text-cyan-400 mt-1">{r.price}</div>
+                  <div className="text-xs text-gray-400">{r.stock}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 text-xs text-gray-400 border-t border-gray-800 mt-4">
+              <span>Selected Retailer: <strong className="text-white">{selectedRetailer}</strong></span>
+              <Link href="/dashboard" className="rs-btn-secondary">
+                <span>Track in Dashboard</span>
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+
+          </div>
+        ) : (
+          <div className="demo-box">
+            
+            <div className="demo-header">
+              <div>
+                <span className="demo-title">Automated Morning Briefing Preview (08:00 UTC)</span>
+                <div className="text-xs text-gray-400 mt-1">
+                  Delivered automatically when tracked items drop below target thresholds.
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDigestChannel('discord')}
+                  className={`demo-tab-btn ${digestChannel === 'discord' ? 'demo-tab-btn-active' : ''}`}
+                >
+                  Discord Embed
+                </button>
+                <button
+                  onClick={() => setDigestChannel('email')}
+                  className={`demo-tab-btn ${digestChannel === 'email' ? 'demo-tab-btn-active' : ''}`}
+                >
+                  Email Briefing
+                </button>
+              </div>
+            </div>
+
+            <div className="digest-preview-box mt-4">
+              <div className="text-cyan-400 font-bold">
+                [RIGSCOUTER-DISPATCH] Daily Price Drop Digest • 2 Deals Triggered
+              </div>
+              <div className="text-gray-400 text-xs">
+                Channel: {digestChannel === 'discord' ? 'Discord Webhook (#rig-alerts)' : 'Verified Email Delivery'}
+              </div>
+              <div className="border-t border-gray-800 pt-2 space-y-1 text-xs">
+                <div>
+                  • <span className="text-white font-bold">ASUS TUF Gaming X870-PLUS WiFi AM5</span>: <span className="text-emerald-400 font-bold">$149.00</span> on Amazon (35% under MSRP, Score: 99/100)
+                </div>
+                <div>
+                  • <span className="text-white font-bold">Ryzen 7 9800X3D Desktop Processor</span>: <span className="text-emerald-400 font-bold">$369.99</span> on eBay (Save $110, Score: 98/100)
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 mt-2">
+              <Link href="/dashboard" className="rs-btn-primary">
+                <span>Configure Alert Preferences</span>
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+
+          </div>
+        )}
+
+      </section>
+
+      {/* ── Key Features ──────────────────────────────────────────────── */}
+      <section id="features" aria-labelledby="features-heading" className="section-container">
+        <header className="section-header">
+          <span className="section-kicker">Core System Architecture</span>
+          <h2 id="features-heading" className="section-title">
+            Deal Evaluation &amp; Alert Engine
+          </h2>
+          <p className="section-lead">
+            Three independent layers handle extraction, statistical scoring, and notification dispatch without human intervention.
+          </p>
+        </header>
+
+        <div className="feature-grid">
+          
+          <article className="feature-card">
+            <div className="feature-icon-box bg-cyan-950 border border-cyan-800 text-cyan-400">
+              <Globe className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <h3 className="feature-title">Multi-Retailer Scraping</h3>
+            <p className="feature-text">
+              Real-time monitoring across Amazon and eBay with 2-cycle grace periods for temporary rate-limiting, out-of-stock validation, and automatic stock failover hot-swapping.
+            </p>
+          </article>
+
+          <article className="feature-card">
+            <div className="feature-icon-box bg-purple-950 border border-purple-800 text-purple-400">
+              <BarChart3 className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <h3 className="feature-title">AI Deal Scoring (0–100)</h3>
+            <p className="feature-text">
+              Statistical discount evaluation comparing listings against rolling 90-day historic all-time lows (45%), manufacturer MSRP (35%), and cross-retailer pricing spread (20%).
+            </p>
+          </article>
+
+          <article className="feature-card">
+            <div className="feature-icon-box bg-emerald-950 border border-emerald-800 text-emerald-400">
+              <Mail className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <h3 className="feature-title">Automated Daily Digest</h3>
+            <p className="feature-text">
+              Automated briefing engine executing daily at 08:00 UTC, summarizing newly triggered price drops and dispatching formatted payloads to Discord webhooks and email.
+            </p>
+          </article>
+
         </div>
       </section>
 
-      {/* ── 3 Core Pillars ──────────────────────────────────────────────── */}
-      <section id="features" aria-labelledby="features-heading" className="section-container">
-        <header className="section-header">
-          <span className="section-kicker">Core Architecture</span>
-          <h2 id="features-heading" className="section-title">
-            Built for Serious PC Enthusiasts
-          </h2>
-          <p className="section-lead">
-            Adversarial price validation designed to detect artificial discounts and protect consumers from inflated hardware pricing.
-          </p>
-        </header>
-
-        <ul role="list" className="feature-grid">
-          
-          <li role="listitem">
-            <article className="feature-card h-full">
-              <div className="feature-icon-box bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                <Globe className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <h3 className="text-base font-bold text-white font-heading">Multi-Retailer Scraping</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Scrapes Micro Center, Amazon, Newegg, Best Buy, and B&H Photo in real-time, normalizing partner variations into clean canonical models.
-              </p>
-            </article>
-          </li>
-
-          <li role="listitem">
-            <article className="feature-card h-full">
-              <div className="feature-icon-box bg-purple-500/10 border border-purple-500/20 text-purple-400">
-                <BarChart3 className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <h3 className="text-base font-bold text-white font-heading">AI Deal Scoring (0–100)</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Cuts through artificial retailer discounts by evaluating MSRP variance, 90-day lowest prices, and cross-retailer competition.
-              </p>
-            </article>
-          </li>
-
-          <li role="listitem">
-            <article className="feature-card h-full">
-              <div className="feature-icon-box bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                <Mail className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <h3 className="text-base font-bold text-white font-heading">Automated Daily Digest</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Automated cron dispatches morning price drop reports directly to your Email and Discord webhook at 08:00 AM UTC.
-              </p>
-            </article>
-          </li>
-
-        </ul>
-      </section>
-
-      {/* ── 4-Tier Scraper Pipeline Architecture Section ────────────────── */}
+      {/* ── Architecture Pipeline ────────────────────────────────────── */}
       <section id="pipeline" aria-labelledby="pipeline-heading" className="section-container">
         <header className="section-header">
-          <span className="section-kicker">High Availability Scraping</span>
+          <span className="section-kicker">Reliability Engineering</span>
           <h2 id="pipeline-heading" className="section-title">
-            The 4-Tier Fallback Pipeline
+            Data Ingestion &amp; Verification Pipeline
           </h2>
           <p className="section-lead">
-            How RigScouter maintains 100% data continuity without getting blocked or delivering stale pricing data.
+            When hardware retail APIs enforce anti-bot restrictions, our multi-tiered failover pipeline guarantees continuous price accuracy.
           </p>
         </header>
 
-        <ul role="list" className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
-          <li role="listitem">
-            <article className="p-5 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-[10px] font-bold">Tier 1</span>
-                <h3 className="text-sm font-bold text-white font-heading">Direct OAuth 2.0 REST API</h3>
-              </div>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Queries certified high-throughput endpoints (such as the eBay Buy & Browse API) with sub-second tokenized responses and official live inventory tags.
-              </p>
-            </article>
-          </li>
+        <div className="pipeline-grid">
+          <div className="pipeline-card">
+            <div className="pipeline-header-row">
+              <span className="pipeline-step-badge bg-cyan-950 text-cyan-300 border border-cyan-800">TIER 1</span>
+              <h3 className="pipeline-card-title">Direct OAuth 2.0 REST API</h3>
+            </div>
+            <p className="pipeline-card-text">
+              Official eBay Browse API integration utilizing client credentials for real-time inventory queries and verified condition parsing.
+            </p>
+          </div>
 
-          <li role="listitem">
-            <article className="p-5 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold">Tier 2</span>
-                <h3 className="text-sm font-bold text-white font-heading">TLS Fingerprint Impersonation</h3>
-              </div>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Uses asynchronous HTTP clients simulating modern Chrome 124 JA3/TLS handshakes to navigate anti-bot verification challenges cleanly.
-              </p>
-            </article>
-          </li>
+          <div className="pipeline-card">
+            <div className="pipeline-header-row">
+              <span className="pipeline-step-badge bg-blue-950 text-blue-300 border border-blue-800">TIER 2</span>
+              <h3 className="pipeline-card-title">TLS Fingerprint Impersonation</h3>
+            </div>
+            <p className="pipeline-card-text">
+              Automated curl-impersonate client matching browser JA3/JA4 TLS signatures and HTTP/2 framing to bypass bot mitigations.
+            </p>
+          </div>
 
-          <li role="listitem">
-            <article className="p-5 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px] font-bold">Tier 3</span>
-                <h3 className="text-sm font-bold text-white font-heading">All Offers Display (AOD) Extraction</h3>
-              </div>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Inspects multi-seller side-drawers on suppressed Buy Box pages, filtering strictly for Brand New condition to avoid false Used/Renewed price reporting.
-              </p>
-            </article>
-          </li>
+          <div className="pipeline-card">
+            <div className="pipeline-header-row">
+              <span className="pipeline-step-badge bg-purple-950 text-purple-300 border border-purple-800">TIER 3</span>
+              <h3 className="pipeline-card-title">All Offers Display (AOD) Extraction</h3>
+            </div>
+            <p className="pipeline-card-text">
+              Specialized extraction verifying Brand New Buy Box pricing over open-box, renewed, or third-party seller variations.
+            </p>
+          </div>
 
-          <li role="listitem">
-            <article className="p-5 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">Tier 4</span>
-                <h3 className="text-sm font-bold text-white font-heading">Real-Time Search AI Fallback</h3>
-              </div>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                If retailers throttle direct access, our engine queries real-time web cache indexers, extracting prices with regex filters for shipping, gift cards, and bundles.
-              </p>
-            </article>
-          </li>
-        </ul>
+          <div className="pipeline-card">
+            <div className="pipeline-header-row">
+              <span className="pipeline-step-badge bg-emerald-950 text-emerald-300 border border-emerald-800">TIER 4</span>
+              <h3 className="pipeline-card-title">Real-Time Search AI Fallback</h3>
+            </div>
+            <p className="pipeline-card-text">
+              Fallback scraper with exact-match model verification ensuring alerts only trigger on authentic product listings.
+            </p>
+          </div>
+        </div>
       </section>
 
-      {/* ── Top Deals Benchmark Table ───────────────────────────────────── */}
+      {/* ── Top Deals Table ───────────────────────────────────────────── */}
       <section id="deals" aria-labelledby="deals-heading" className="section-container">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
+        
+        <div className="deals-header-row">
           <div>
-            <span className="section-kicker">Market Intelligence</span>
-            <h2 id="deals-heading" className="section-title mt-0.5">
+            <span className="section-kicker">Live Database Feed</span>
+            <h2 id="deals-heading" className="section-title">
               Top Hardware Deals
             </h2>
           </div>
-          <Link
-            href="/dashboard"
-            className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 self-start sm:self-auto"
-          >
-            <span>Open Full Watchlist</span>
+          <Link href="/dashboard" className="deals-link-more">
+            <span>Explore All Watchlist Items</span>
             <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
           </Link>
         </div>
 
         <div className="deals-table-container">
-          <div className="overflow-x-auto">
-            <table className="deals-table">
-              <caption className="sr-only">Top Live PC Hardware Deals Scored by RigScouter AI</caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="deals-th">Hardware Component</th>
-                  <th scope="col" className="deals-th">Category</th>
-                  <th scope="col" className="deals-th">Lowest Price</th>
-                  <th scope="col" className="deals-th">Retailer</th>
-                  <th scope="col" className="deals-th">Deal Score</th>
-                  <th scope="col" className="deals-th text-right">Action</th>
+          <table className="deals-table">
+            <thead>
+              <tr>
+                <th scope="col" className="deals-th">Hardware Component</th>
+                <th scope="col" className="deals-th">Category</th>
+                <th scope="col" className="deals-th">Best Price</th>
+                <th scope="col" className="deals-th">Retailer</th>
+                <th scope="col" className="deals-th">AI Score</th>
+                <th scope="col" className="deals-th text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topDeals.map((deal) => (
+                <tr key={deal.id}>
+                  <td className="deals-td font-semibold text-white">
+                    {deal.name}
+                  </td>
+                  <td className="deals-td">
+                    <span className="demo-category-pill">{deal.category}</span>
+                  </td>
+                  <td className="deals-td font-mono font-bold text-cyan-400">
+                    ${typeof deal.price === 'number' ? deal.price.toFixed(2) : deal.price}
+                    {deal.cut && (
+                      <span className="ml-1 text-emerald-400 font-semibold">{deal.cut}</span>
+                    )}
+                  </td>
+                  <td className="deals-td text-gray-300">
+                    {deal.retailer}
+                  </td>
+                  <td className="deals-td">
+                    <span className="chip chip-save">
+                      {deal.score}/100
+                    </span>
+                  </td>
+                  <td className="deals-td text-right">
+                    <Link
+                      href="/dashboard"
+                      className="rs-btn-secondary py-1 px-2.5 text-xs"
+                    >
+                      Track
+                    </Link>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {topDeals.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="deals-td font-bold text-white max-w-[260px] sm:max-w-xs">
-                      <div className="truncate" title={item.name}>{item.name}</div>
-                    </td>
-                    <td className="deals-td">
-                      <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono text-[10px]">
-                        {item.category}
-                      </span>
-                    </td>
-                    <td className="deals-td font-bold text-cyan-400 font-mono">
-                      ${Number(item.price).toFixed(2)}
-                      {item.cut && item.cut !== '-' && (
-                        <span className="ml-1.5 text-[10px] text-emerald-400 font-semibold">{item.cut}</span>
-                      )}
-                    </td>
-                    <td className="deals-td text-gray-300">
-                      {item.retailer}
-                    </td>
-                    <td className="deals-td">
-                      <span className="px-2 py-0.5 rounded-full font-bold text-[11px] bg-orange-500/20 text-orange-300">
-                        {item.score}/100
-                      </span>
-                    </td>
-                    <td className="deals-td text-right">
-                      <Link
-                        href={`/dashboard?search=${encodeURIComponent(item.name)}`}
-                        className="px-2.5 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-[11px] transition-all inline-block"
-                      >
-                        Track
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
+
       </section>
 
-      {/* ── Supported Retailers Network ─────────────────────────────────── */}
+      {/* ── Monitored Retailers Grid ──────────────────────────────────── */}
       <section id="retailers" aria-labelledby="retailers-heading" className="section-container">
         <header className="section-header">
-          <span className="section-kicker">Supported Retailers</span>
+          <span className="section-kicker">Supported Ecosystem</span>
           <h2 id="retailers-heading" className="section-title">
-            Multi-Retailer Pricing Engine
+            Multi-Retailer Pricing Matrix
           </h2>
           <p className="section-lead">
-            Real-time automated pricing across active retailers, with additional major hardware destinations rolling out soon.
+            Live retail endpoints, testing validation status, and planned roadmap integrations.
           </p>
         </header>
 
         <ul role="list" className="retailer-grid">
-          {[
-            { name: 'Amazon', active: true },
-            { name: 'eBay', active: true },
-            { name: 'Best Buy', status: 'testing' },
-            { name: 'Micro Center', active: false },
-            { name: 'Newegg', active: false },
-            { name: 'B&H Photo', active: false },
-          ].map((ret) => (
-            <li
-              key={ret.name}
-              className={`retailer-card ${
-                ret.active
-                  ? 'border-cyan-500/30 bg-cyan-950/20 shadow-sm shadow-cyan-500/10'
-                  : ret.status === 'testing'
-                  ? 'border-cyan-500/40 bg-cyan-950/30 shadow-sm shadow-cyan-500/15'
-                  : 'border-gray-800/80 bg-gray-950/40 opacity-75'
-              }`}
-            >
-              <div className="font-bold text-white text-xs">{ret.name}</div>
-              {ret.active ? (
-                <div className="text-[10px] text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-                  <span>Live</span>
-                </div>
-              ) : ret.status === 'testing' ? (
-                <div className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" aria-hidden="true" />
-                  <span>Testing</span>
-                </div>
-              ) : (
-                <div className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  <span>Coming Soon</span>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* ── Comprehensive Technical FAQ Section ─────────────────────────── */}
-      <section id="faq" aria-labelledby="faq-heading" className="section-container">
-        <header className="section-header">
-          <span className="section-kicker">Knowledge Base</span>
-          <h2 id="faq-heading" className="section-title">
-            Frequently Asked Questions
-          </h2>
-          <p className="section-lead">
-            Technical answers to how RigScouter handles real-time scraping, out-of-stock listings, and algorithmic deal evaluations.
-          </p>
-        </header>
-
-        <ul role="list" className="faq-list">
-          <li role="listitem">
-            <details className="faq-item" open>
-              <summary className="faq-summary">
-                <span>How does the 0–100 AI Deal Score distinguish real deals from fake sales?</span>
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
-              </summary>
-              <div className="faq-content">
-                Many online sellers mark prices up right before advertising a "35% OFF" sale. RigScouter ignores marketing banners and computes a multi-factor score: 45% based on variance against the verified 90-day all-time low, 35% against manufacturer MSRP, and 20% on current multi-retailer competitive spread. Only hardware genuinely selling near historic minimums earns a score above 90.
-              </div>
-            </details>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">Amazon</span>
+            <span className="retailer-status-badge text-emerald-400">
+              <span className="status-dot-active" aria-hidden="true" />
+              <span>LIVE</span>
+            </span>
           </li>
-
-          <li role="listitem">
-            <details className="faq-item">
-              <summary className="faq-summary">
-                <span>What happens when an item in my watchlist sells out or gets restocked?</span>
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
-              </summary>
-              <div className="faq-content">
-                Our self-healing crawler employs a 2-cycle grace period to ensure brief network throttles are not mistaken for sold-out inventory. If an item is confirmed out of stock, its deal score is zeroed to prevent bad alerts. When the seller restocks or another monitored retailer (e.g., Amazon) has the item in stock, the engine automatically hot-swaps to the active retailer and updates pricing.
-              </div>
-            </details>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">eBay</span>
+            <span className="retailer-status-badge text-emerald-400">
+              <span className="status-dot-active" aria-hidden="true" />
+              <span>LIVE</span>
+            </span>
           </li>
-
-          <li role="listitem">
-            <details className="faq-item">
-              <summary className="faq-summary">
-                <span>How often are hardware prices refreshed?</span>
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
-              </summary>
-              <div className="faq-content">
-                The global catalog runs automated cycles daily at 00:00 UTC and 08:00 UTC, while individual user watchlists trigger background refreshes whenever items are inspected. Changes trigger rolling time-series delta recalculations across 24-hour, 7-day, and 30-day intervals.
-              </div>
-            </details>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">Best Buy</span>
+            <span className="retailer-status-badge text-cyan-400">
+              <span className="status-dot-testing" aria-hidden="true" />
+              <span>TESTING</span>
+            </span>
           </li>
-
-          <li role="listitem">
-            <details className="faq-item">
-              <summary className="faq-summary">
-                <span>Why are Used or Renewed items separated from Brand New pricing?</span>
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
-              </summary>
-              <div className="faq-content">
-                Amazon All Offers Display and third-party marketplaces often mix refurbished, open-box, and brand-new hardware together. RigScouter parses condition headers strictly—prioritizing Brand New Buy Box pricing while clearly badging open-box offers so users are never misled by lower used prices.
-              </div>
-            </details>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">Micro Center</span>
+            <span className="retailer-status-badge text-amber-400">
+              <span className="status-dot-soon" aria-hidden="true" />
+              <span>SOON</span>
+            </span>
           </li>
-
-          <li role="listitem">
-            <details className="faq-item">
-              <summary className="faq-summary">
-                <span>Can I receive notifications on Discord or Email?</span>
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
-              </summary>
-              <div className="faq-content">
-                Yes. Through the user preferences dashboard, you can supply a Discord Webhook URL or verify your email address to receive custom threshold drop alerts and automated morning digests.
-              </div>
-            </details>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">Newegg</span>
+            <span className="retailer-status-badge text-amber-400">
+              <span className="status-dot-soon" aria-hidden="true" />
+              <span>SOON</span>
+            </span>
+          </li>
+          <li role="listitem" className="retailer-card">
+            <span className="retailer-name-text">B&amp;H Photo</span>
+            <span className="retailer-status-badge text-amber-400">
+              <span className="status-dot-soon" aria-hidden="true" />
+              <span>SOON</span>
+            </span>
           </li>
         </ul>
       </section>
 
       {/* ── Bottom CTA Banner ──────────────────────────────────────────── */}
-      <section aria-labelledby="cta-heading" className="section-container text-center">
-        <div className="rs-card p-8 sm:p-10 space-y-4">
-          <h2 id="cta-heading" className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight">
-            Ready to Track PC Deals?
+      <section aria-labelledby="cta-heading" className="section-container">
+        <div className="cta-box">
+          <h2 id="cta-heading" className="cta-title">
+            Automate Your Hardware Price Tracking
           </h2>
-          <p className="text-xs sm:text-sm text-gray-400 max-w-md mx-auto">
-            Launch the dashboard to search hardware, set target price alert thresholds, and receive automated daily digests.
+          <p className="section-lead">
+            Launch the live dashboard to search desktop components, set target price alert thresholds, and receive automated briefings.
           </p>
           <div className="pt-2">
             <Link
               href="/dashboard"
-              className="rs-btn-primary px-6 py-3 inline-flex items-center gap-2"
+              className="rs-btn-primary px-6 py-2.5"
             >
               <Bell className="w-4 h-4" aria-hidden="true" />
               <span>Launch Live Dashboard</span>
@@ -805,11 +694,11 @@ export default function HomePage() {
       <footer role="contentinfo" className="site-footer">
         <div className="footer-inner">
           <div className="footer-row">
-            <div className="flex items-center gap-2 text-gray-300 font-bold">
+            <div className="footer-brand">
               <Cpu className="w-4 h-4 text-cyan-400" aria-hidden="true" />
               <span>RigScouter-AI</span>
             </div>
-            <div>
+            <div className="footer-copyright">
               © 2026 RigScouter-AI • Autonomous PC Hardware Intelligence
             </div>
             <nav aria-label="Footer Navigation" className="footer-nav">
@@ -819,7 +708,6 @@ export default function HomePage() {
               <Link href="/methodology" className="footer-link">Methodology</Link>
               <Link href="/privacy" className="footer-link">Privacy</Link>
               <Link href="/terms" className="footer-link">Terms</Link>
-              <a href="#faq" className="footer-link">FAQ</a>
             </nav>
           </div>
           <p className="footer-disclaimer">

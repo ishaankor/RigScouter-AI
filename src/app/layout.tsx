@@ -4,7 +4,7 @@ import './globals.css';
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://rigscouter.ai';
 
 export const viewport: Viewport = {
-  themeColor: '#0b0f19',
+  themeColor: '#090d16',
   colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,
@@ -108,36 +108,6 @@ const jsonLd = [
       'Automated Multi-Channel Briefings',
     ],
   },
-  {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: [
-      {
-        '@type': 'Question',
-        name: 'How does the 0–100 AI Deal Score distinguish real deals from fake sales?',
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: 'RigScouter evaluates MSRP variance (35%), rolling 90-day all-time lows (45%), and cross-retailer competition (20%) to expose fake discount markups.',
-        },
-      },
-      {
-        '@type': 'Question',
-        name: 'What happens when an item in my watchlist sells out or gets restocked?',
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: 'The self-healing crawler employs a 2-cycle grace period. If confirmed out of stock, deal score is zeroed. Once restocked, the system automatically hot-swaps to the active retailer.',
-        },
-      },
-      {
-        '@type': 'Question',
-        name: 'How often are hardware prices refreshed?',
-        acceptedAnswer: {
-          '@type': 'Answer',
-          text: 'The catalog runs automated refresh cycles twice daily at 00:00 UTC and 08:00 UTC, calculating rolling 24h, 7d, and 30d interval deltas.',
-        },
-      },
-    ],
-  },
 ];
 
 export default function RootLayout({
@@ -153,7 +123,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="antialiased min-h-screen bg-[#0b0f19] text-[#f3f4f6]">
+      <body className="antialiased min-h-screen bg-[#090d16] text-[#f3f4f6]">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-gray-950 focus:font-bold focus:rounded-lg focus:shadow-lg focus:outline-none"
