@@ -31,12 +31,10 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   
-  // Clean 2-mode demo tab
   const [demoTab, setDemoTab] = useState<'comparison' | 'digest'>('comparison');
   const [selectedRetailer, setSelectedRetailer] = useState<string>('eBay');
   const [digestChannel, setDigestChannel] = useState<'discord' | 'email'>('discord');
 
-  // Hardware Ticker Deals Data (hydrated from live database catalog)
   const [tickerDeals, setTickerDeals] = useState<any[]>([
     { name: 'Ryzen 7 9800X3D 8-Core CPU', price: '$369.99', save: '$110', retailer: 'eBay', score: 98 },
     { name: 'TUF Gaming X870-PLUS WiFi AM5', price: '$149.00', save: '$80', retailer: 'Amazon', score: 99 },
@@ -49,7 +47,6 @@ export default function HomePage() {
     { name: 'T-Force Vulcan Z 32GB DDR4 RAM', price: '$220.00', save: '$29', retailer: 'eBay', score: 88 }
   ]);
 
-  // Top Hardware Deals Data (hydrated from live database catalog)
   const [topDeals, setTopDeals] = useState<any[]>([
     { id: '1', name: 'ASUS TUF Gaming X870-PLUS WiFi AM5 ATX Motherboard', category: 'Motherboard', price: 149.00, msrp: 229.99, retailer: 'Amazon', score: 99, cut: '-35%' },
     { id: '2', name: 'AMD Ryzen 7 9800X3D 8-Core Desktop Processor', category: 'CPU', price: 369.99, msrp: 479.99, retailer: 'eBay', score: 98, cut: '-23%' },
@@ -59,7 +56,6 @@ export default function HomePage() {
     { id: '6', name: 'ASUS ROG Strix GeForce GTX 1080 Ti 11GB OC Edition', category: 'GPU', price: 120.00, msrp: 399.00, retailer: 'eBay', score: 92, cut: '-70%' },
   ]);
 
-  // Featured Comparison Data (hydrated from live database catalog)
   const [featuredComparison, setFeaturedComparison] = useState<any>({
     name: 'AMD Ryzen 7 9800X3D 8-Core, 16-Thread Desktop Processor',
     category: 'CPU',
@@ -85,7 +81,6 @@ export default function HomePage() {
       setUser(session?.user ?? null);
     });
 
-    // Hydrate market data directly from Supabase database via API route
     fetch('/api/market-preview')
       .then(res => res.json())
       .then(data => {
@@ -114,39 +109,33 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f19] text-gray-100 selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="site-wrapper">
       
-      {/* Ambient Lighting */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[350px] bg-gradient-to-b from-cyan-500/10 via-blue-600/5 to-transparent rounded-full blur-[120px] pointer-events-none" />
-
       {/* ── Semantic Site Header ─────────────────────────────────────────── */}
-      <header role="banner" className="sticky top-0 z-50 backdrop-blur-md bg-[#0b0f19]/80 border-b border-gray-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <header role="banner" className="site-header">
+        <div className="header-inner">
           
-          {/* Brand Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group" aria-label="RigScouter AI Home">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+          <Link href="/" className="brand-link" aria-label="RigScouter AI Home">
+            <div className="brand-icon">
               <Cpu className="w-4 h-4 text-white" aria-hidden="true" />
             </div>
-            <span className="text-lg font-black font-heading tracking-tight text-white">
+            <span className="brand-text">
               RigScouter<span className="text-cyan-400">-AI</span>
             </span>
           </Link>
 
-          {/* Clean Nav Links */}
-          <nav aria-label="Primary Navigation" className="hidden md:flex items-center gap-8 text-xs font-semibold text-gray-400">
-            <Link href="/features" className="hover:text-white transition-colors">Features</Link>
-            <Link href="/deal-scoring" className="hover:text-white transition-colors">Deal Scoring</Link>
-            <Link href="/methodology" className="hover:text-white transition-colors">Methodology</Link>
-            <a href="#pipeline" className="hover:text-white transition-colors">Architecture</a>
-            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+          <nav aria-label="Primary Navigation" className="site-nav">
+            <Link href="/features" className="site-nav-link">Features</Link>
+            <Link href="/deal-scoring" className="site-nav-link">Deal Scoring</Link>
+            <Link href="/methodology" className="site-nav-link">Methodology</Link>
+            <a href="#pipeline" className="site-nav-link">Architecture</a>
+            <a href="#faq" className="site-nav-link">FAQ</a>
           </nav>
 
-          {/* User Actions */}
           <div className="flex items-center gap-3">
             {user ? (
-              <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-xl text-xs">
-                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-[9px] text-gray-950">
+              <div className="user-badge">
+                <div className="user-avatar">
                   {user.email?.[0].toUpperCase() || 'U'}
                 </div>
                 <span className="text-gray-300 font-medium max-w-[110px] truncate">{user.email}</span>
@@ -172,7 +161,7 @@ export default function HomePage() {
             <Link
               href="/dashboard"
               aria-label="Launch RigScouter Live Application"
-              className="btn-glow px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-cyan-500/20 cursor-pointer"
+              className="rs-btn-primary flex items-center gap-1.5"
             >
               <span>Launch App</span>
               <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -186,35 +175,28 @@ export default function HomePage() {
       <main id="main-content" role="main">
 
       {/* ── Hero Section ───────────────────────────────────────────────── */}
-      <section aria-labelledby="hero-heading" className="relative pt-16 pb-16 md:pt-24 md:pb-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+      <section aria-labelledby="hero-heading" className="hero-section">
         
-        {/* Overhead Ambient Glow */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[340px] sm:w-[580px] h-[220px] bg-gradient-to-b from-cyan-400/20 via-blue-500/10 to-transparent blur-[80px] rounded-full pointer-events-none" />
-
-        {/* Pill Badge */}
-        <div className="relative z-10 inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold backdrop-blur-sm">
+        <div className="hero-badge-pill">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" aria-hidden="true" />
           <span>Autonomous PC Hardware Market Intelligence</span>
         </div>
 
-        {/* Master Headline */}
-        <h1 id="hero-heading" className="relative z-10 text-4xl sm:text-6xl lg:text-7xl font-black font-heading tracking-tight text-white leading-tight">
+        <h1 id="hero-heading" className="hero-title">
           Scout PC Hardware Deals.
           <span className="block mt-2 sm:mt-3 gradient-text-blue">
             Never Overpay.
           </span>
         </h1>
 
-        {/* Subheadline */}
-        <p className="relative z-10 text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
+        <p className="hero-subtitle">
           RigScouter continuously crawls Amazon and eBay in real-time, with Best Buy in active testing and Micro Center, Newegg, and B&H Photo coming soon. We compute deep AI deal scores (0–100) and dispatch automated daily price digests to your Email and Discord webhook.
         </p>
 
-        {/* Action CTAs */}
-        <div className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <div className="hero-cta-group">
           <Link
             href="/dashboard"
-            className="w-full sm:w-auto btn-glow px-7 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25"
+            className="w-full sm:w-auto rs-btn-primary px-7 py-3 text-sm flex items-center justify-center gap-2"
           >
             <Bell className="w-4 h-4" aria-hidden="true" />
             <span>Launch Watchlist Tracker</span>
@@ -223,14 +205,13 @@ export default function HomePage() {
 
           <a
             href="#demo"
-            className="w-full sm:w-auto btn-glass px-6 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+            className="w-full sm:w-auto rs-btn-secondary px-6 py-3 text-sm flex items-center justify-center gap-2"
           >
             <Sparkles className="w-4 h-4 text-cyan-400" aria-hidden="true" />
             <span>View Live Demo</span>
           </a>
         </div>
 
-        {/* Semantic Metrics Description List */}
         <dl className="stats-dl" aria-label="System Performance Metrics">
           <div className="stats-item">
             <dt className="stats-dt">Multi-Retailer</dt>
@@ -252,10 +233,10 @@ export default function HomePage() {
 
       </section>
 
-      {/* ── Live Ticker Strip (Seamless Double-Track Infinite Marquee) ─── */}
-      <section aria-label="Live Market Price Drops" className="border-y border-gray-800/80 bg-gray-950/70 py-2.5 overflow-hidden">
+      {/* ── Live Ticker Strip ─────────────────────────────────────────── */}
+      <section aria-label="Live Market Price Drops" className="marquee-bar">
         <div className="flex items-center">
-          <div className="shrink-0 px-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-cyan-400 border-r border-gray-800 z-20 bg-gray-950 py-1 shadow-[4px_0_12px_rgba(0,0,0,0.45)]">
+          <div className="marquee-label">
             <Flame className="w-3.5 h-3.5 text-orange-400" aria-hidden="true" />
             <span className="whitespace-nowrap">Live Price Drops</span>
           </div>
@@ -264,14 +245,13 @@ export default function HomePage() {
             <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-gray-950 to-transparent z-10" />
             <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-gray-950 to-transparent z-10" />
 
-            {/* Track 1 */}
             <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3">
               {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
                   <div
                     key={`track1-${idx}-${deal.name.slice(0, 8)}`}
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-gray-900 border border-gray-800/80 text-xs font-medium shrink-0 whitespace-nowrap hover:border-cyan-500/40 transition-colors"
+                    className="marquee-pill"
                   >
                     <span className="text-gray-200 font-semibold">{deal.name}</span>
                     <span className="text-cyan-400 font-bold">{deal.price}</span>
@@ -288,14 +268,13 @@ export default function HomePage() {
                 ))}
             </div>
 
-            {/* Track 2 */}
             <div className="flex shrink-0 animate-marquee gap-3 items-center pl-3" aria-hidden="true">
               {(tickerDeals.length >= 8 ? tickerDeals : [...tickerDeals, ...tickerDeals, ...tickerDeals])
                 .filter(deal => deal && deal.name && deal.price)
                 .map((deal, idx) => (
                   <div
                     key={`track2-${idx}-${deal.name.slice(0, 8)}`}
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-gray-900 border border-gray-800/80 text-xs font-medium shrink-0 whitespace-nowrap hover:border-cyan-500/40 transition-colors"
+                    className="marquee-pill"
                   >
                     <span className="text-gray-200 font-semibold">{deal.name}</span>
                     <span className="text-cyan-400 font-bold">{deal.price}</span>
@@ -316,7 +295,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Interactive Sandbox Preview ─────────────────────────────────── */}
-      <section id="demo" aria-labelledby="demo-heading" className="section-container space-y-6">
+      <section id="demo" aria-labelledby="demo-heading" className="section-container">
         <header className="section-header">
           <span className="section-kicker">Interactive Preview</span>
           <h2 id="demo-heading" className="section-title">
@@ -327,20 +306,15 @@ export default function HomePage() {
           </p>
         </header>
 
-        {/* Accessible Tab Navigation */}
-        <div className="flex justify-center">
-          <div role="tablist" aria-label="Interactive Demo Modes" className="inline-flex p-1 bg-gray-900 rounded-xl border border-gray-800">
+        <div className="flex justify-center mb-6">
+          <div role="tablist" aria-label="Interactive Demo Modes" className="demo-tab-list">
             <button
               role="tab"
               id="tab-comparison"
               aria-selected={demoTab === 'comparison'}
               aria-controls="panel-comparison"
               onClick={() => setDemoTab('comparison')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                demoTab === 'comparison'
-                  ? 'bg-gray-800 text-cyan-300 shadow-sm'
-                  : 'text-gray-400 hover:text-white'
-              }`}
+              className={`demo-tab-btn ${demoTab === 'comparison' ? 'demo-tab-btn-active' : ''}`}
             >
               Multi-Retailer Price Comparison
             </button>
@@ -350,19 +324,14 @@ export default function HomePage() {
               aria-selected={demoTab === 'digest'}
               aria-controls="panel-digest"
               onClick={() => setDemoTab('digest')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                demoTab === 'digest'
-                  ? 'bg-gray-800 text-cyan-300 shadow-sm'
-                  : 'text-gray-400 hover:text-white'
-              }`}
+              className={`demo-tab-btn ${demoTab === 'digest' ? 'demo-tab-btn-active' : ''}`}
             >
               Automated Daily Digest
             </button>
           </div>
         </div>
 
-        {/* Tab Panels */}
-        <div className="glass-card p-6 sm:p-8 rounded-2xl border border-gray-800">
+        <div className="rs-card p-6 sm:p-8">
           {demoTab === 'comparison' ? (
             <div role="tabpanel" id="panel-comparison" aria-labelledby="tab-comparison" className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
@@ -371,7 +340,7 @@ export default function HomePage() {
                     <h3 className="text-lg font-bold text-white font-heading">
                       {featuredComparison.name}
                     </h3>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+                    <span className="rs-badge rs-badge-emerald">
                       Score: {featuredComparison.score}/100 ({featuredComparison.dealTag})
                     </span>
                   </div>
@@ -388,7 +357,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Retailer Chips */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 {featuredComparison.retailers.map((ret: any) => (
                   <button
@@ -427,7 +395,7 @@ export default function HomePage() {
                 <span>Active Retailer: <strong className="text-white">{selectedRetailer}</strong></span>
                 <Link
                   href={`/dashboard?search=${encodeURIComponent(featuredComparison.name)}`}
-                  className="btn-glow px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                  className="rs-btn-secondary flex items-center gap-1.5"
                 >
                   <Search className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Search in Dashboard</span>
@@ -484,7 +452,7 @@ export default function HomePage() {
               <div className="flex justify-end pt-2">
                 <Link
                   href="/dashboard"
-                  className="btn-glow px-4 py-2 rounded-lg text-xs font-bold inline-flex items-center gap-1.5"
+                  className="rs-btn-primary flex items-center gap-1.5"
                 >
                   <Bell className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Configure Notifications</span>
@@ -495,8 +463,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── 3 Core Pillars (Semantic Architecture List) ─────────────────── */}
-      <section id="features" aria-labelledby="features-heading" className="section-container space-y-8">
+      {/* ── 3 Core Pillars ──────────────────────────────────────────────── */}
+      <section id="features" aria-labelledby="features-heading" className="section-container">
         <header className="section-header">
           <span className="section-kicker">Core Architecture</span>
           <h2 id="features-heading" className="section-title">
@@ -509,7 +477,6 @@ export default function HomePage() {
 
         <ul role="list" className="feature-grid">
           
-          {/* Card 1 */}
           <li role="listitem">
             <article className="feature-card h-full">
               <div className="feature-icon-box bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
@@ -522,7 +489,6 @@ export default function HomePage() {
             </article>
           </li>
 
-          {/* Card 2 */}
           <li role="listitem">
             <article className="feature-card h-full">
               <div className="feature-icon-box bg-purple-500/10 border border-purple-500/20 text-purple-400">
@@ -535,7 +501,6 @@ export default function HomePage() {
             </article>
           </li>
 
-          {/* Card 3 */}
           <li role="listitem">
             <article className="feature-card h-full">
               <div className="feature-icon-box bg-amber-500/10 border border-amber-500/20 text-amber-400">
@@ -552,7 +517,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 4-Tier Scraper Pipeline Architecture Section ────────────────── */}
-      <section id="pipeline" aria-labelledby="pipeline-heading" className="section-container space-y-8">
+      <section id="pipeline" aria-labelledby="pipeline-heading" className="section-container">
         <header className="section-header">
           <span className="section-kicker">High Availability Scraping</span>
           <h2 id="pipeline-heading" className="section-title">
@@ -615,8 +580,8 @@ export default function HomePage() {
       </section>
 
       {/* ── Top Deals Benchmark Table ───────────────────────────────────── */}
-      <section id="deals" aria-labelledby="deals-heading" className="section-container space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+      <section id="deals" aria-labelledby="deals-heading" className="section-container">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
           <div>
             <span className="section-kicker">Market Intelligence</span>
             <h2 id="deals-heading" className="section-title mt-0.5">
@@ -632,46 +597,46 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="glass-card overflow-hidden border border-gray-800 rounded-2xl">
+        <div className="deals-table-container">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="deals-table">
               <caption className="sr-only">Top Live PC Hardware Deals Scored by RigScouter AI</caption>
               <thead>
-                <tr className="border-b border-gray-800 bg-gray-900/60 text-gray-400 font-semibold">
-                  <th scope="col" className="py-3.5 px-5">Hardware Component</th>
-                  <th scope="col" className="py-3.5 px-3">Category</th>
-                  <th scope="col" className="py-3.5 px-3">Lowest Price</th>
-                  <th scope="col" className="py-3.5 px-3">Retailer</th>
-                  <th scope="col" className="py-3.5 px-3">Deal Score</th>
-                  <th scope="col" className="py-3.5 px-5 text-right">Action</th>
+                <tr>
+                  <th scope="col" className="deals-th">Hardware Component</th>
+                  <th scope="col" className="deals-th">Category</th>
+                  <th scope="col" className="deals-th">Lowest Price</th>
+                  <th scope="col" className="deals-th">Retailer</th>
+                  <th scope="col" className="deals-th">Deal Score</th>
+                  <th scope="col" className="deals-th text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800/50 font-medium">
+              <tbody>
                 {topDeals.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-gray-800/20 transition-colors">
-                    <td className="py-3 px-5 font-bold text-white max-w-[260px] sm:max-w-xs">
+                  <tr key={idx}>
+                    <td className="deals-td font-bold text-white max-w-[260px] sm:max-w-xs">
                       <div className="truncate" title={item.name}>{item.name}</div>
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="deals-td">
                       <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-mono text-[10px]">
                         {item.category}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-bold text-cyan-400 font-mono">
+                    <td className="deals-td font-bold text-cyan-400 font-mono">
                       ${Number(item.price).toFixed(2)}
                       {item.cut && item.cut !== '-' && (
                         <span className="ml-1.5 text-[10px] text-emerald-400 font-semibold">{item.cut}</span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-gray-300">
+                    <td className="deals-td text-gray-300">
                       {item.retailer}
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="deals-td">
                       <span className="px-2 py-0.5 rounded-full font-bold text-[11px] bg-orange-500/20 text-orange-300">
                         {item.score}/100
                       </span>
                     </td>
-                    <td className="py-3 px-5 text-right">
+                    <td className="deals-td text-right">
                       <Link
                         href={`/dashboard?search=${encodeURIComponent(item.name)}`}
                         className="px-2.5 py-1 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-[11px] transition-all inline-block"
@@ -688,7 +653,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Supported Retailers Network ─────────────────────────────────── */}
-      <section id="retailers" aria-labelledby="retailers-heading" className="section-container space-y-6">
+      <section id="retailers" aria-labelledby="retailers-heading" className="section-container">
         <header className="section-header">
           <span className="section-kicker">Supported Retailers</span>
           <h2 id="retailers-heading" className="section-title">
@@ -740,7 +705,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Comprehensive Technical FAQ Section ─────────────────────────── */}
-      <section id="faq" aria-labelledby="faq-heading" className="section-container space-y-8">
+      <section id="faq" aria-labelledby="faq-heading" className="section-container">
         <header className="section-header">
           <span className="section-kicker">Knowledge Base</span>
           <h2 id="faq-heading" className="section-title">
@@ -815,8 +780,8 @@ export default function HomePage() {
       </section>
 
       {/* ── Bottom CTA Banner ──────────────────────────────────────────── */}
-      <section aria-labelledby="cta-heading" className="py-12 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="glass-card p-8 sm:p-10 rounded-2xl border border-cyan-500/20 text-center space-y-4">
+      <section aria-labelledby="cta-heading" className="section-container text-center">
+        <div className="rs-card p-8 sm:p-10 space-y-4">
           <h2 id="cta-heading" className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight">
             Ready to Track PC Deals?
           </h2>
@@ -826,7 +791,7 @@ export default function HomePage() {
           <div className="pt-2">
             <Link
               href="/dashboard"
-              className="btn-glow px-6 py-3 rounded-xl text-xs font-bold inline-flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+              className="rs-btn-primary px-6 py-3 inline-flex items-center gap-2"
             >
               <Bell className="w-4 h-4" aria-hidden="true" />
               <span>Launch Live Dashboard</span>
@@ -837,9 +802,9 @@ export default function HomePage() {
       </main>
 
       {/* ── Semantic Site Footer ────────────────────────────────────────── */}
-      <footer role="contentinfo" className="border-t border-gray-800/80 bg-gray-950/80 py-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
+      <footer role="contentinfo" className="site-footer">
+        <div className="footer-inner">
+          <div className="footer-row">
             <div className="flex items-center gap-2 text-gray-300 font-bold">
               <Cpu className="w-4 h-4 text-cyan-400" aria-hidden="true" />
               <span>RigScouter-AI</span>
@@ -847,21 +812,22 @@ export default function HomePage() {
             <div>
               © 2026 RigScouter-AI • Autonomous PC Hardware Intelligence
             </div>
-            <nav aria-label="Footer Navigation" className="flex items-center gap-5">
-              <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-              <Link href="/features" className="hover:text-white transition-colors">Features</Link>
-              <Link href="/deal-scoring" className="hover:text-white transition-colors">Deal Scoring</Link>
-              <Link href="/methodology" className="hover:text-white transition-colors">Methodology</Link>
-              <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+            <nav aria-label="Footer Navigation" className="footer-nav">
+              <Link href="/dashboard" className="footer-link">Dashboard</Link>
+              <Link href="/features" className="footer-link">Features</Link>
+              <Link href="/deal-scoring" className="footer-link">Deal Scoring</Link>
+              <Link href="/methodology" className="footer-link">Methodology</Link>
+              <Link href="/privacy" className="footer-link">Privacy</Link>
+              <Link href="/terms" className="footer-link">Terms</Link>
+              <a href="#faq" className="footer-link">FAQ</a>
             </nav>
           </div>
-          <p className="text-[11px] text-gray-600 text-center sm:text-left">
+          <p className="footer-disclaimer">
             RigScouter AI is an independent automated price intelligence engine tracking computer hardware components across major global retail platforms. All product trademarks, model names, and manufacturer logos are the property of their respective owners.
           </p>
         </div>
       </footer>
 
-      {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
