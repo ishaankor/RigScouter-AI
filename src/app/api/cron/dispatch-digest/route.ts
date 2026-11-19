@@ -126,11 +126,11 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
 
   // 0a. Replica / Toy / Scale Model / Accessory Conflict Check
   const isReplicaOrAccessory = (s: string) =>
-    /\b(replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|box only|display only|prop|diecast|die-cast)\b/i.test(s);
+    /\b(fan\s*for|fans?\s*for|for\s+[\w\s\-]+fans?|^\s*fans?\b|replacement\s*fan|gpu\s*fans?|vga\s*fans?|card\s*fans?|cooling\s*fans?|water\s*block|waterblock|hydro\s*copper|heatsink|heat\s*sink|backplate|bracket|shroud|thermal\s*paste|cable|housing|case\s*only|fan\s*only|box\s*only|replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|display only|prop|diecast|die-cast)\b/i.test(s);
   const itemIsReplica = isReplicaOrAccessory(itemName) || isReplicaOrAccessory(itemCompId);
   const hIsReplica = isReplicaOrAccessory(hName) || isReplicaOrAccessory(hModel) || isReplicaOrAccessory(hId);
   if (itemIsReplica !== hIsReplica) {
-    return false; // Prevent display replicas/accessories ($29) from matching $2000 real hardware
+    return false; // Prevent replacement fans, cooling accessories, or replicas ($27) from matching real hardware
   }
 
   // 1. CPU Tier Conflict Check (Ryzen 3/5/7/9 vs Core i3/i5/i7/i9 vs Ultra 5/7/9)
@@ -726,6 +726,10 @@ export async function GET(req: NextRequest) {
               const r = c.retailer || 'Amazon';
               const p = Number(c.current_price || 0);
               const u = resolveRetailerUrl(r, c.product_url, c.specs, item.component_name);
+              const cName = (c.name || '').toLowerCase();
+              if (isReplicaOrAccessory(cName) && !isReplicaOrAccessory(item.component_name)) {
+                return; // skip accessory row
+              }
               if (p > 0) {
                 const key = r.toLowerCase();
                 if (!offersMap.has(key) || (offersMap.get(key)!.price > p)) {
@@ -739,6 +743,13 @@ export async function GET(req: NextRequest) {
                 (s.RetailerOffers || []).forEach((ro: any) => {
                   const roR = ro.retailer || 'Store';
                   const roP = Number(ro.price || 0);
+                  const roTitle = (ro.title || '').toLowerCase();
+                  if (isReplicaOrAccessory(roTitle) && !isReplicaOrAccessory(item.component_name)) {
+                    return; // skip accessory offer
+                  }
+                  if (ro.inStock === false || ro.in_stock === false || ro.is_sold_out === true) {
+                    return; // skip out-of-stock offer
+                  }
                   if (roP > 0) {
                     const roKey = roR.toLowerCase();
                     const roUrl = resolveRetailerUrl(roR, ro.url, s, item.component_name);
@@ -763,12 +774,22 @@ export async function GET(req: NextRequest) {
             }
 
             const sortedOffers = Array.from(offersMap.values()).sort((a, b) => a.price - b.price);
-            const bestOffer = sortedOffers[0];
-            const maxSavings = sortedOffers.length > 1
-              ? Number((sortedOffers[sortedOffers.length - 1].price - bestOffer.price).toFixed(2))
+
+            // Anomaly guard: filter out glitch drops (>65% drop on hardware items where previous reference is >$80)
+            const refPrice = Number(item.previous_price_24h || item.previous_price_7d || item.all_time_low || 0);
+            const validNonAnomalous = sortedOffers.filter(off => {
+              if (refPrice > 80 && off.price < refPrice * 0.35) {
+                return false; // drop is suspicious/anomalous (e.g. $27 accessory for a $350 GPU)
+              }
+              return true;
+            });
+            const effectiveOffers = validNonAnomalous.length > 0 ? validNonAnomalous : sortedOffers;
+            const bestOffer = effectiveOffers[0];
+            const maxSavings = effectiveOffers.length > 1
+              ? Number((effectiveOffers[effectiveOffers.length - 1].price - bestOffer.price).toFixed(2))
               : 0;
 
-            const offersList = sortedOffers.map((off, idx) => ({
+            const offersList = effectiveOffers.map((off, idx) => ({
               retailer: off.retailer,
               price: off.price,
               url: off.url,
