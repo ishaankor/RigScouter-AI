@@ -387,7 +387,14 @@ export function WatchlistManager({
 
     // Filter out dummy/unscraped retailers (price is 0 or URL is missing or retailer is empty or 'Online Retailer')
     const validOffers = combinedOffers.filter(o => o && o.retailer && o.retailer.toLowerCase() !== 'online retailer' && Number(o.price) > 0);
-    const finalOffers = validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer && o.retailer.toLowerCase() !== 'online retailer') || []);
+    const finalOffers = (validOffers.length > 0 ? validOffers : (combinedOffers.filter(o => o && o.retailer && o.retailer.toLowerCase() !== 'online retailer') || []))
+      // Sort offers: in-stock first, then lowest price
+      .sort((a, b) => {
+        const aStock = a.inStock !== false;
+        const bStock = b.inStock !== false;
+        if (aStock !== bStock) return aStock ? -1 : 1;
+        return (Number(a.price) || 0) - (Number(b.price) || 0);
+      });
 
     const cleanFallbackRetailer = (item.retailer && item.retailer.toLowerCase() !== 'online retailer')
       ? item.retailer

@@ -22,7 +22,7 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'self' https://ishaankor.github.io https://*.ishaankoradia.com https://ishaankoradia.com;",
+            value: "frame-ancestors 'self' https://ishaankor.github.io https://*.ishaankoradia.com https://ishaankoradia.com http://localhost:* http://127.0.0.1:*;",
           },
           { key: 'X-XSS-Protection', value: '1; mode=block' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
