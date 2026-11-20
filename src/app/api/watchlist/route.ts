@@ -349,8 +349,11 @@ export async function GET(req: NextRequest) {
 
         if (m && m.retailer && Number(m.current_price) > 0) {
           const rKey = m.retailer.toLowerCase();
-          if (!retailerOffersMap.has(rKey)) {
-            const mPrice = Number(m.current_price || 0);
+          const existingOffer = retailerOffersMap.get(rKey);
+          const mPrice = Number(m.current_price || 0);
+          const mHasDirectSellerUrl = Boolean(m.product_url && (m.product_url.includes('smid=') || m.product_url.includes('aod=1')));
+          const exHasDirectSellerUrl = Boolean(existingOffer?.url && (existingOffer.url.includes('smid=') || existingOffer.url.includes('aod=1')));
+          if (!existingOffer || (mHasDirectSellerUrl && !exHasDirectSellerUrl && mPrice <= existingOffer.price)) {
             const mMsrp = Number(m.msrp || mPrice);
             let mSpecs: any = {};
             try { mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {}); } catch {}
@@ -381,8 +384,11 @@ export async function GET(req: NextRequest) {
             mSpecs.RetailerOffers.forEach((ro: any) => {
               if (ro && ro.retailer && Number(ro.price) > 0) {
                 const roKey = ro.retailer.toLowerCase();
-                if (!retailerOffersMap.has(roKey)) {
-                  const roPrice = Number(ro.price || 0);
+                const existingOffer = retailerOffersMap.get(roKey);
+                const roPrice = Number(ro.price || 0);
+                const roHasDirectSellerUrl = Boolean(ro.url && (ro.url.includes('smid=') || ro.url.includes('aod=1')));
+                const exHasDirectSellerUrl = Boolean(existingOffer?.url && (existingOffer.url.includes('smid=') || existingOffer.url.includes('aod=1')));
+                if (!existingOffer || (roHasDirectSellerUrl && !exHasDirectSellerUrl && roPrice <= existingOffer.price)) {
                   const roMsrp = Number(ro.originalPrice || roPrice);
                   const roInStock = ro.inStock !== false && ro.in_stock !== false && ro.is_sold_out !== true;
                   retailerOffersMap.set(roKey, {

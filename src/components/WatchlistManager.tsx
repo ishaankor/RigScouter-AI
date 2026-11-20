@@ -353,7 +353,7 @@ export function WatchlistManager({
             if (sib.imageUrl && (!existingOffer.imageUrl || existingOffer.imageUrl === item.imageUrl)) {
               existingOffer.imageUrl = sib.imageUrl;
             }
-            if (sib.productUrl && (!existingOffer.url || existingOffer.url === '#')) {
+            if (sib.productUrl && (!existingOffer.url || existingOffer.url === '#' || ((sib.productUrl.includes('smid=') || sib.productUrl.includes('aod=1')) && !existingOffer.url.includes('smid=')))) {
               existingOffer.url = sib.productUrl;
             }
           }
@@ -836,7 +836,7 @@ export function WatchlistManager({
           if (!existing.imageUrl || existing.imageUrl === grp.imageUrl) {
             existing.imageUrl = item.imageUrl || existing.imageUrl;
           }
-          if (!existing.productUrl || existing.productUrl === '#') {
+          if (!existing.productUrl || existing.productUrl === '#' || (item.productUrl && (item.productUrl.includes('smid=') || item.productUrl.includes('aod=1')) && !existing.productUrl.includes('smid='))) {
             existing.productUrl = item.productUrl || existing.productUrl;
           }
         }
