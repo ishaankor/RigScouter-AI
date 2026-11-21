@@ -88,31 +88,8 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
   return { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
 
-const isReplicaOrAccessory = (s: string) =>
-  /\b(fan\s*for|fans?\s*for|for\s+[\w\s\-]+fans?|^\s*fans?\b|replacement\s*fan|gpu\s*fans?|vga\s*fans?|card\s*fans?|cooling\s*fans?|water\s*block|waterblock|hydro\s*copper|heatsink|heat\s*sink|backplate|bracket|shroud|thermal\s*paste|cable|housing|case\s*only|fan\s*only|box\s*only|replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|display only|prop|diecast|die-cast)\b/i.test(s || '');
-
 function isHardwareOfferMatch(item: any, h: any): boolean {
   if (!h || !h.current_price || Number(h.current_price) <= 0) return false;
-
-  // 0. Category match
-  const normalizeCat = (c: string) => {
-    const s = (c || '').toLowerCase().trim();
-    if (s.includes('cpu') || s.includes('processor')) return 'cpu';
-    if (s.includes('gpu') || s.includes('graphics') || s.includes('video card')) return 'gpu';
-    if (s.includes('motherboard') || s.includes('mobo')) return 'motherboard';
-    if (s.includes('ram') || s.includes('memory')) return 'ram';
-    if (s.includes('ssd') || s.includes('storage') || s.includes('drive')) return 'storage';
-    if (s.includes('psu') || s.includes('power supply')) return 'psu';
-    if (s.includes('case') || s.includes('chassis')) return 'case';
-    if (s.includes('cooler') || s.includes('cooling')) return 'cooler';
-    return s;
-  };
-
-  const itemCat = normalizeCat(item.category || '');
-  const hCat = normalizeCat(h.category || '');
-  if (itemCat && hCat && itemCat !== hCat && itemCat !== 'hardware' && hCat !== 'hardware') {
-    return false;
-  }
 
   const itemCompId = (item.component_id || item.id || '').toLowerCase().trim();
   const hId = (h.id || '').toLowerCase().trim();
@@ -123,67 +100,7 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
   const baseItemCompId = stripRetailerSuffix(itemCompId);
   const baseHId = stripRetailerSuffix(hId);
 
-  const itemName = (item.component_name || item.name || '').toLowerCase().trim();
-  const hName = (h.name || '').toLowerCase().trim();
-  const hModel = (h.model || '').toLowerCase().trim();
-
-  // 0a. Replica / Toy / Scale Model / Accessory Conflict Check
-  const itemIsReplica = isReplicaOrAccessory(itemName) || isReplicaOrAccessory(itemCompId);
-  const hIsReplica = isReplicaOrAccessory(hName) || isReplicaOrAccessory(hModel) || isReplicaOrAccessory(hId);
-  if (itemIsReplica !== hIsReplica) {
-    return false; // Prevent replacement fans, cooling accessories, or replicas ($27) from matching real hardware
-  }
-
-  // 1. CPU Tier Conflict Check (Ryzen 3/5/7/9 vs Core i3/i5/i7/i9 vs Ultra 5/7/9)
-  const extractCpuTier = (str: string): string | null => {
-    const rMatch = str.match(/\b(ryzen\s*[3579]|r[3579])\b/i);
-    if (rMatch) return rMatch[0].replace(/\s+/g, '').toLowerCase().replace('r', 'ryzen');
-    const iMatch = str.match(/\b(core\s*i[3579]|i[3579]-?\d{4,5})\b/i);
-    if (iMatch) return iMatch[1].replace(/[- ]/g, '').toLowerCase();
-    const uMatch = str.match(/\bultra\s*[579]\b/i);
-    if (uMatch) return uMatch[0].replace(/\s+/g, '').toLowerCase();
-    return null;
-  };
-
-  const itemCpuTier = extractCpuTier(itemName) || extractCpuTier(itemCompId);
-  const hCpuTier = extractCpuTier(hName) || extractCpuTier(hModel) || extractCpuTier(hId);
-  if (itemCpuTier && hCpuTier && itemCpuTier !== hCpuTier) {
-    return false; // Mismatched CPU tier: e.g. Ryzen 7 vs Ryzen 5
-  }
-
-  // 2. Specific CPU / GPU Model Token Match (e.g., 9800x3d, 7800x3d, 7500f, 4080, 4070, 14900k)
-  const extractModelNumber = (str: string): string | null => {
-    const cpuModel = str.match(/\b(\d{4,5}[a-z0-9]*(?:x3d)?)\b/i);
-    if (cpuModel) return cpuModel[1].toLowerCase();
-    const gpuModel = str.match(/\b(rtx|gtx|rx|arc)?\s*(\d{3,4})\s*(super|ti|xtx|xt|gre)?\b/i);
-    if (gpuModel) {
-      const num = gpuModel[2];
-      const mod = gpuModel[3] ? '-' + gpuModel[3].toLowerCase() : '';
-      return `${num}${mod}`;
-    }
-    return null;
-  };
-
-  const itemModelNum = extractModelNumber(itemName) || extractModelNumber(itemCompId);
-  const hModelNum = extractModelNumber(hName) || extractModelNumber(hModel) || extractModelNumber(hId);
-
-  // If item has a specific model number, candidate MUST have the exact same model number
-  if (itemModelNum && hModelNum && itemModelNum !== hModelNum) {
-    return false;
-  }
-
-  // 3. GPU Sub-tier modifier check (prevents 4080 matching 4080 Super or 4070 matching 4070 Ti)
-  const isSuper = (s: string) => /\bsuper\b/i.test(s);
-  const isTi = (s: string) => /\bti\b/i.test(s);
-  const isXtx = (s: string) => /\bxtx\b/i.test(s);
-  const hasGpuIndicator = (s: string) => s.includes('40') || s.includes('50') || s.includes('rtx') || s.includes('7900') || s.includes('rx');
-  if (hasGpuIndicator(itemName) || hasGpuIndicator(hName)) {
-    if (isSuper(itemName) !== isSuper(hName)) return false;
-    if (isTi(itemName) !== isTi(hName)) return false;
-    if (isXtx(itemName) !== isXtx(hName)) return false;
-  }
-
-  // 4. ID-based matching (exact or base ID match)
+  // 1. Direct component_id match (canonical parent row or retailer child row)
   if (baseItemCompId && baseHId && baseItemCompId === baseHId) {
     return true;
   }
@@ -191,12 +108,14 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
     return true;
   }
 
-  // 5. Name / Model match (requires high confidence)
-  if (itemName && hName) {
-    if (hName === itemName) return true;
-    if (itemModelNum && hModelNum && itemModelNum === hModelNum) {
-      return true;
-    }
+  // 2. Exact normalized component name / model match
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const itemName = norm(item.component_name || item.name || '');
+  const hName = norm(h.name || '');
+  const hModel = norm(h.model || '');
+
+  if (itemName && (itemName === hName || itemName === hModel)) {
+    return true;
   }
 
   return false;
@@ -727,10 +646,6 @@ export async function GET(req: NextRequest) {
               const r = c.retailer || 'Amazon';
               const p = Number(c.current_price || 0);
               const u = resolveRetailerUrl(r, c.product_url, c.specs, item.component_name);
-              const cName = (c.name || '').toLowerCase();
-              if (isReplicaOrAccessory(cName) && !isReplicaOrAccessory(item.component_name)) {
-                return; // skip accessory row
-              }
               if (p > 0) {
                 const key = r.toLowerCase();
                 if (!offersMap.has(key) || (offersMap.get(key)!.price > p)) {
@@ -744,10 +659,6 @@ export async function GET(req: NextRequest) {
                 (s.RetailerOffers || []).forEach((ro: any) => {
                   const roR = ro.retailer || 'Store';
                   const roP = Number(ro.price || 0);
-                  const roTitle = (ro.title || '').toLowerCase();
-                  if (isReplicaOrAccessory(roTitle) && !isReplicaOrAccessory(item.component_name)) {
-                    return; // skip accessory offer
-                  }
                   if (ro.inStock === false || ro.in_stock === false || ro.is_sold_out === true) {
                     return; // skip out-of-stock offer
                   }
