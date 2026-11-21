@@ -88,6 +88,9 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
   return { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
 
+const isReplicaOrAccessory = (s: string) =>
+  /\b(fan\s*for|fans?\s*for|for\s+[\w\s\-]+fans?|^\s*fans?\b|replacement\s*fan|gpu\s*fans?|vga\s*fans?|card\s*fans?|cooling\s*fans?|water\s*block|waterblock|hydro\s*copper|heatsink|heat\s*sink|backplate|bracket|shroud|thermal\s*paste|cable|housing|case\s*only|fan\s*only|box\s*only|replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|display only|prop|diecast|die-cast)\b/i.test(s || '');
+
 function isHardwareOfferMatch(item: any, h: any): boolean {
   if (!h || !h.current_price || Number(h.current_price) <= 0) return false;
 
@@ -125,8 +128,6 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
   const hModel = (h.model || '').toLowerCase().trim();
 
   // 0a. Replica / Toy / Scale Model / Accessory Conflict Check
-  const isReplicaOrAccessory = (s: string) =>
-    /\b(fan\s*for|fans?\s*for|for\s+[\w\s\-]+fans?|^\s*fans?\b|replacement\s*fan|gpu\s*fans?|vga\s*fans?|card\s*fans?|cooling\s*fans?|water\s*block|waterblock|hydro\s*copper|heatsink|heat\s*sink|backplate|bracket|shroud|thermal\s*paste|cable|housing|case\s*only|fan\s*only|box\s*only|replica|scale model|toy|miniature|keychain|key chain|cufflinks|cuff links|poster|display only|prop|diecast|die-cast)\b/i.test(s);
   const itemIsReplica = isReplicaOrAccessory(itemName) || isReplicaOrAccessory(itemCompId);
   const hIsReplica = isReplicaOrAccessory(hName) || isReplicaOrAccessory(hModel) || isReplicaOrAccessory(hId);
   if (itemIsReplica !== hIsReplica) {

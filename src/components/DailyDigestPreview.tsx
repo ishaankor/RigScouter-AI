@@ -5,7 +5,24 @@ import { DigestFrequency, ComparisonInterval, DailyDigestReport, DigestItemSumma
 import { generateDailyDigestReport, cleanDisplayTitle } from '@/lib/ai/digest-generator';
 import { supabase } from '@/lib/db/supabase';
 import { getAuthHeaders } from '@/lib/auth/client-auth';
-import { Calendar, Mail, MessageSquare, Send, Sparkles, TrendingDown, RefreshCw, Check, LogIn, ShieldCheck } from 'lucide-react';
+import {
+  Calendar,
+  Mail,
+  MessageSquare,
+  Send,
+  Sparkles,
+  TrendingDown,
+  RefreshCw,
+  Check,
+  LogIn,
+  ShieldCheck,
+  ExternalLink,
+  Clock,
+  SlidersHorizontal,
+  ArrowDownRight,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 
 interface DailyDigestPreviewProps {
   user?: any;
@@ -408,578 +425,691 @@ export function DailyDigestPreview({ user, onOpenAuth }: DailyDigestPreviewProps
     setTimeout(() => setSaveNotice(null), 6000);
   };
 
+  const activeRecipient = customEmail.trim() || user?.email || 'you@example.com';
+  const frequencyMeta: Record<DigestFrequency, { label: string; sub: string; badge: string; dropLabel: string; savingsLabel: string }> = {
+    daily: {
+      label: 'Daily Briefing',
+      sub: 'Every day at 08:00 UTC',
+      badge: 'DAILY BRIEFING',
+      dropLabel: '24h Drops',
+      savingsLabel: '24h Savings'
+    },
+    every_3_days: {
+      label: 'Every 3 Days',
+      sub: '72-hour rolling summary',
+      badge: '3-DAY BRIEFING',
+      dropLabel: '3d Drops',
+      savingsLabel: '3-Day Savings'
+    },
+    weekly: {
+      label: 'Weekly Roundup',
+      sub: '7-day market wrap-up',
+      badge: 'WEEKLY DIGEST',
+      dropLabel: '7d Drops',
+      savingsLabel: 'Weekly Savings'
+    },
+    flash_only: {
+      label: 'Flash Drops Only',
+      sub: 'Instant all-time low alerts',
+      badge: 'FLASH ALERT',
+      dropLabel: 'Flash Deals',
+      savingsLabel: 'Flash Savings'
+    }
+  };
+
+  const currentFreqMeta = frequencyMeta[frequency] || frequencyMeta.daily;
+  const activeDropsCount = frequency === 'weekly'
+    ? (report?.items?.filter(i => (i.change7d?.amount || 0) < 0).length || 0)
+    : (report?.items?.filter(i => (i.change24h?.amount || 0) < 0 || (frequency === 'flash_only' && i.isAllTimeLow)).length || 0);
+
   return (
-    <div className="glass-card p-6 border border-gray-800 rounded-2xl mb-8">
-      {/* Auth Subscription Guard Banner */}
+    <div className="space-y-6 mb-8">
+      {/* Guest Sign-In Banner */}
       {!user && (
-        <div className="bg-gradient-to-r from-purple-950/90 via-gray-950 to-cyan-950/90 border border-purple-500/40 p-5 rounded-2xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
-              <Mail className="w-6 h-6" />
+        <div className="bg-gray-900/90 border border-gray-800 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-800/50 flex items-center justify-center text-cyan-400 shrink-0">
+              <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-bold text-white text-sm flex items-center gap-2">
-                Automated Digest Subscription (Sign In Required)
+              <h4 className="font-bold text-white text-sm">
+                Sign in to activate automated price briefings
               </h4>
               <p className="text-xs text-gray-400 mt-0.5">
-                Users must be signed in to subscribe and receive automated price drop digests dispatched to Email or Discord.
+                Connect your account to schedule personalized Email or Discord price drop digests for your watchlist.
               </p>
             </div>
           </div>
           <button
             onClick={onOpenAuth}
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-gray-950 font-bold text-xs rounded-xl shadow-lg shadow-purple-500/20 flex items-center gap-2 transition-all cursor-pointer shrink-0"
+            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
           >
-            <LogIn className="w-4 h-4" />
-            Sign In to Subscribe
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
           </button>
         </div>
       )}
 
-      {/* Top Title & Explanation */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+      {/* Clean Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-gray-800/80">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-purple-500/20 text-purple-300 text-xs font-bold px-2.5 py-1 rounded-full border border-purple-500/30">
-              Daily Automater Feature
-            </span>
-            <h2 className="text-2xl font-bold font-heading text-white">Automated Price Digest Engine</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-xl font-bold font-heading text-white tracking-tight">
+              Automated Price Digest
+            </h2>
+            {user && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-2.5 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                Active Schedule
+              </span>
+            )}
           </div>
-          <p className="text-sm text-gray-400 mt-1">
-            Receives real-time price scrapes, computes multi-interval deltas, and delivers an executive summary to your preferred channel.
+          <p className="text-xs text-gray-400 mt-1">
+             Configure automated multi-retailer price briefings and preview your live intelligence report.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {user && (
-            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" /> Subscribed (Active)
-            </span>
-          )}
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-gray-400 bg-gray-900/70 border border-gray-800/80 px-3 py-2 rounded-xl">
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Dispatches at <strong className="text-gray-200">08:00 UTC</strong></span>
+          </div>
           <button
             onClick={handleRegenerate}
             disabled={isGenerating}
-            className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+            className="bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-200 text-xs font-semibold px-3.5 py-2 rounded-xl flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 text-cyan-400 ${isGenerating ? 'animate-spin' : ''}`} />
-            Run Automater Cycle Now
+            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isGenerating ? 'animate-spin' : ''}`} />
+            <span>Refresh Preview</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Controls Configuration */}
-        <div className="lg:col-span-4 bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-2xl space-y-6">
-          {/* Summary Frequency */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-cyan-400" /> Summary Frequency
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'daily', label: 'Daily (8:00 AM)' },
-                { id: 'every_3_days', label: 'Every 3 Days' },
-                { id: 'weekly', label: 'Weekly Digest' },
-                { id: 'flash_only', label: 'Flash Sales Only' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleFrequencyChange(item.id as DigestFrequency)}
-                  className={`p-2.5 text-xs font-semibold rounded-xl border text-left transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
-                    frequency === item.id
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
-                      : 'bg-black/20 text-gray-400 border-white/5 hover:text-white hover:border-white/10 hover:bg-white/5'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+      {/* Main 2-Column Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Clean Configuration Panel */}
+        <div className="lg:col-span-4 bg-gray-950/70 border border-gray-800/80 rounded-2xl p-5 space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-800/70">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-200">
+                Delivery Settings
+              </h3>
             </div>
+            <span className="text-[11px] text-gray-500 font-medium">Auto-saved</span>
           </div>
 
-          {/* Delivery Channel */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
-              <Send className="w-4 h-4 text-purple-400" /> Delivery Destination
+          {/* 1. Delivery Destination */}
+          <div className="space-y-2.5">
+            <label className="block text-xs font-semibold text-gray-300">
+              Delivery Channel
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 p-1 bg-gray-900/90 border border-gray-800/80 rounded-xl">
               {[
-                { id: 'email', label: 'Email', icon: Mail },
+                { id: 'email', label: 'Email Briefing', icon: Mail },
                 { id: 'discord', label: 'Discord Webhook', icon: MessageSquare },
               ].map((ch) => {
                 const Icon = ch.icon;
+                const isSelected = deliveryChannel === ch.id;
                 return (
                   <button
                     key={ch.id}
+                    type="button"
                     onClick={() => handleDeliveryChannelChange(ch.id as any)}
-                    className={`p-3 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm cursor-pointer ${
-                      deliveryChannel === ch.id
-                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
-                        : 'bg-black/20 text-gray-400 border-white/5 hover:text-white hover:border-white/10 hover:bg-white/5'
+                    className={`py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-gray-800 text-white shadow-sm border border-gray-700/70'
+                        : 'text-gray-400 hover:text-gray-200 border border-transparent'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-cyan-400' : 'text-gray-500'}`} />
                     <span>{ch.label}</span>
                   </button>
                 );
               })}
             </div>
-            
-            {deliveryChannel === 'email' && (
-              <div className="mt-3 animate-fade-in">
+
+            {deliveryChannel === 'email' ? (
+              <div className="pt-1">
+                <label className="block text-[11px] text-gray-400 mb-1.5">
+                  Recipient Email Address
+                </label>
                 <input
                   type="email"
-                  placeholder={user?.email ? `Default: ${user.email}` : "Custom routing email address"}
+                  placeholder={user?.email ? user.email : 'Enter email address'}
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
-                  className="w-full bg-black/40 border border-purple-500/30 text-xs text-white px-4 py-3 rounded-xl focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 placeholder:text-gray-500 transition-all shadow-inner"
+                  className="w-full bg-gray-900/90 border border-gray-800 focus:border-cyan-500/60 text-xs text-white px-3.5 py-2.5 rounded-xl focus:outline-none placeholder:text-gray-500 transition-colors"
                 />
+                {user?.email && !customEmail && (
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Defaults to your account email (<span className="text-gray-400">{user.email}</span>).
+                  </p>
+                )}
               </div>
-            )}
-
-            {deliveryChannel === 'discord' && (
-              <div className="mt-3 animate-fade-in space-y-2">
+            ) : (
+              <div className="pt-1 space-y-2">
+                <label className="block text-[11px] text-gray-400">
+                  Discord Channel Webhook URL
+                </label>
                 <input
                   type="url"
                   placeholder="https://discord.com/api/webhooks/..."
                   value={discordWebhook}
                   onChange={(e) => setDiscordWebhook(e.target.value)}
-                  className="w-full bg-black/40 border border-indigo-500/40 text-xs text-white px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 placeholder:text-gray-500 transition-all shadow-inner font-mono"
+                  className="w-full bg-gray-900/90 border border-gray-800 focus:border-cyan-500/60 text-xs text-white px-3.5 py-2.5 rounded-xl focus:outline-none placeholder:text-gray-600 transition-colors font-mono"
                 />
-                <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 p-2.5 rounded-lg border border-white/5">
-                  💡 <strong className="text-gray-200">How to get a Webhook URL:</strong> In Discord, open <span className="text-indigo-300 font-semibold">Channel Settings ➔ Integrations ➔ Webhooks ➔ New Webhook</span>, then click <span className="text-indigo-300 font-semibold">Copy Webhook URL</span>. When you save, a confirmation ping will automatically be dispatched to the channel.
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  In Discord, open <span className="text-gray-300">Channel Settings &rarr; Integrations &rarr; Webhooks</span> and copy the webhook URL. Saving dispatches a test ping.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Price Interval Selection */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-300 mb-2">
-              Include Comparison Intervals
+          {/* 2. Summary Frequency */}
+          <div className="pt-4 border-t border-gray-800/70 space-y-2.5">
+            <label className="block text-xs font-semibold text-gray-300">
+              Dispatch Cadence
             </label>
-            <div className="flex flex-wrap gap-2">
-              {(['24h', '7d', '30d', 'ATL'] as ComparisonInterval[]).map((int) => {
-                const active = selectedIntervals.includes(int);
+            <div className="grid grid-cols-1 gap-2">
+              {(['daily', 'every_3_days', 'weekly', 'flash_only'] as DigestFrequency[]).map((freqId) => {
+                const meta = frequencyMeta[freqId];
+                const isSelected = frequency === freqId;
                 return (
                   <button
-                    key={int}
-                    onClick={() => toggleInterval(int)}
-                    className={`px-4 py-2 text-xs font-bold rounded-full border flex items-center gap-1.5 transition-all duration-300 hover:-translate-y-0.5 shadow-sm ${
-                      active
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                        : 'bg-black/20 text-gray-500 border-white/5 hover:text-gray-300 hover:border-white/10'
+                    key={freqId}
+                    type="button"
+                    onClick={() => handleFrequencyChange(freqId)}
+                    className={`px-3.5 py-2.5 rounded-xl border text-left flex items-center justify-between transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/40 border-cyan-500/40 text-white'
+                        : 'bg-gray-900/50 border-gray-800/80 text-gray-400 hover:text-gray-200 hover:border-gray-700'
                     }`}
                   >
-                    {active && <Check className="w-3 h-3" />}
-                    {int === 'ATL' ? 'vs All-Time Low' : `vs ${int}`}
+                    <div>
+                      <div className={`text-xs font-semibold ${isSelected ? 'text-cyan-300' : 'text-gray-200'}`}>
+                        {meta.label}
+                      </div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">
+                        {meta.sub}
+                      </div>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      isSelected ? 'border-cyan-400 bg-cyan-500/20 text-cyan-300' : 'border-gray-700'
+                    }`}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
+                    </div>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Save Subscription Preferences Button */}
-          <button
-            onClick={handleSaveSubscription}
-            disabled={isSaving}
-            className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-extrabold text-xs rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_25px_rgba(168,85,247,0.6)] transition-all duration-300 hover:-translate-y-0.5 cursor-pointer uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            <span>
-              {isSaving
-                ? (deliveryChannel === 'discord' ? 'Saving & Pinging Channel...' : 'Saving Preferences...')
-                : user ? 'Save Subscription Preferences' : 'Sign In to Subscribe'}
-            </span>
-          </button>
-
-          {saveNotice && (
-            <div className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 p-2 rounded-lg border border-emerald-800/40">
-              {saveNotice}
+          {/* 3. Comparison Benchmarks */}
+          <div className="pt-4 border-t border-gray-800/70 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-300">
+                Historical Benchmarks
+              </label>
+              <span className="text-[11px] text-gray-500">
+                {selectedIntervals.length} selected
+              </span>
             </div>
-          )}
-        </div>
-
-        {/* Generated Live Digest Preview */}
-        <div className="lg:col-span-8 bg-gray-950/80 p-6 rounded-xl border border-gray-800">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
-            <div className="text-xs text-gray-400 font-mono">
-              PREVIEW CHANNEL: <span className="text-purple-400 font-bold uppercase">{deliveryChannel}</span>
-            </div>
-            <div className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" /> AI Engine Active
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: '24h', label: '24h Delta' },
+                { id: '7d', label: '7-Day Trend' },
+                { id: '30d', label: '30-Day Trend' },
+                { id: 'ATL', label: '90d Low (ATL)' },
+              ] as { id: ComparisonInterval; label: string }[]).map(({ id, label }) => {
+                const active = selectedIntervals.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => toggleInterval(id)}
+                    className={`px-3 py-2 text-xs font-semibold rounded-xl border flex items-center justify-between transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-gray-900 text-gray-100 border-gray-700'
+                        : 'bg-gray-950/60 text-gray-500 border-gray-800/60 hover:text-gray-300 hover:border-gray-800'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span className={`w-3.5 h-3.5 rounded flex items-center justify-center ${
+                      active ? 'bg-cyan-500 text-gray-950' : 'border border-gray-700'
+                    }`}>
+                      {active && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Dynamic Mockup Body */}
-          <div className="relative mt-6">
+          {/* 4. Save Action */}
+          <div className="pt-2">
+            <button
+              onClick={handleSaveSubscription}
+              disabled={isSaving}
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSaving ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {isSaving
+                  ? (deliveryChannel === 'discord' ? 'Saving & Testing Webhook...' : 'Saving Preferences...')
+                  : user ? 'Save Digest Preferences' : 'Sign In to Subscribe'}
+              </span>
+            </button>
+
+            {saveNotice && (
+              <div className={`mt-3 text-xs font-medium p-3 rounded-xl border flex items-start gap-2 ${
+                saveNotice.includes('⚠️') || saveNotice.includes('failed')
+                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/50'
+                  : 'text-emerald-300 bg-emerald-950/40 border-emerald-800/50'
+              }`}>
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{saveNotice.replace(/^[✅⚠️]\s*/, '')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Live Briefing Preview */}
+        <div className="lg:col-span-8 bg-gray-950/70 border border-gray-800/80 rounded-2xl overflow-hidden">
+          {/* Preview Window Top Bar */}
+          <div className="px-5 py-3.5 bg-gray-900/70 border-b border-gray-800/80 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-700" />
+              </div>
+              <span className="text-xs font-semibold text-gray-300 pl-1">
+                Live Briefing Preview
+              </span>
+              <span className="text-[11px] font-medium text-cyan-400 bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded-md">
+                {currentFreqMeta.label}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Channel: <strong className="text-gray-200 capitalize">{deliveryChannel}</strong></span>
+            </div>
+          </div>
+
+          {/* Preview Content Body */}
+          <div className="p-5 sm:p-6">
             {!user ? (
-              /* Signed Out CTA */
-              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-12 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-lg shadow-purple-500/10">
-                  <LogIn className="w-8 h-8" />
+              <div className="py-16 px-6 text-center flex flex-col items-center justify-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-cyan-400">
+                  <LogIn className="w-5 h-5" />
                 </div>
-                <div className="max-w-md space-y-1.5">
-                  <h3 className="text-xl font-bold font-heading text-white">Sign In to View Daily Digest</h3>
+                <div className="max-w-sm space-y-1">
+                  <h3 className="text-base font-bold text-white">Sign In to Preview Your Briefing</h3>
                   <p className="text-xs text-gray-400 leading-relaxed">
-                    The Daily Digest dynamically analyzes and summarizes price movements exclusively for your tracked watchlist items.
+                    Your digest is generated directly from your personal watchlist components and historical price snapshots.
                   </p>
                 </div>
                 <button
                   onClick={onOpenAuth}
-                  className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-gray-950 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className="mt-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-gray-950 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
                 >
-                  <LogIn className="w-4 h-4" />
+                  <LogIn className="w-3.5 h-3.5" />
                   <span>Sign In / Register</span>
                 </button>
               </div>
             ) : isGenerating ? (
-              /* Loading State */
-              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-16 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-3">
-                <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
-                <h3 className="text-base font-bold text-white">Generating AI Daily Intelligence...</h3>
-                <p className="text-xs text-gray-400">Analyzing your personal tracked hardware across multi-retailer intervals</p>
+              <div className="py-20 px-6 text-center flex flex-col items-center justify-center space-y-3">
+                <RefreshCw className="w-6 h-6 text-cyan-400 animate-spin" />
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-white">Compiling Hardware Intelligence...</h3>
+                  <p className="text-xs text-gray-400">Evaluating multi-retailer price deltas across your tracked components</p>
+                </div>
               </div>
             ) : !report || !report.items || report.items.length === 0 ? (
-              /* Logged In with Empty Watchlist */
-              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-12 rounded-2xl border border-gray-800 text-center flex flex-col items-center justify-center space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 shadow-lg">
-                  <Calendar className="w-8 h-8 text-cyan-400" />
+              <div className="py-16 px-6 text-center flex flex-col items-center justify-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400">
+                  <Calendar className="w-5 h-5 text-cyan-400" />
                 </div>
-                <div className="max-w-md space-y-1.5">
-                  <h3 className="text-xl font-bold font-heading text-white">No Tracked Components Found</h3>
+                <div className="max-w-sm space-y-1">
+                  <h3 className="text-base font-bold text-white">No Watchlist Components Tracked</h3>
                   <p className="text-xs text-gray-400 leading-relaxed">
-                    Your personal watchlist has 0 tracked items. Add components in the <strong>Watchlist Tracker</strong> tab to generate your real-time daily price digest.
+                    Add components in the <strong className="text-gray-200">Watchlist Tracker</strong> tab to generate your personalized daily price digest.
                   </p>
                 </div>
               </div>
             ) : deliveryChannel === 'email' ? (
-              // ================= EMAIL MOCKUP =================
-              <div className="bg-gradient-to-b from-gray-900 to-[#121216] p-8 rounded-2xl shadow-2xl mx-auto border border-gray-800/80">
-                <div className="text-center mb-8 pb-6 border-b border-gray-800/60">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-                        ⚡ RigScouter AI
+              /* ================= CLEAN EXECUTIVE EMAIL BRIEFING ================= */
+              <div className="bg-gray-900/40 border border-gray-800/80 rounded-xl overflow-hidden">
+                {/* Email Envelope Header */}
+                <div className="px-5 py-4 bg-gray-900/70 border-b border-gray-800/80 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-extrabold tracking-tight text-white">
+                        RigScouter<span className="text-cyan-400">-AI</span>
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 bg-cyan-950/70 border border-cyan-800/50 px-2 py-0.5 rounded">
+                        {currentFreqMeta.badge}
                       </span>
                     </div>
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      {frequency === 'weekly' ? 'WEEKLY DIGEST' : frequency === 'every_3_days' ? '3-DAY BRIEFING' : frequency === 'flash_only' ? '⚡ FLASH ALERT' : 'LIVE BRIEFING'}
+                    <span className="text-[11px] text-gray-400 font-mono">
+                      {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} • 08:00 UTC
                     </span>
                   </div>
-                  <h2 className="text-lg font-black text-white mt-3">{report ? report.headline : 'Generating intelligence...'}</h2>
-                  <p className="text-gray-400 text-xs mt-0.5">
-                    {frequency === 'weekly'
-                      ? 'Automated Hardware Intelligence • Weekly Digest'
-                      : frequency === 'every_3_days'
-                      ? 'Automated Hardware Intelligence • 3-Day Momentum'
-                      : frequency === 'flash_only'
-                      ? 'High-Priority Alert • Flash Deals & Lows'
-                      : 'Automated Hardware Intelligence • Today at 8:00 AM'}
-                  </p>
+
+                  <h2 className="text-base sm:text-lg font-bold text-white leading-snug">
+                    {report.headline}
+                  </h2>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400 pt-0.5">
+                    <span>From: <strong className="text-gray-300 font-medium">rigscouter@ishaankoradia.com</strong></span>
+                    <span>To: <strong className="text-gray-300 font-medium">{activeRecipient}</strong></span>
+                  </div>
                 </div>
 
-                {/* Metrics Dashboard */}
-                <div className="grid grid-cols-3 gap-2 p-3 bg-black/40 rounded-xl border border-white/5 text-center mb-6">
-                  <div>
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">Tracked</div>
-                    <div className="text-sm font-black text-white mt-0.5">{report?.items?.length || 0} Items</div>
-                  </div>
-                  <div className="border-x border-white/5">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">
-                      {frequency === 'weekly' ? '7d Drops' : frequency === 'every_3_days' ? '3d Drops' : frequency === 'flash_only' ? 'Flash Deals' : '24h Drops'}
+                <div className="p-5 space-y-5">
+                  {/* KPI Summary Bar */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-gray-950/70 border border-gray-800/80 rounded-xl p-3.5">
+                      <div className="text-[11px] font-medium text-gray-400">Monitored Parts</div>
+                      <div className="text-lg font-bold text-white mt-0.5">
+                        {report.items.length}
+                      </div>
                     </div>
-                    <div className="text-sm font-black text-emerald-400 mt-0.5">
-                      {frequency === 'weekly'
-                        ? (report?.items?.filter(i => (i.change7d?.amount || 0) < 0).length || 0)
-                        : (report?.items?.filter(i => (i.change24h?.amount || 0) < 0 || (frequency === 'flash_only' && i.isAllTimeLow)).length || 0)}
+                    <div className="bg-gray-950/70 border border-gray-800/80 rounded-xl p-3.5">
+                      <div className="text-[11px] font-medium text-gray-400">{currentFreqMeta.dropLabel}</div>
+                      <div className={`text-lg font-bold mt-0.5 ${activeDropsCount > 0 ? 'text-emerald-400' : 'text-white'}`}>
+                        {activeDropsCount}
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold text-gray-400 uppercase">
-                      {frequency === 'weekly' ? 'Weekly Savings' : frequency === 'every_3_days' ? '3-Day Savings' : frequency === 'flash_only' ? 'Flash Savings' : '24h Savings'}
+                    <div className="bg-gray-950/70 border border-gray-800/80 rounded-xl p-3.5">
+                      <div className="text-[11px] font-medium text-gray-400">{currentFreqMeta.savingsLabel}</div>
+                      <div className={`text-lg font-bold mt-0.5 ${Number(report.totalSavedOpportunity || 0) > 0 ? 'text-cyan-400' : 'text-white'}`}>
+                        ${Number(report.totalSavedOpportunity || 0).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="text-sm font-black text-cyan-400 mt-0.5">${Number(report?.totalSavedOpportunity || 0).toFixed(2)}</div>
-                  </div>
-                </div>
-                
-                <div className="space-y-6 text-sm">
-                  <div className="bg-black/30 border-l-4 border-l-cyan-500 rounded-xl p-4 border border-white/5">
-                    <div className="text-[10px] font-black uppercase tracking-wider text-cyan-400 mb-1">
-                      {frequency === 'weekly' ? 'Weekly Intelligence Summary' : frequency === 'every_3_days' ? '3-Day Market Momentum' : frequency === 'flash_only' ? 'Flash Deal Intelligence' : 'Executive Intelligence Summary'}
-                    </div>
-                    <p className="text-gray-300 text-xs leading-relaxed">{report ? report.executiveSummary : 'Analyzing market data and formulating strategy...'}</p>
                   </div>
 
-                  {report?.biggestDrop && (
-                    <div className="bg-gradient-to-r from-emerald-950/60 to-cyan-950/60 border border-emerald-500/40 p-5 rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.15)] transform transition-all duration-300 hover:scale-[1.01]">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-emerald-400 font-black tracking-wider text-[10px] uppercase bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/40">
-                              {frequency === 'weekly' ? '↘ Top Weekly Drop' : frequency === 'every_3_days' ? '↘ Top 3-Day Drop' : frequency === 'flash_only' ? '⚡ Flash Drop' : '↘ Top Daily Drop'}
+                  {/* Executive Summary Callout */}
+                  <div className="bg-gray-950/70 border border-gray-800/80 border-l-2 border-l-cyan-400 rounded-xl p-4">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 mb-1.5 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Executive Market Summary</span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      {report.executiveSummary}
+                    </p>
+                  </div>
+
+                  {/* Top Price Drop Highlight (if any) */}
+                  {report.biggestDrop && (
+                    <div className="bg-emerald-950/20 border border-emerald-800/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded">
+                            <ArrowDownRight className="w-3 h-3" />
+                            Biggest Price Drop
+                          </span>
+                          {report.biggestDrop.isAllTimeLow && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 bg-cyan-950/80 border border-cyan-800/60 px-2 py-0.5 rounded">
+                              90d All-Time Low
                             </span>
-                            {report?.biggestDrop?.isAllTimeLow && (
-                              <span className="bg-purple-950 text-purple-300 text-[10px] px-2 py-0.5 rounded font-black border border-purple-800/40">
-                                🔥 90D ALL-TIME LOW
-                              </span>
-                            )}
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-white">
+                          {cleanDisplayTitle(report.biggestDrop.item?.componentName || '')}
+                        </h3>
+                        <div className="text-xs text-gray-400">
+                          Best offer on <strong className="text-gray-200">{report.biggestDrop.item?.retailer}</strong>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-start sm:self-center shrink-0">
+                        <div className="text-right">
+                          <div className="text-lg font-extrabold text-emerald-400">
+                            ${Number(report.biggestDrop.item?.currentPrice || 0).toFixed(2)}
                           </div>
-                          <h3 className="text-base font-extrabold text-white">
-                            {cleanDisplayTitle(report?.biggestDrop?.item?.componentName || '')}
-                          </h3>
+                          <div className="text-[11px] font-semibold text-emerald-300">
+                            -${Math.abs(frequency === 'weekly' ? (report.biggestDrop.change7d?.amount || 0) : (report.biggestDrop.change24h?.amount || 0)).toFixed(2)} drop
+                          </div>
                         </div>
+                        {report.biggestDrop.item?.productUrl && report.biggestDrop.item.productUrl !== '#' && (
+                          <a
+                            href={report.biggestDrop.item.productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>View Deal</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
                       </div>
-                      <div className="grid grid-cols-3 gap-3 p-3 bg-black/50 rounded-xl border border-white/5">
-                        <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">Best Price</span>
-                          <span className="text-emerald-400 font-black text-base">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">
-                            {frequency === 'weekly' ? '7d Drop' : frequency === 'every_3_days' ? '3d Drop' : 'Drop'}
-                          </span>
-                          <span className="text-white font-bold text-base">
-                            -${Math.abs(frequency === 'weekly' ? (report?.biggestDrop?.change7d?.amount || 0) : (report?.biggestDrop?.change24h?.amount || 0)).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-gray-500 text-[10px] font-bold uppercase">Best Retailer</span>
-                          <span className="text-cyan-400 font-bold text-base truncate">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
-                        </div>
-                      </div>
-                      {report?.biggestDrop?.item?.retailerOffers && report.biggestDrop.item.retailerOffers.length > 1 && (
-                        <div className="mt-2.5 pt-2.5 border-t border-white/10 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mr-1">Store Prices:</span>
-                          {report.biggestDrop.item.retailerOffers.map((off: any) => (
-                            <a
-                              key={off.retailer}
-                              href={off.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all ${
-                                off.isLowest
-                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-700/60 shadow-sm'
-                                  : 'bg-gray-900 text-gray-400 border-gray-800 hover:border-gray-700 hover:text-gray-200'
-                              }`}
-                            >
-                              {off.retailer}: ${Number(off.price).toFixed(2)} {off.isLowest ? '✓ Best' : ''}
-                            </a>
-                          ))}
-                          {report.biggestDrop.item.maxSavings && report.biggestDrop.item.maxSavings > 0 ? (
-                            <span className="text-[10px] text-emerald-400 font-bold ml-auto">
-                              Save ${report.biggestDrop.item.maxSavings.toFixed(2)} vs highest
-                            </span>
-                          ) : null}
-                        </div>
-                      )}
                     </div>
                   )}
 
-                  {/* Interval Comparison Breakdown Table */}
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase text-gray-400 tracking-wider mb-3 ml-1">
-                      Tracked Watchlist Intelligence ({report?.items?.length || 0})
-                    </h4>
-                    <div className="space-y-2.5">
-                      {report?.items?.map((itemSummary: DigestItemSummary) => {
-                        const cleanName = cleanDisplayTitle(itemSummary?.item?.componentName || '');
-                        const p30 = Number(itemSummary?.item?.previousPrice30d || 0);
-                        const p7 = Number(itemSummary?.item?.previousPrice7d || 0);
-                        const p24 = Number(itemSummary?.item?.previousPrice24h || 0);
-                        const curr = Number(itemSummary?.item?.currentPrice || 0);
-                        const displayDrop = frequency === 'weekly' ? (itemSummary?.change7d?.amount || 0) : (itemSummary?.change24h?.amount || 0);
-                        const isDrop = displayDrop < 0;
+                  {/* Tracked Watchlist Breakdown */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between px-0.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        Tracked Components ({report.items.length})
+                      </h4>
+                      <span className="text-[11px] text-gray-500">
+                        Click any store pill to open direct listing
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-gray-800/70 border border-gray-800/80 rounded-xl bg-gray-950/60 overflow-hidden">
+                      {report.items.map((itemSummary: DigestItemSummary) => {
+                        const item = itemSummary.item;
+                        const cleanName = cleanDisplayTitle(item?.componentName || '');
+                        const curr = Number(item?.currentPrice || 0);
+                        const p24 = Number(item?.previousPrice24h || 0);
+                        const p7 = Number(item?.previousPrice7d || 0);
+                        const p30 = Number(item?.previousPrice30d || 0);
+                        const atl = Number(item?.allTimeLow || 0);
+                        const displayDrop = frequency === 'weekly' ? (itemSummary.change7d?.amount || 0) : (itemSummary.change24h?.amount || 0);
+                        const isDrop = displayDrop < -0.01;
+                        const isInStock = item?.inStock !== false;
 
                         return (
-                          <div key={itemSummary?.item?.id || Math.random()} className="bg-black/30 p-3.5 rounded-xl border border-white/5 hover:border-cyan-800/40 transition-all">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 bg-cyan-950/80 text-cyan-400 text-[10px] font-bold rounded border border-cyan-800/40">
-                                  {itemSummary?.item?.category || 'GPU'}
+                          <div key={item?.id || cleanName} className="p-4 hover:bg-gray-900/40 transition-colors space-y-2.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              {/* Left: Category + Name */}
+                              <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                                <span className="px-2 py-0.5 bg-gray-900 text-cyan-400 text-[10px] font-bold uppercase tracking-wider rounded border border-gray-800 shrink-0">
+                                  {item?.category || 'Hardware'}
                                 </span>
-                                <span className="font-bold text-white text-xs">{cleanName}</span>
+                                <a
+                                  href={item?.productUrl && item.productUrl !== '#' ? item.productUrl : undefined}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-semibold text-white hover:text-cyan-300 text-xs sm:text-sm truncate transition-colors"
+                                  title={item?.componentName}
+                                >
+                                  {cleanName}
+                                </a>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                                {itemSummary?.item?.inStock !== false ? (
+
+                              {/* Right: Current Price & Status */}
+                              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                                {isInStock ? (
                                   <>
-                                    <span className="font-black text-white text-sm">${curr.toFixed(2)}</span>
                                     {isDrop ? (
-                                      <span className="text-emerald-400 font-bold text-xs bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                                        -${Math.abs(displayDrop).toFixed(2)} {frequency === 'weekly' ? '(7d)' : ''}
+                                      <span className="text-emerald-400 font-semibold text-[11px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                                        -${Math.abs(displayDrop).toFixed(2)}
                                       </span>
                                     ) : (
-                                      <span className="text-gray-500 font-medium text-xs">Stable</span>
+                                      <span className="text-gray-500 text-[11px] font-medium">
+                                        Held steady
+                                      </span>
                                     )}
+                                    <span className="font-bold text-white text-sm sm:text-base tabular-nums">
+                                      ${curr.toFixed(2)}
+                                    </span>
                                   </>
                                 ) : (
                                   <>
-                                    <span className="font-black text-gray-500 line-through text-sm">${curr.toFixed(2)}</span>
-                                    <span className="text-rose-400 font-bold text-xs bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800/40">
+                                    <span className="text-rose-400 font-semibold text-[11px] bg-rose-950/50 px-2 py-0.5 rounded border border-rose-800/50">
                                       Out of Stock
                                     </span>
+                                    <span className="font-bold text-gray-500 line-through text-sm tabular-nums">
+                                      ${curr.toFixed(2)}
+                                    </span>
                                   </>
-                                )}
-                                {itemSummary?.item?.retailerOffers && itemSummary.item.retailerOffers.length > 1 ? (
-                                  <div className="flex items-center gap-1">
-                                    {itemSummary.item.retailerOffers.map((off: any) => (
-                                      <a
-                                        key={off.retailer}
-                                        href={off.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-all ${
-                                          off.isLowest
-                                            ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60 shadow-sm'
-                                            : 'bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200'
-                                        }`}
-                                        title={`${off.retailer}: $${Number(off.price).toFixed(2)}${off.isLowest ? ' (Lowest Price)' : ''}`}
-                                      >
-                                        {off.retailer}: ${Number(off.price).toFixed(0)}
-                                      </a>
-                                    ))}
-                                    {itemSummary.item.maxSavings && itemSummary.item.maxSavings > 0 ? (
-                                      <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/40 px-1 py-0.5 rounded border border-emerald-900/40" title={`Save $${itemSummary.item.maxSavings.toFixed(2)}`}>
-                                        -${itemSummary.item.maxSavings.toFixed(0)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-400 text-xs px-2 py-0.5 bg-gray-900 rounded border border-gray-800">
-                                    {itemSummary?.item?.retailer || 'Store'}
-                                  </span>
                                 )}
                               </div>
                             </div>
 
-                            {/* Mini price trajectory */}
-                            {(p30 > 0 || p7 > 0 || p24 > 0) && (
-                              <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2 text-[10px] text-gray-500 font-mono">
-                                <span className="uppercase text-gray-600 font-bold">History:</span>
-                                {p30 > 0 && <span>30d: <strong className="text-gray-400">${p30.toFixed(0)}</strong></span>}
-                                {p7 > 0 && <span>&rarr; 7d: <strong className="text-gray-400">${p7.toFixed(0)}</strong></span>}
-                                {p24 > 0 && <span>&rarr; 24h: <strong className="text-gray-400">${p24.toFixed(0)}</strong></span>}
-                                <span className="text-emerald-400 font-bold">&rarr; Now: ${curr.toFixed(0)}</span>
+                            {/* Bottom row: Store comparison links + Selected Historical Benchmarks */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                              {/* Store Pills */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {item?.retailerOffers && item.retailerOffers.length > 0 ? (
+                                  item.retailerOffers.map((off: any) => (
+                                    <a
+                                      key={off.retailer}
+                                      href={off.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border transition-colors ${
+                                        off.isLowest
+                                          ? 'bg-emerald-950/50 text-emerald-300 border-emerald-800/60 hover:border-emerald-600'
+                                          : 'bg-gray-900/80 text-gray-400 border-gray-800 hover:text-gray-200 hover:border-gray-700'
+                                      }`}
+                                    >
+                                      <span>{off.retailer}: ${Number(off.price).toFixed(2)}</span>
+                                      <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                                    </a>
+                                  ))
+                                ) : (
+                                  <a
+                                    href={item?.productUrl || '#'}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-900/80 text-gray-300 border border-gray-800 hover:border-gray-700"
+                                  >
+                                    <span>{item?.retailer || 'Store'}: ${curr.toFixed(2)}</span>
+                                    <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                                  </a>
+                                )}
                               </div>
-                            )}
+
+                              {/* Dynamic Historical Benchmarks based on selectedIntervals */}
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500 font-mono">
+                                {selectedIntervals.includes('24h') && p24 > 0 && (
+                                  <span>24h: <strong className="text-gray-300 font-medium">${p24.toFixed(2)}</strong></span>
+                                )}
+                                {selectedIntervals.includes('7d') && p7 > 0 && (
+                                  <span>7d: <strong className="text-gray-300 font-medium">${p7.toFixed(2)}</strong></span>
+                                )}
+                                {selectedIntervals.includes('30d') && p30 > 0 && (
+                                  <span>30d: <strong className="text-gray-300 font-medium">${p30.toFixed(2)}</strong></span>
+                                )}
+                                {selectedIntervals.includes('ATL') && atl > 0 && (
+                                  <span>ATL: <strong className="text-cyan-400 font-medium">${atl.toFixed(2)}</strong></span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-
-                  {report?.items?.some((i: DigestItemSummary) => i.alternativePick) && (
-                    <div className="mt-6 bg-gradient-to-br from-purple-900/40 to-fuchsia-900/20 border border-fuchsia-500/40 p-5 rounded-xl shadow-[0_0_20px_rgba(217,70,239,0.1)] relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Sparkles className="w-24 h-24 text-fuchsia-400" />
-                      </div>
-                      <div className="font-black text-fuchsia-400 mb-3 flex items-center gap-2 relative z-10 text-xs tracking-wider uppercase">
-                        <Sparkles className="w-4 h-4" /> AI Recommendations
-                      </div>
-                      <div className="space-y-3 relative z-10">
-                        {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
-                          <div key={idx} className="text-gray-300 text-sm bg-black/40 p-3 rounded-lg border border-white/5">
-                            Replace <span className="font-bold text-white">{cleanDisplayTitle(i.item?.componentName || '')}</span> with <span className="font-bold text-cyan-400">{i.alternativePick?.name}</span> to save <span className="text-emerald-400 font-black">${Number(i.alternativePick?.savings || 0).toFixed(2)}</span>.
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             ) : (
-              // ================= DISCORD WEBHOOK EMBED PREVIEW =================
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
-                    <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Discord Webhook Embed Preview</span>
+              /* ================= DISCORD WEBHOOK EMBED PREVIEW ================= */
+              <div className="bg-[#313338] rounded-xl p-4 sm:p-5 border border-[#1e1f22] font-sans">
+                {/* Bot Header */}
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <img
+                    src="/icon.png"
+                    alt="RigScouter Bot"
+                    className="w-8 h-8 rounded-full object-cover bg-[#2b2d31] border border-white/10"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/favicon.png';
+                    }}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white text-sm">RigScouter AI</span>
+                    <span className="bg-[#5865F2] text-white text-[10px] px-1.5 py-0.2 rounded font-bold uppercase flex items-center gap-0.5">
+                      <Check className="w-2.5 h-2.5 stroke-[3]" /> APP
+                    </span>
+                    <span className="text-xs text-[#949ba4] ml-1">Today at 08:00 AM</span>
                   </div>
-                  <span className="text-[11px] text-gray-400">Live channel appearance</span>
                 </div>
-                <div className="bg-[#36393f] mx-auto rounded-lg flex overflow-hidden shadow-2xl border border-[#202225] font-sans">
-                  {/* Embed Left Pillar */}
-                  <div className="w-1.5 bg-[#5865F2] shrink-0"></div>
-                
-                <div className="p-4 w-full text-gray-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <img
-                      src="/icon.png"
-                      alt="RigScouter Bot"
-                      className="w-7 h-7 rounded-full object-cover shadow-lg border border-cyan-500/30 bg-[#2f3136]"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/favicon.png';
-                      }}
-                    />
-                    <span className="font-bold text-white text-sm">RigScouter Bot</span>
-                    <span className="bg-[#5865F2] text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Bot
+
+                {/* Discord Rich Embed Card */}
+                <div className="ml-10 bg-[#2b2d31] rounded-lg border-l-4 border-l-[#38bdf8] p-4 max-w-2xl space-y-3 shadow-md">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#38bdf8]">
+                      ⚡ RigScouter {currentFreqMeta.label}
                     </span>
-                    <span className="text-xs text-[#72767d] ml-1">
-                      {frequency === 'weekly' ? 'Weekly Digest' : frequency === 'every_3_days' ? '3-Day Digest' : frequency === 'flash_only' ? 'Flash Alert' : 'Daily Digest'}
+                    <span className="text-[11px] text-[#949ba4]">
+                      {report.items.length} Tracked • {activeDropsCount} Drop(s)
                     </span>
                   </div>
-                  
-                  <div className="pl-1">
-                    <div className="font-bold text-[#00b0f4] mb-2 hover:underline cursor-pointer">{report ? report.headline : 'Generating...'}</div>
-                    <div className="text-sm text-[#dcddde] mb-4 leading-snug">{report ? report.executiveSummary : 'Analyzing market data...'}</div>
-                    
-                    {report?.biggestDrop && (
-                      <div className="bg-[#2f3136] border border-[#202225] rounded p-3 mb-4 border-l-4 border-l-emerald-500">
-                        <div className="font-bold text-emerald-400 text-xs mb-1 uppercase">
-                          {frequency === 'weekly' ? 'Top Weekly Drop' : frequency === 'every_3_days' ? 'Top 3-Day Drop' : 'Top Deal Drop'}
-                        </div>
-                        <div className="font-bold text-white text-sm mb-1">{cleanDisplayTitle(report?.biggestDrop?.item?.componentName || '')}</div>
-                        <div className="text-xs text-[#b9bbbe]">
-                          Now: <span className="text-emerald-400 font-bold">${Number(report?.biggestDrop?.item?.currentPrice || 0).toFixed(2)}</span> • 
-                          Drop: <span className="text-white font-bold">-${Math.abs(frequency === 'weekly' ? (report?.biggestDrop?.change7d?.amount || 0) : (report?.biggestDrop?.change24h?.amount || 0)).toFixed(2)}</span> • 
-                          <span className="text-[#00b0f4] ml-1">{report?.biggestDrop?.item?.retailer || 'Store'}</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="text-xs font-bold text-[#8e9297] mb-2 uppercase">Tracked Prices</div>
-                    <div className="bg-[#2f3136] rounded p-2 mb-4 font-mono text-[11px]">
-                      {report?.items?.map((itemSummary: DigestItemSummary, idx: number) => (
-                        <div key={idx} className="flex justify-between py-1 border-b border-[#202225] last:border-0">
-                          <span className="truncate pr-2 text-[#b9bbbe]">{cleanDisplayTitle(itemSummary?.item?.componentName || '')}</span>
-                          <span className="text-white font-bold whitespace-nowrap">${Number(itemSummary?.item?.currentPrice || 0).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
 
-                    {report?.items?.some((i: DigestItemSummary) => i.alternativePick) && (
-                      <div className="bg-[#2f3136] border border-[#202225] rounded p-3 border-l-4 border-l-fuchsia-500">
-                        <div className="font-bold text-fuchsia-400 text-xs mb-1 uppercase flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" /> AI Switch Recommendations
-                        </div>
-                        {report.items.filter((i: DigestItemSummary) => i.alternativePick).map((i: DigestItemSummary, idx: number) => (
-                          <div key={idx} className="text-xs text-[#dcddde] mt-1.5">
-                            • Replace <span className="font-bold">{cleanDisplayTitle(i.item?.componentName || '').split(' ')[0]}</span> with <span className="text-[#00b0f4]">{i.alternativePick?.name}</span> (Save ${Number(i.alternativePick?.savings || 0).toFixed(0)})
+                  <div className="font-bold text-white text-sm sm:text-base leading-snug">
+                    {report.headline}
+                  </div>
+
+                  <p className="text-xs text-[#dbdee1] leading-relaxed">
+                    {report.executiveSummary}
+                  </p>
+
+                  {/* Structured Component Embed Fields */}
+                  <div className="space-y-2 pt-1">
+                    {report.items.map((itemSummary: DigestItemSummary, idx: number) => {
+                      const item = itemSummary.item;
+                      const cleanName = cleanDisplayTitle(item?.componentName || '');
+                      const curr = Number(item?.currentPrice || 0);
+                      const displayDrop = frequency === 'weekly' ? (itemSummary.change7d?.amount || 0) : (itemSummary.change24h?.amount || 0);
+                      const isDrop = displayDrop < -0.01;
+
+                      return (
+                        <div key={item?.id || idx} className="bg-[#1e1f22]/70 rounded-md p-2.5 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <a
+                              href={item?.productUrl && item.productUrl !== '#' ? item.productUrl : undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-[#00a8fc] hover:underline truncate block"
+                            >
+                              {cleanName}
+                            </a>
+                            <span className="text-[11px] text-[#949ba4]">
+                              {item?.category || 'Hardware'} • Best on <strong className="text-[#dbdee1]">{item?.retailer || 'Store'}</strong>
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="text-right shrink-0">
+                            <div className="font-bold text-white tabular-nums">${curr.toFixed(2)}</div>
+                            {isDrop ? (
+                              <div className="text-[10px] font-bold text-emerald-400">
+                                -${Math.abs(displayDrop).toFixed(2)}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-[#949ba4]">Stable</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                    {/* Embed Footer */}
-                    <div className="flex items-center gap-1.5 mt-3 pt-2 text-[10px] text-[#72767d] border-t border-[#202225]/60">
-                      <img
-                        src="/icon.png"
-                        alt="RigScouter"
-                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/favicon.png';
-                        }}
-                      />
-                      <span>RigScouter AI • {frequency === 'weekly' ? 'Weekly Digest' : frequency === 'every_3_days' ? '3-Day Digest' : frequency === 'flash_only' ? 'Flash Alert' : 'Daily Digest'} • Next automated run at 08:00 UTC</span>
-                    </div>
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-[#949ba4]">
+                    <span>RigScouter AI Automated Market Engine</span>
+                    <span>Next dispatch: 08:00 UTC</span>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
           </div>
         </div>
       </div>
