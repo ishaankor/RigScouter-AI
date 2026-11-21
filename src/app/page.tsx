@@ -165,10 +165,10 @@ export default function HomePage() {
       {/* ── Hero Section ───────────────────────────────────────────────── */}
       <section id="overview" aria-labelledby="hero-heading" className="hero-section">
         
-        <div className="hero-badge-pill">
+        {/* <div className="hero-badge-pill">
           <span className="status-dot-live" aria-hidden="true" />
           <span>Real-Time PC Hardware Market Intelligence</span>
-        </div>
+        </div> */}
 
         <h1 id="hero-heading" className="hero-title">
           Autonomous PC Hardware
