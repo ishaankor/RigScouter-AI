@@ -1793,6 +1793,7 @@ code, pre, .font-mono {
 }
 
 /* ── Dashboard Semantic Design System ─────────────────────────────────── */
+@layer components {
 .dashboard-layout {
   max-width: 80rem;
   margin-left: auto;
@@ -2049,5 +2050,6 @@ code, pre, .font-mono {
   .dashboard-footer-banner {
     flex-direction: row;
   }
+}
 }
 

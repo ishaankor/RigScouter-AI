@@ -2189,7 +2189,7 @@ export function WatchlistManager({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-sm font-bold text-amber-200 shrink-0">{searchError.title}</h4>
+                <h3 className="text-sm font-bold text-amber-200 shrink-0">{searchError.title}</h3>
                 {searchError.query && (
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-black/50 text-amber-300 border border-amber-800/50 max-w-[260px] sm:max-w-[420px] truncate inline-block">
                     &quot;{searchError.query}&quot;
