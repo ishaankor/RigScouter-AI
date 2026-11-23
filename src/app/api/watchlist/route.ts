@@ -288,44 +288,24 @@ export async function GET(req: NextRequest) {
         }
       });
 
-      if (matches.length === 0) {
-        const cleanName = cName.replace(/[^a-z0-9\s]/g, ' ').replace(/\b\d+\s*(?:gb|tb|mb|mhz|ghz|w|bit)\b/g, '');
-        const tokens: string[] = cleanName.split(/\s+/).filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'black', 'white', 'dual', 'triple', 'graphics', 'card', 'desktop', 'processor', 'solid', 'state', 'drive', 'internal', 'nvme', 'power', 'supply', 'memory'].includes(t));
-        const modelTokens = tokens.filter((t: string) => /\d/.test(t) || t.length >= 4);
-
+      if (matches.length === 0 && cName) {
         (hwCatalog || []).forEach((h: any) => {
-          const itemCat = normalizeCat(item.category || '');
-          const hCat = normalizeCat(h.category || '');
-          if (itemCat && hCat && itemCat !== hCat && itemCat !== 'hardware' && hCat !== 'hardware') {
-            return;
-          }
-
-          const hText = `${h.name || ''} ${h.model || ''} ${h.id || ''} ${h.brand || ''}`.toLowerCase();
-
-          // Brand conflict check using the catalog's own brand column
-          const hBrand = (h.brand || '').toLowerCase().trim();
-          if (hBrand && hBrand !== 'hardware' && cName.length > 10 && !cName.includes(hBrand)) {
-            const firstWord = cleanName.trim().split(/\s+/)[0];
-            if (firstWord && firstWord.length >= 3 && firstWord !== hBrand && !hText.includes(firstWord)) {
-              return;
-            }
-          }
-
-          // Model token check: All critical digit tokens must match
-          if (modelTokens.length > 0) {
-            const digitTokens = modelTokens.filter((t: string) => /\d/.test(t));
-            if (digitTokens.length > 0 && !digitTokens.every((d: string) => hText.includes(d))) return;
-
-            const score = modelTokens.filter((t: string) => hText.includes(t)).length;
-            if (score >= Math.max(1, modelTokens.length - 1) && !matches.some((m: any) => m.id === h.id)) {
-              matches.push(h);
-            }
+          const hName = (h.name || '').toLowerCase().trim();
+          const hModel = (h.model || '').toLowerCase().trim();
+          if ((hName && hName === cName) || (hModel && hModel === cName)) {
+            matches.push(h);
           }
         });
       }
 
-      // Sort matches by retailer reliability & lowest price
+      // Sort matches: canonical base ID match first, then retailer reliability & lowest price
       matches.sort((a: any, b: any) => {
+        const aId = (a.id || '').toLowerCase();
+        const bId = (b.id || '').toLowerCase();
+        const aIsCanonical = (aId === cId || aId === baseCId) ? 0 : 1;
+        const bIsCanonical = (bId === cId || bId === baseCId) ? 0 : 1;
+        if (aIsCanonical !== bIsCanonical) return aIsCanonical - bIsCanonical;
+
         const urlA = a.product_url && a.product_url.startsWith('http') ? 0 : 1;
         const urlB = b.product_url && b.product_url.startsWith('http') ? 0 : 1;
         if (urlA !== urlB) return urlA - urlB;
@@ -339,6 +319,8 @@ export async function GET(req: NextRequest) {
 
       const retailerOffersMap = new Map<string, any>();
       const rawHistoryList: any[] = [];
+
+      // Pass 1: Authoritative top-level row offers (each row is authoritative for its own m.retailer)
       matches.forEach((m: any) => {
         try {
           const mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {});
@@ -377,9 +359,14 @@ export async function GET(req: NextRequest) {
             });
           }
         }
-        // Also unpack specs.RetailerOffers if stored inside row
+      });
+
+      // Pass 2: Unpack specs.RetailerOffers (canonical row's RetailerOffers first, without overwriting Pass 1 authoritative retailer rows with stale sibling copies)
+      matches.forEach((m: any) => {
         try {
           const mSpecs = typeof m.specs === 'string' ? JSON.parse(m.specs || '{}') : (m.specs || {});
+          const mId = (m.id || '').toLowerCase();
+          const isCanonicalRow = mId === cId || mId === baseCId;
           if (Array.isArray(mSpecs.RetailerOffers)) {
             mSpecs.RetailerOffers.forEach((ro: any) => {
               if (ro && ro.retailer && Number(ro.price) > 0) {
@@ -388,7 +375,8 @@ export async function GET(req: NextRequest) {
                 const roPrice = Number(ro.price || 0);
                 const roHasDirectSellerUrl = Boolean(ro.url && (ro.url.includes('smid=') || ro.url.includes('aod=1')));
                 const exHasDirectSellerUrl = Boolean(existingOffer?.url && (existingOffer.url.includes('smid=') || existingOffer.url.includes('aod=1')));
-                if (!existingOffer || (roHasDirectSellerUrl && !exHasDirectSellerUrl && roPrice <= existingOffer.price)) {
+                // Canonical row's RetailerOffers can update its retailers; secondary child rows only fill missing retailers
+                if (!existingOffer || (isCanonicalRow && ro.url && ro.url.startsWith('http')) || (roHasDirectSellerUrl && !exHasDirectSellerUrl && roPrice <= existingOffer.price)) {
                   const roMsrp = Number(ro.originalPrice || roPrice);
                   const roInStock = ro.inStock !== false && ro.in_stock !== false && ro.is_sold_out !== true;
                   retailerOffersMap.set(roKey, {
@@ -1167,7 +1155,8 @@ export async function PATCH(req: NextRequest) {
 
 /**
  * DELETE /api/watchlist
- * Deletes a watchlist item by id passed in query parameter or json body.
+ * Deletes a watchlist item by id, ids, componentId, or componentName,
+ * and automatically prunes any orphaned hardware_components rows no longer tracked by any user.
  */
 export async function DELETE(req: NextRequest) {
   try {
@@ -1180,23 +1169,136 @@ export async function DELETE(req: NextRequest) {
     }
 
     const urlId = req.nextUrl.searchParams.get('id');
-    let bodyId: string | undefined;
+    let body: any = {};
     try {
-      const body = await req.json();
-      bodyId = body?.id;
+      body = await req.json();
     } catch {}
-    const idToDelete = urlId || bodyId;
-    if (!idToDelete) {
-      return NextResponse.json({ error: 'Missing item id' }, { status: 400 });
+
+    const rawId = urlId || body?.id;
+    const rawIds: string[] = [
+      ...(Array.isArray(body?.ids) ? body.ids : []),
+      ...(rawId ? [rawId] : [])
+    ].filter(Boolean);
+    const bodyComponentId = typeof body?.componentId === 'string' ? body.componentId.trim() : '';
+    const bodyComponentName = typeof body?.componentName === 'string' ? body.componentName.trim() : '';
+
+    if (rawIds.length === 0 && !bodyComponentId && !bodyComponentName) {
+      return NextResponse.json({ error: 'Missing item id or component identifier' }, { status: 400 });
     }
 
-    // Ensure users can only delete their own watchlist items
-    let deleteQuery = supabaseAdmin.from('watchlist_items').delete().eq('id', idToDelete);
-    if (verifiedUser.role !== 'service') {
-      deleteQuery = deleteQuery.eq('user_id', verifiedUser.id);
+    const stripRetailerSuffix = (id: string) =>
+      (id || '').toLowerCase().trim().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+    const slugifyName = (name: string) =>
+      (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = Array.from(
+      new Set(
+        rawIds
+          .map(i => String(i).replace(/^(w-|hw-|comp-)/, ''))
+          .filter(i => uuidRegex.test(i))
+      )
+    );
+    const candidateBaseIds = new Set<string>();
+    rawIds.forEach(i => {
+      const cleaned = String(i).replace(/^(w-|hw-|comp-)/, '');
+      if (!uuidRegex.test(cleaned) && cleaned.length > 2) {
+        candidateBaseIds.add(stripRetailerSuffix(cleaned));
+      }
+    });
+    if (bodyComponentId) {
+      candidateBaseIds.add(stripRetailerSuffix(bodyComponentId));
     }
-    await deleteQuery;
-    return NextResponse.json({ success: true, deletedId: idToDelete });
+    if (bodyComponentName) {
+      candidateBaseIds.add(slugifyName(bodyComponentName));
+    }
+
+    // 1. Fetch user's watchlist rows before deletion so we capture their exact component_id & component_name
+    let userWlQuery = supabaseAdmin.from('watchlist_items').select('id, user_id, component_id, component_name');
+    if (verifiedUser.role !== 'service') {
+      userWlQuery = userWlQuery.eq('user_id', verifiedUser.id);
+    }
+    const { data: userWlRows } = await userWlQuery;
+    const rowsToDelete = (userWlRows || []).filter((row: any) => {
+      if (validUuids.includes(row.id)) return true;
+      const rowBaseId = stripRetailerSuffix(row.component_id || '');
+      if (rowBaseId && candidateBaseIds.has(rowBaseId)) return true;
+      if (bodyComponentName && (row.component_name || '').toLowerCase().trim() === bodyComponentName.toLowerCase()) {
+        return true;
+      }
+      return false;
+    });
+
+    rowsToDelete.forEach((row: any) => {
+      if (row.component_id) candidateBaseIds.add(stripRetailerSuffix(row.component_id));
+      if (row.component_name) candidateBaseIds.add(slugifyName(row.component_name));
+    });
+
+    const deleteUuids = Array.from(new Set([...validUuids, ...rowsToDelete.map((r: any) => r.id).filter(Boolean)]));
+
+    // 2. Delete from watchlist_items
+    if (deleteUuids.length > 0) {
+      let delById = supabaseAdmin.from('watchlist_items').delete().in('id', deleteUuids);
+      if (verifiedUser.role !== 'service') {
+        delById = delById.eq('user_id', verifiedUser.id);
+      }
+      await delById;
+    } else if (rawId) {
+      let delSingle = supabaseAdmin.from('watchlist_items').delete().eq('id', rawId);
+      if (verifiedUser.role !== 'service') {
+        delSingle = delSingle.eq('user_id', verifiedUser.id);
+      }
+      await delSingle;
+    }
+
+    // 3. Prune orphaned hardware_components rows not tracked by any remaining watchlist_items row
+    let prunedComponentIds: string[] = [];
+    try {
+      const [{ data: remainingWl }, { data: allHw }] = await Promise.all([
+        supabaseAdmin.from('watchlist_items').select('component_id, component_name'),
+        supabaseAdmin.from('hardware_components').select('id, name, model')
+      ]);
+
+      const activeBaseIds = new Set<string>();
+      const activeNames = new Set<string>();
+      (remainingWl || []).forEach((wl: any) => {
+        const bId = stripRetailerSuffix(wl.component_id || '');
+        if (bId) activeBaseIds.add(bId);
+        const sName = slugifyName(wl.component_name || '');
+        if (sName) activeBaseIds.add(sName);
+        const cName = (wl.component_name || '').toLowerCase().trim();
+        if (cName) activeNames.add(cName);
+      });
+
+      const orphanHwIds = (allHw || [])
+        .filter((hw: any) => {
+          const hwBaseId = stripRetailerSuffix(hw.id || '');
+          if (!hwBaseId) return false;
+          const hwName = (hw.name || '').toLowerCase().trim();
+          const hwModel = (hw.model || '').toLowerCase().trim();
+          const isTrackedById = activeBaseIds.has(hwBaseId);
+          const isTrackedByName = (hwName && activeNames.has(hwName)) || (hwModel && activeNames.has(hwModel));
+          return !isTrackedById && !isTrackedByName;
+        })
+        .map((hw: any) => hw.id);
+
+      if (orphanHwIds.length > 0) {
+        await supabaseAdmin.from('hardware_components').delete().in('id', orphanHwIds);
+        try {
+          await supabaseAdmin.from('retailer_products').delete().in('id', orphanHwIds);
+        } catch {}
+        prunedComponentIds = orphanHwIds;
+      }
+    } catch (pruneErr) {
+      console.warn('[/api/watchlist DELETE] Orphan hardware_components prune notice:', pruneErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      deletedId: rawId || deleteUuids[0],
+      deletedCount: deleteUuids.length,
+      prunedComponentIds
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Delete failed' }, { status: 500 });
   }

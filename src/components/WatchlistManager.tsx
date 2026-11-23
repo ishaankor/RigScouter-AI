@@ -353,7 +353,7 @@ export function WatchlistManager({
             if (sib.imageUrl && (!existingOffer.imageUrl || existingOffer.imageUrl === item.imageUrl)) {
               existingOffer.imageUrl = sib.imageUrl;
             }
-            if (sib.productUrl && (!existingOffer.url || existingOffer.url === '#' || ((sib.productUrl.includes('smid=') || sib.productUrl.includes('aod=1')) && !existingOffer.url.includes('smid=')))) {
+            if (sib.productUrl && sib.productUrl.startsWith('http') && (!existingOffer.url || existingOffer.url === '#' || Number(sib.currentPrice || 0) === Number(existingOffer.price || 0) || ((sib.productUrl.includes('smid=') || sib.productUrl.includes('aod=1')) && !existingOffer.url.includes('smid=')))) {
               existingOffer.url = sib.productUrl;
             }
           }
@@ -1627,7 +1627,22 @@ export function WatchlistManager({
       } catch (e) {}
     }
 
-    // 5. Backend proxy cleanup
+    // 5. Server-side watchlist delete + automatic orphaned hardware_components pruning
+    try {
+      const authHeaders = await getAuthHeaders();
+      await fetch('/api/watchlist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          id,
+          ids: validUuids,
+          componentId: (itemToDelete as any)?.component_id || (itemToDelete as any)?.componentId,
+          componentName: itemToDelete?.componentName
+        })
+      });
+    } catch (e) {}
+
+    // 6. Backend proxy cleanup
     const BACKEND_URL = getBackendUrl();
     try {
       await fetch(`${BACKEND_URL}/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });

@@ -88,8 +88,84 @@ function getRetailerBadgeStyle(retailer: string): { bg: string; color: string; b
   return { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
 
+function computeHistoryIntervals(historyList: any[], currentPrice: number) {
+  const current = Number(currentPrice) || 0;
+  if (!Array.isArray(historyList) || historyList.length === 0) {
+    return {
+      previousPrice24h: current > 0 ? current : undefined,
+      previousPrice7d: undefined,
+      previousPrice30d: undefined,
+      allTimeLow: current > 0 ? current : undefined,
+    };
+  }
+
+  const nowMs = Date.now();
+  let earliestMs = nowMs;
+  let atl = current > 0 ? current : Infinity;
+
+  const validEntries = historyList
+    .map(h => {
+      const p = Number(h?.price || 0);
+      const ts = h?.timestamp || (h?.date ? `${h.date}T00:00:00Z` : undefined);
+      const ms = ts ? new Date(ts).getTime() : NaN;
+      return { price: p, ms };
+    })
+    .filter(h => h.price > 0 && !isNaN(h.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  if (validEntries.length === 0) {
+    return {
+      previousPrice24h: current > 0 ? current : undefined,
+      previousPrice7d: undefined,
+      previousPrice30d: undefined,
+      allTimeLow: current > 0 ? current : undefined,
+    };
+  }
+
+  validEntries.forEach(h => {
+    if (h.ms < earliestMs) earliestMs = h.ms;
+    if (h.price < atl) atl = h.price;
+  });
+
+  const historyDays = Math.max(0, (nowMs - earliestMs) / (1000 * 60 * 60 * 24));
+
+  let p24: number | undefined;
+  const pointsBefore24h = validEntries.filter(h => h.ms <= nowMs - (18 * 60 * 60 * 1000));
+  if (pointsBefore24h.length > 0) {
+    p24 = pointsBefore24h[pointsBefore24h.length - 1].price;
+  } else if (historyDays >= 0.8) {
+    p24 = validEntries[0].price;
+  }
+
+  let p7: number | undefined;
+  const pointsBefore7d = validEntries.filter(h => h.ms <= nowMs - (6 * 24 * 60 * 60 * 1000));
+  if (pointsBefore7d.length > 0) {
+    p7 = pointsBefore7d[pointsBefore7d.length - 1].price;
+  } else if (historyDays >= 6.5) {
+    p7 = validEntries[0].price;
+  }
+
+  let p30: number | undefined;
+  const pointsBefore30d = validEntries.filter(h => h.ms <= nowMs - (25 * 24 * 60 * 60 * 1000));
+  if (pointsBefore30d.length > 0) {
+    p30 = pointsBefore30d[pointsBefore30d.length - 1].price;
+  } else if (historyDays >= 28.0) {
+    p30 = validEntries[0].price;
+  }
+
+  return {
+    previousPrice24h: p24 ?? (current > 0 ? current : undefined),
+    previousPrice7d: p7,
+    previousPrice30d: p30,
+    allTimeLow: atl !== Infinity ? atl : (current > 0 ? current : undefined),
+  };
+}
+
 function isHardwareOfferMatch(item: any, h: any): boolean {
   if (!h || !h.current_price || Number(h.current_price) <= 0) return false;
+
+  const itemNameRaw = item.component_name || item.name || '';
+  const hNameRaw = h.name || '';
 
   const itemCompId = (item.component_id || item.id || '').toLowerCase().trim();
   const hId = (h.id || '').toLowerCase().trim();
@@ -110,8 +186,8 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
 
   // 2. Exact normalized component name / model match
   const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const itemName = norm(item.component_name || item.name || '');
-  const hName = norm(h.name || '');
+  const itemName = norm(itemNameRaw);
+  const hName = norm(hNameRaw);
   const hModel = norm(h.model || '');
 
   if (itemName && (itemName === hName || itemName === hModel)) {
@@ -635,42 +711,84 @@ export async function GET(req: NextRequest) {
 
         let formattedWatchlist: any[] = [];
         if (watchlistItems && watchlistItems.length > 0) {
-          formattedWatchlist = watchlistItems.map((item: any) => {
-            // 1. Find all candidate offers from retailers for this component using strict hardware matching
-            const candidates = (allHwComponents || []).filter((h: any) => isHardwareOfferMatch(item, h));
+          const retailerPriority: Record<string, number> = {
+            'Amazon': 1,
+            'Micro Center': 2,
+            'Newegg': 3,
+            'B&H': 4,
+            'Best Buy': 5,
+            'eBay': 6
+          };
 
-            // 2. Build multi-retailer offers map across candidate rows and specs.RetailerOffers
+          formattedWatchlist = watchlistItems.map((item: any) => {
+            const cId = (item.component_id || item.id || '').toLowerCase().trim();
+            const stripSuffix = (id: string) => id.replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+            const baseCId = stripSuffix(cId);
+
+            // 1. Find all candidate offers from retailers for this component and sort identically to /api/watchlist
+            const candidates = (allHwComponents || []).filter((h: any) => isHardwareOfferMatch(item, h));
+            candidates.sort((a: any, b: any) => {
+              // Canonical base row or exact ID match first
+              const aExact = (a.id || '').toLowerCase() === cId || (a.id || '').toLowerCase() === baseCId ? 0 : 1;
+              const bExact = (b.id || '').toLowerCase() === cId || (b.id || '').toLowerCase() === baseCId ? 0 : 1;
+              if (aExact !== bExact) return aExact - bExact;
+
+              const urlA = a.product_url && a.product_url.startsWith('http') ? 0 : 1;
+              const urlB = b.product_url && b.product_url.startsWith('http') ? 0 : 1;
+              if (urlA !== urlB) return urlA - urlB;
+              const pA = retailerPriority[a.retailer] || 99;
+              const pB = retailerPriority[b.retailer] || 99;
+              if (pA !== pB) return pA - pB;
+              return (Number(a.current_price) || 999999) - (Number(b.current_price) || 999999);
+            });
+
+            // 2. Build multi-retailer offers map across candidate rows and specs.RetailerOffers (matching /api/watchlist)
             const offersMap = new Map<string, { retailer: string; price: number; url: string; originalPrice?: number }>();
+            const rawHistoryList: any[] = [];
 
             candidates.forEach((c: any) => {
+              let s: any = {};
+              try {
+                s = typeof c.specs === 'string' ? JSON.parse(c.specs || '{}') : (c.specs || {});
+              } catch {}
+
+              if (Array.isArray(s.price_history)) {
+                rawHistoryList.push(...s.price_history);
+              }
+
+              const cInStock = s.in_stock !== false && s.inStock !== false && s.is_sold_out !== true && Number(c.deal_score ?? 50) > 0;
               const r = c.retailer || 'Amazon';
               const p = Number(c.current_price || 0);
               const u = resolveRetailerUrl(r, c.product_url, c.specs, item.component_name);
-              if (p > 0) {
+              if (cInStock && p > 0) {
                 const key = r.toLowerCase();
-                if (!offersMap.has(key) || (offersMap.get(key)!.price > p)) {
+                const existing = offersMap.get(key);
+                const cHasDirectSeller = Boolean(u && (u.includes('smid=') || u.includes('aod=1')));
+                const exHasDirectSeller = Boolean(existing?.url && (existing.url.includes('smid=') || existing.url.includes('aod=1')));
+                if (!existing || (cHasDirectSeller && !exHasDirectSeller && p <= existing.price)) {
                   offersMap.set(key, { retailer: r, price: p, url: u });
                 }
               }
 
-              // Also check candidate specs.RetailerOffers
-              try {
-                const s = typeof c.specs === 'string' ? JSON.parse(c.specs || '{}') : (c.specs || {});
-                (s.RetailerOffers || []).forEach((ro: any) => {
-                  const roR = ro.retailer || 'Store';
-                  const roP = Number(ro.price || 0);
-                  if (ro.inStock === false || ro.in_stock === false || ro.is_sold_out === true) {
-                    return; // skip out-of-stock offer
+              // Also check candidate specs.RetailerOffers (lock in first canonical match per retailer just like /api/watchlist)
+              (Array.isArray(s.RetailerOffers) ? s.RetailerOffers : []).forEach((ro: any) => {
+                if (!ro || !ro.retailer) return;
+                const roR = ro.retailer;
+                const roP = Number(ro.price || 0);
+                if (ro.inStock === false || ro.in_stock === false || ro.is_sold_out === true) {
+                  return;
+                }
+                if (roP > 0) {
+                  const roKey = roR.toLowerCase();
+                  const roUrl = resolveRetailerUrl(roR, ro.url, s, item.component_name);
+                  const existing = offersMap.get(roKey);
+                  const roHasDirectSeller = Boolean(roUrl && (roUrl.includes('smid=') || roUrl.includes('aod=1')));
+                  const exHasDirectSeller = Boolean(existing?.url && (existing.url.includes('smid=') || existing.url.includes('aod=1')));
+                  if (!existing || (roHasDirectSeller && !exHasDirectSeller && roP <= existing.price)) {
+                    offersMap.set(roKey, { retailer: roR, price: roP, url: roUrl, originalPrice: Number(ro.originalPrice || roP) });
                   }
-                  if (roP > 0) {
-                    const roKey = roR.toLowerCase();
-                    const roUrl = resolveRetailerUrl(roR, ro.url, s, item.component_name);
-                    if (!offersMap.has(roKey) || (offersMap.get(roKey)!.price > roP)) {
-                      offersMap.set(roKey, { retailer: roR, price: roP, url: roUrl, originalPrice: Number(ro.originalPrice || roP) });
-                    }
-                  }
-                });
-              } catch {}
+                }
+              });
             });
 
             // If offersMap is empty, fallback to item data
@@ -685,17 +803,7 @@ export async function GET(req: NextRequest) {
               });
             }
 
-            const sortedOffers = Array.from(offersMap.values()).sort((a, b) => a.price - b.price);
-
-            // Anomaly guard: filter out glitch drops (>65% drop on hardware items where previous reference is >$80)
-            const refPrice = Number(item.previous_price_24h || item.previous_price_7d || item.all_time_low || 0);
-            const validNonAnomalous = sortedOffers.filter(off => {
-              if (refPrice > 80 && off.price < refPrice * 0.35) {
-                return false; // drop is suspicious/anomalous (e.g. $27 accessory for a $350 GPU)
-              }
-              return true;
-            });
-            const effectiveOffers = validNonAnomalous.length > 0 ? validNonAnomalous : sortedOffers;
+            const effectiveOffers = Array.from(offersMap.values()).sort((a, b) => a.price - b.price);
             const bestOffer = effectiveOffers[0];
             const maxSavings = effectiveOffers.length > 1
               ? Number((effectiveOffers[effectiveOffers.length - 1].price - bestOffer.price).toFixed(2))
@@ -709,19 +817,39 @@ export async function GET(req: NextRequest) {
               diffVsLowest: Number((off.price - bestOffer.price).toFixed(2))
             }));
 
-            const matchedHw = candidates.length > 0 
-              ? candidates.sort((a, b) => Number(a.current_price || 0) - Number(b.current_price || 0))[0]
-              : null;
+            const matchedHw = candidates[0] || null;
 
             const currentPrice = bestOffer.price;
             const retailer = bestOffer.retailer;
             const productUrl = bestOffer.url;
             const specs = matchedHw?.specs || item.specs;
             const imageUrl = matchedHw?.image_url || item.image_url;
-            const allTimeLow = item.all_time_low ? Number(item.all_time_low) : (matchedHw?.lowest_price_90d ? Number(matchedHw.lowest_price_90d) : 0);
-            const previousPrice24h = Number(item.previous_price_24h || currentPrice);
-            const previousPrice7d = Number(item.previous_price_7d || currentPrice);
-            const previousPrice30d = Number(item.previous_price_30d || currentPrice);
+
+            const historyMap = new Map<string, any>();
+            rawHistoryList.forEach(h => {
+              const key = h?.timestamp || h?.date;
+              if (key && !historyMap.has(key)) {
+                historyMap.set(key, h);
+              }
+            });
+            const combinedHistory = Array.from(historyMap.values());
+            const computed = computeHistoryIntervals(combinedHistory, currentPrice);
+
+            const allTimeLow = Math.min(
+              Number(item.all_time_low || Infinity),
+              Number(matchedHw?.lowest_price_90d || Infinity),
+              Number(computed.allTimeLow || Infinity),
+              currentPrice > 0 ? currentPrice : Infinity
+            );
+            const previousPrice24h = (item.previous_price_24h != null && Math.abs(Number(item.previous_price_24h) - currentPrice) >= 0.01)
+              ? Number(item.previous_price_24h)
+              : (computed.previousPrice24h ?? Number(item.previous_price_24h || currentPrice));
+            const previousPrice7d = (item.previous_price_7d != null && Number(item.previous_price_7d) > 0 && Math.abs(Number(item.previous_price_7d) - currentPrice) >= 0.01)
+              ? Number(item.previous_price_7d)
+              : (computed.previousPrice7d ?? Number(item.previous_price_7d || currentPrice));
+            const previousPrice30d = (item.previous_price_30d != null && Number(item.previous_price_30d) > 0 && Math.abs(Number(item.previous_price_30d) - currentPrice) >= 0.01)
+              ? Number(item.previous_price_30d)
+              : (computed.previousPrice30d ?? Number(item.previous_price_30d || currentPrice));
 
             let matchedHwSpecs: any = {};
             try {
