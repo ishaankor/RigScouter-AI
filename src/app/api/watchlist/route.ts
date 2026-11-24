@@ -283,7 +283,7 @@ export async function GET(req: NextRequest) {
       (hwCatalog || []).forEach((h: any) => {
         const hId = (h.id || '').toLowerCase();
         const baseHId = stripSuffix(hId);
-        if (hId && cId && (baseHId === baseCId || hId === cId || hId.startsWith(cId) || cId.startsWith(hId))) {
+        if (hId && cId && (baseHId === baseCId || hId === cId)) {
           matches.push(h);
         }
       });
@@ -744,28 +744,19 @@ export async function POST(req: NextRequest) {
       .from('hardware_components')
       .select('*');
 
+    const stripPostSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
     let matchedHw: any = null;
     if (allHw && allHw.length > 0) {
       if (clientComponentId) {
-        matchedHw = allHw.find((h: any) => h.id === clientComponentId || h.id.startsWith(`${clientComponentId}-`));
+        const targetBaseId = stripPostSuffix(clientComponentId);
+        matchedHw = allHw.find((h: any) => h.id === clientComponentId || stripPostSuffix(h.id || '') === targetBaseId);
       }
       if (!matchedHw && (model || componentName)) {
         const searchTarget = (model || componentName).toLowerCase().trim();
-        const cleanTarget = searchTarget.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        const tokens = cleanTarget.split(' ').filter((t: string) => t.length > 2 && !['the', 'and', 'for', 'with', 'edition', 'gaming', 'series', 'brand', 'new', 'unused'].includes(t));
-        const digitTokens = tokens.filter((t: string) => /\d/.test(t));
-
         matchedHw = allHw.find((h: any) => {
-          const hId = (h.id || '').toLowerCase();
-          const hName = (h.name || '').toLowerCase();
-          const hModel = (h.model || '').toLowerCase();
-          const fullText = `${hId} ${hName} ${hModel}`;
-          if (clientComponentId && (hId === clientComponentId || hId.startsWith(clientComponentId))) return true;
-          if (searchTarget && (hName === searchTarget || hModel === searchTarget)) return true;
-          if (digitTokens.length > 0 && digitTokens.every((d: string) => fullText.includes(d))) {
-            return true;
-          }
-          return false;
+          const hName = (h.name || '').toLowerCase().trim();
+          const hModel = (h.model || '').toLowerCase().trim();
+          return Boolean(searchTarget && (hName === searchTarget || hModel === searchTarget));
         });
       }
     }
@@ -778,7 +769,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Aggregate catalog sibling offers across retailers
-    const stripPostSuffix = (id: string) => (id || '').toLowerCase().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
     const baseCId = stripPostSuffix(matchedHw?.id || clientComponentId || '');
 
     const catalogOffers: any[] = [];
@@ -874,13 +864,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Prevent duplicate tracking in user watchlist_items
+    // 2. Prevent duplicate tracking in user watchlist_items (exact component_id or exact component_name only)
     if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
       const { data: existingWl } = await supabaseAdmin
         .from('watchlist_items')
         .select('*')
         .eq('user_id', userId)
-        .or(`component_name.ilike.%${componentName.slice(0, 30)}%,component_id.eq.${finalCompId}`)
+        .or(`component_name.ilike.${componentName.trim()},component_id.eq.${finalCompId}`)
         .limit(1);
 
       if (existingWl && existingWl.length > 0) {

@@ -180,7 +180,7 @@ function isHardwareOfferMatch(item: any, h: any): boolean {
   if (baseItemCompId && baseHId && baseItemCompId === baseHId) {
     return true;
   }
-  if (itemCompId && (hId === itemCompId || hId.startsWith(itemCompId + '-'))) {
+  if (itemCompId && hId === itemCompId) {
     return true;
   }
 

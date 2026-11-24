@@ -312,18 +312,17 @@ export function WatchlistManager({
     }> = [...baseOffers];
 
     const itemKey = getNormalizedKey(item);
+    const stripRetailerSuffix = (id: string) =>
+      (id || '').toLowerCase().trim().replace(/-(amazon|ebay|micro-center|microcenter|newegg|best-buy|bestbuy|bh|b-h)$/, '');
+    const itemBaseId = stripRetailerSuffix(item.component_id || item.componentId || item.id || '');
     if (trendingItems.length > 0) {
-      const itemTitle = (item.componentName || item.component_name || item.name || '').toLowerCase();
+      const itemTitle = (item.componentName || item.component_name || item.name || '').toLowerCase().trim();
       const siblings = trendingItems.filter(t => {
+        const tBaseId = stripRetailerSuffix(t.id || '');
+        if (itemBaseId && tBaseId && itemBaseId === tBaseId) return true;
         const tKey = getNormalizedKey(t);
-        if (tKey && itemKey && (tKey === itemKey || (tKey.length > 6 && itemKey.includes(tKey)))) return true;
-        
-        if (t.model && itemTitle) {
-          const tModel = (t.model || '').toLowerCase().trim();
-          if (tModel.length > 5 && itemTitle.includes(tModel)) {
-            return true;
-          }
-        }
+        if (tKey && itemKey && tKey === itemKey) return true;
+        if (t.model && itemTitle && (t.model || '').toLowerCase().trim() === itemTitle) return true;
         return false;
       });
       for (const sib of siblings) {
@@ -559,7 +558,7 @@ export function WatchlistManager({
                 const matchingHwList = (hwCatalog || []).filter((h: any) => {
                   const hId = (h.id || '').toLowerCase();
                   const baseHId = stripSuffix(hId);
-                  if (hId && gCompId && (baseHId === baseGCompId || hId === gCompId || hId.startsWith(gCompId + '-'))) return true;
+                  if (hId && gCompId && (baseHId === baseGCompId || hId === gCompId)) return true;
                   const hKey = getNormalizedKey(h);
                   return Boolean(gKey && hKey && gKey === hKey);
                 });
@@ -1333,10 +1332,9 @@ export function WatchlistManager({
 
     es.addEventListener('retailer_found', async (e: MessageEvent) => {
       const payload = JSON.parse(e.data);
-      const isMatch = (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
-                      payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
-                      payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
-                      queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
+      const isMatch = (payload.pending_id && payload.pending_id === pendingId) ||
+                      (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
+                      (payload.query && payload.query.toLowerCase() === queryToScrape.toLowerCase());
                       
       if (isMatch) {
         const offerImage = payload.imageUrl || (payload.offer && (payload.offer.imageUrl || payload.offer.image_url));
@@ -1440,9 +1438,7 @@ export function WatchlistManager({
         const payload = JSON.parse(e.data);
         const isMatch = (payload.pending_id && payload.pending_id === pendingId) ||
                         (payload.original_query && payload.original_query.toLowerCase() === queryToScrape.toLowerCase()) || 
-                        payload.query.toLowerCase() === queryToScrape.toLowerCase() ||
-                        payload.query.toLowerCase().includes(queryToScrape.toLowerCase()) ||
-                        queryToScrape.toLowerCase().includes(payload.query.toLowerCase());
+                        (payload.query && payload.query.toLowerCase() === queryToScrape.toLowerCase());
                         
         if (isMatch) {
           setIsScraping(false);
@@ -3168,7 +3164,7 @@ export function WatchlistManager({
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>⚡ Scrape & Add to Watchlist</span>
+                      <span>Scrape & Add to Watchlist</span>
                     </>
                   )}
                 </button>
